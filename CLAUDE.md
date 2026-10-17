@@ -39,6 +39,8 @@ não é barrado. Esse caso quem segura é a regra, não a trava.
 
 ## REGRAS DE ARQUITETURA DESTE REPOSITÓRIO
 
+Documentos de governança na raiz: `PRD.md`, `ARCHITECTURE.md`, `RULES.md` (versão completa
+destas regras), `DESIGN.md`, `TASKS.md`, `MEMORY.md` (leia as lições antes de mexer).
 Detalhe e justificativa em `docs/ARQUITETURA.md`. O resumo que não pode ser esquecido:
 
 1. **Tudo é por tenant.** Toda tabela (menos `core_tenants`) tem `tenant_id`; toda FK de negócio é

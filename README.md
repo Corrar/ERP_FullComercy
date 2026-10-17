@@ -159,6 +159,8 @@ Senha: `SEED_ADMIN_PASSWORD` do `.env`.
 
 ## Documentação
 
+- `PRD.md` (produto) · `ARCHITECTURE.md` (arquitetura) · `RULES.md` (regras) · `DESIGN.md` (UX/UI e convenções de API) · `TASKS.md` (backlog) · `MEMORY.md` (decisões e lições)
+
 - `docs/ARQUITETURA.md` — decisões, árvore de diretórios, como nasce um módulo novo.
 - `prisma/schema.prisma` — o schema comentado (regras no cabeçalho).
 - `CLAUDE.md` — regras permanentes da casa.
