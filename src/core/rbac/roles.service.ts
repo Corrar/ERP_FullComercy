@@ -1,4 +1,5 @@
 import { ctx } from '../tenancy/tenant-context';
+import { tenantTransaction } from '../../infra/prisma';
 import { AppError } from '../../shared/errors';
 import { allPermissions, permissionExists } from './permissions';
 
@@ -28,10 +29,10 @@ export async function setRolePermissions(roleId: string, permissions: string[]) 
   const role = await db.role.findUnique({ where: { id: roleId } });
   if (!role) throw AppError.notFound('Perfil');
   if (role.isSystem) throw AppError.forbidden('Perfil de sistema não é editável.');
-  await db.$transaction([
-    db.rolePermission.deleteMany({ where: { roleId } }),
-    db.rolePermission.createMany({ data: permissions.map((permissionKey) => ({ roleId, permissionKey, tenantId })) }),
-  ]);
+  await tenantTransaction(db, tenantId, async (tx) => {
+    await tx.rolePermission.deleteMany({ where: { roleId } });
+    await tx.rolePermission.createMany({ data: permissions.map((permissionKey) => ({ roleId, permissionKey, tenantId })) });
+  });
   return db.role.findUnique({ where: { id: roleId }, include: { permissions: true } });
 }
 

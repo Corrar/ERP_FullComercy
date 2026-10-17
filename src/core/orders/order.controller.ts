@@ -26,7 +26,8 @@ export const createOrderSchema = z.object({
   customerId: z.string().uuid().nullable().optional(),
   warehouseId: z.string().uuid().nullable().optional(),
   sellerUserId: z.string().uuid().nullable().optional(),
-  items: z.array(itemSchema).min(1),
+  /** Pode vir vazio quando o módulo injeta as linhas (adesão a plano). O service valida depois. */
+  items: z.array(itemSchema).default([]),
   payments: z.array(paymentSchema).optional(),
   discount: z.number().nonnegative().optional(),
   surcharge: z.number().nonnegative().optional(),

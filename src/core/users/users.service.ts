@@ -1,4 +1,5 @@
 import { ctx } from '../tenancy/tenant-context';
+import { tenantTransaction } from '../../infra/prisma';
 import { AppError } from '../../shared/errors';
 import { hashPassword } from '../auth/auth.service';
 
@@ -26,10 +27,10 @@ export async function createUser(input: { name: string; email: string; password:
 export async function setUserRoles(userId: string, roleIds: string[]) {
   const { db, tenantId } = ctx();
   if (!(await db.user.findUnique({ where: { id: userId } }))) throw AppError.notFound('Usuário');
-  await db.$transaction([
-    db.userRole.deleteMany({ where: { userId } }),
-    db.userRole.createMany({ data: roleIds.map((roleId) => ({ userId, roleId, tenantId })) }),
-  ]);
+  await tenantTransaction(db, tenantId, async (tx) => {
+    await tx.userRole.deleteMany({ where: { userId } });
+    await tx.userRole.createMany({ data: roleIds.map((roleId) => ({ userId, roleId, tenantId })) });
+  });
 }
 
 export async function setActive(userId: string, isActive: boolean) {
@@ -61,9 +62,9 @@ export async function resetPassword(userId: string, next: string) {
 
 export async function setUserPermissionExceptions(userId: string, items: { permissionKey: string; effect: 'ALLOW' | 'DENY' }[]) {
   const { db, tenantId } = ctx();
-  await db.$transaction([
-    db.userPermission.deleteMany({ where: { userId } }),
-    db.userPermission.createMany({ data: items.map((i) => ({ ...i, userId, tenantId })) }),
-  ]);
+  await tenantTransaction(db, tenantId, async (tx) => {
+    await tx.userPermission.deleteMany({ where: { userId } });
+    await tx.userPermission.createMany({ data: items.map((i) => ({ ...i, userId, tenantId })) });
+  });
   return db.userPermission.findMany({ where: { userId } });
 }

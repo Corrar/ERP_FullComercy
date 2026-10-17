@@ -41,6 +41,7 @@ export const getCredenciais = async (req: Request, res: Response) => res.json(aw
 export const deleteCredencial = async (req: Request, res: Response) => res.json(await acesso.revogarCredencial(String(req.params.id)));
 export const getDispositivos = async (_req: Request, res: Response) => res.json(await acesso.listarDispositivos());
 export const postDispositivo = async (req: Request, res: Response) => res.status(201).json(await acesso.criarDispositivo(parse(z.object({ name: z.string().min(2), kind: z.enum(['TURNSTILE', 'DOOR', 'BIOMETRIC', 'QR_READER']).default('TURNSTILE'), provider: z.string().min(2).max(40).default('webhook'), config: z.record(z.unknown()).optional() }), req.body)));
+export const postGirarToken = async (req: Request, res: Response) => res.json(await acesso.girarToken(String(req.params.id)));
 export const patchDispositivo = async (req: Request, res: Response) => res.json(await acesso.atualizarDispositivo(String(req.params.id), parse(z.object({ name: z.string().optional(), isActive: z.boolean().optional() }), req.body)));
 export const getEventosAcesso = async (req: Request, res: Response) => res.json(await acesso.eventosDeAcesso(parse(z.object({ deviceId: z.string().uuid().optional(), customerId: z.string().uuid().optional(), allowed: z.coerce.boolean().optional(), take: z.coerce.number().int().optional() }), req.query)));
 /** Público (chamado pela catraca). O token do aparelho é a autenticação. */

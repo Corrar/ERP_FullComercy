@@ -22,10 +22,15 @@ export async function contaDaComanda(tabId: string) {
   const tab = await db.foodTab.findUnique({ where: { id: tabId }, include: { orders: { include: { order: { include: { items: true, payments: true } } } }, table: true } });
   if (!tab) throw AppError.notFound('Comanda');
   const pedidos = tab.orders.map((f) => f.order).filter((o) => o.status !== OrderStatus.CANCELLED);
-  const subtotal = round2(sum(pedidos.map((o) => D(o.total))));
-  const taxa = round2(subtotal.mul(D(tab.serviceFeeRate)).div(100));
+  // A taxa de serviço, quando já materializada (pedido só com linhas FEE), NÃO entra na base de
+  // cálculo dela mesma — senão a conta relida depois do fechamento cobraria taxa sobre a taxa.
+  const ehTaxa = (o: typeof pedidos[number]) => o.items.length > 0 && o.items.every((i) => i.kind === 'FEE');
+  const consumo = pedidos.filter((o) => !ehTaxa(o));
+  const taxasMaterializadas = pedidos.filter(ehTaxa);
+  const subtotal = round2(sum(consumo.map((o) => D(o.total))));
+  const taxa = taxasMaterializadas.length ? round2(sum(taxasMaterializadas.map((o) => D(o.total)))) : round2(subtotal.mul(D(tab.serviceFeeRate)).div(100));
   const pago = round2(sum(pedidos.flatMap((o) => o.payments.map((p) => D(p.amount)))));
-  return { tab, pedidos, subtotal, taxaServico: taxa, total: round2(subtotal.plus(taxa)), pago, restante: round2(subtotal.plus(taxa).minus(pago)) };
+  return { tab, pedidos, subtotal, taxaServico: taxa, taxaMaterializada: taxasMaterializadas.length > 0, total: round2(subtotal.plus(taxa)), pago, restante: round2(subtotal.plus(taxa).minus(pago)) };
 }
 
 /** Fecha a conta: cobra a taxa num pedido de FEE, rateia o pagamento e completa tudo. */
@@ -38,7 +43,7 @@ export async function fecharComanda(tabId: string, payments: { method: PaymentMe
   if (pagoAgora.plus(conta.pago).lt(total)) throw AppError.validation(`Pagamento insuficiente: faltam ${total.minus(conta.pago).minus(pagoAgora)}.`);
 
   // A taxa de serviço vira um pedido próprio (linha FEE), para o financeiro enxergá-la separada.
-  if (cobrarTaxa && conta.taxaServico.gt(0)) {
+  if (cobrarTaxa && conta.taxaServico.gt(0) && !conta.taxaMaterializada) {
     await orders.createOrder({
       moduleKey: 'FOOD', channel: 'TABLE', items: [{ kind: 'FEE', description: `Taxa de serviço comanda ${conta.tab.code}`, quantity: 1, unitPrice: conta.taxaServico.toNumber() }],
       moduleData: { tabId, serviceType: 'DINE_IN' }, notes: 'Taxa de serviço',
@@ -76,12 +81,12 @@ export async function transferirComanda(tabId: string, toTableId: string) {
   if (!tab || tab.status !== 'OPEN') throw AppError.conflict('Comanda não está aberta.');
   const destino = await db.foodTable.findUnique({ where: { id: toTableId } });
   if (!destino?.isActive) throw AppError.notFound('Mesa destino');
-  await db.$transaction([
-    db.foodTab.update({ where: { id: tabId }, data: { tableId: toTableId } }),
-    db.foodOrder.updateMany({ where: { tabId }, data: { tableId: toTableId } }),
-    db.foodTable.update({ where: { id: toTableId }, data: { status: 'OCCUPIED' } }),
-    ...(tab.tableId ? [db.foodTable.update({ where: { id: tab.tableId }, data: { status: 'FREE' } })] : []),
-  ]);
+  await tenantTransaction(db, ctx().tenantId, async (tx) => {
+    await tx.foodTab.update({ where: { id: tabId }, data: { tableId: toTableId } });
+    await tx.foodOrder.updateMany({ where: { tabId }, data: { tableId: toTableId } });
+    await tx.foodTable.update({ where: { id: toTableId }, data: { status: 'OCCUPIED' } });
+    if (tab.tableId) await tx.foodTable.update({ where: { id: tab.tableId }, data: { status: 'FREE' } });
+  });
   return db.foodTab.findUnique({ where: { id: tabId }, include: { table: true } });
 }
 

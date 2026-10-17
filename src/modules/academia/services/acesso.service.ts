@@ -8,6 +8,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { prisma, prismaForTenant } from '../../../infra/prisma';
 import { ctx } from '../../../core/tenancy/tenant-context';
 import { AppError } from '../../../shared/errors';
+import { seal, open, safeEqual } from '../../../shared/crypto';
 import { events } from '../../../shared/events';
 
 interface AccessRules { weekdays?: number[]; from?: string; to?: string; maxCheckInsPerDay?: number }
@@ -47,7 +48,7 @@ export async function checkInManual(customerId: string) {
 export async function eventoDoDispositivo(input: { deviceId: string; token: string; kind: CredentialKind; value: string; raw?: unknown }) {
   const device = await prisma.gymAccessDevice.findUnique({ where: { id: input.deviceId } });
   const cfg = (device?.config ?? {}) as { webhookToken?: string };
-  if (!device?.isActive || !cfg.webhookToken || cfg.webhookToken !== input.token) throw new AppError('UNAUTHENTICATED', 'Dispositivo não autorizado.');
+  if (!device?.isActive || !cfg.webhookToken || !safeEqual(open(cfg.webhookToken), input.token)) throw new AppError('UNAUTHENTICATED', 'Dispositivo não autorizado.');
   const db = prismaForTenant(device.tenantId);
   await db.gymAccessDevice.update({ where: { id: device.id }, data: { lastSeenAt: new Date() } });
 
@@ -76,13 +77,21 @@ export const presentesAgora = () => ctx().db.gymCheckIn.findMany({ where: { chec
 
 // ── Dispositivos ──
 export const listarDispositivos = () => ctx().db.gymAccessDevice.findMany({ select: { id: true, name: true, kind: true, provider: true, isActive: true, lastSeenAt: true, createdAt: true } });
-/** Cria o aparelho e devolve o token UMA vez (fica só o hash de nada: o token em si na config, cifrar é dívida declarada). */
+/** Cria o aparelho e devolve o token UMA vez. No banco fica CIFRADO (shared/crypto.ts). */
 export async function criarDispositivo(input: { name: string; kind: 'TURNSTILE' | 'DOOR' | 'BIOMETRIC' | 'QR_READER'; provider: string; config?: Record<string, unknown> }) {
   const webhookToken = randomBytes(24).toString('base64url');
-  const d = await ctx().db.gymAccessDevice.create({ data: { ...input, tenantId: ctx().tenantId, config: { ...(input.config ?? {}), webhookToken } as never } });
+  const d = await ctx().db.gymAccessDevice.create({ data: { ...input, tenantId: ctx().tenantId, config: { ...(input.config ?? {}), webhookToken: seal(webhookToken) } as never } });
   return { id: d.id, name: d.name, webhookUrl: `/public/academia/dispositivos/${d.id}/eventos`, webhookToken };
 }
 export const atualizarDispositivo = (id: string, input: { name?: string; isActive?: boolean }) => ctx().db.gymAccessDevice.update({ where: { id }, data: input });
+/** Gira o token do aparelho (perdeu-se, vazou, trocou o integrador). Devolve o novo uma vez. */
+export async function girarToken(id: string) {
+  const d = await ctx().db.gymAccessDevice.findUnique({ where: { id } });
+  if (!d) throw AppError.notFound('Dispositivo');
+  const webhookToken = randomBytes(24).toString('base64url');
+  await ctx().db.gymAccessDevice.update({ where: { id }, data: { config: { ...(d.config as object), webhookToken: seal(webhookToken) } as never } });
+  return { id, webhookToken };
+}
 export const revogarCredencial = (id: string) => ctx().db.gymAccessCredential.update({ where: { id }, data: { isActive: false, revokedAt: new Date() } });
 export const credenciaisDoAluno = (customerId: string) => ctx().db.gymAccessCredential.findMany({ where: { customerId }, select: { id: true, kind: true, isActive: true, createdAt: true, revokedAt: true } });
 export const eventosDeAcesso = (filter: { deviceId?: string; customerId?: string; allowed?: boolean; take?: number }) =>

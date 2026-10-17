@@ -1,0 +1,43 @@
+name: CI
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fc_platform
+          POSTGRES_PASSWORD: fc_platform_ci
+          POSTGRES_DB: fullcomercy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fc_platform -d fullcomercy"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_ADMIN_URL: postgresql://fc_platform:fc_platform_ci@localhost:5432/fullcomercy?schema=public
+      DATABASE_URL: postgresql://app_rw:app_rw_ci@localhost:5432/fullcomercy?schema=public
+      JWT_SECRET: ci-only-0123456789abcdef0123456789abcdef
+      PLATFORM_API_KEY: ci-only-platform-key-0123456789abcdef
+      APP_ENCRYPTION_KEY: ci-only-encryption-key-0123456789
+      SEED_ADMIN_PASSWORD: Demo-12345678
+      JOBS_ENABLED: "0"
+      PGPASSWORD: fc_platform_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npx prisma validate
+      - run: npm run typecheck
+      - run: npm test
+      - name: Papéis de banco (plataforma BYPASSRLS, tenant comum)
+        run: |
+          psql -h localhost -U fc_platform -d fullcomercy -v ON_ERROR_STOP=1 -c "ALTER ROLE fc_platform BYPASSRLS;" -c "CREATE ROLE app_rw LOGIN PASSWORD 'app_rw_ci' NOSUPERUSER NOBYPASSRLS;" -c "GRANT USAGE ON SCHEMA public TO app_rw;"
+      - run: npx prisma migrate deploy
+      - run: psql -h localhost -U fc_platform -d fullcomercy -v ON_ERROR_STOP=1 -f prisma/sql/001_rls_tenant.sql
+      - run: npm run db:seed
+      - run: npm run test:e2e

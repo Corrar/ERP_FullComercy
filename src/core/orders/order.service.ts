@@ -41,18 +41,19 @@ const ORDER_INCLUDE = {
 
 export async function createOrder(draft: OrderDraft) {
   const { db, tenantId, userId } = ctx();
-  if (!draft.items?.length) throw AppError.validation('Pedido sem itens.');
 
   // 1. QUAL MÓDULO? — a decisão central, isolada em `resolve` para ser testável sozinha.
   const strategy: SalesStrategy = salesStrategies.resolve(draft);
   const channel = draft.channel ?? strategy.channels[0] ?? OrderChannel.COUNTER;
 
   // 2. Itens: variante + preço de tabela.
-  let items = await priceItems(draft.items);
+  let items = await priceItems(draft.items ?? []);
 
   // 3. O módulo opina.
   await strategy.validate?.(draft);
   if (strategy.price) items = await strategy.price(items, draft);
+  // Só agora: a estratégia pode ter INJETADO linhas (adesão de plano) num rascunho sem itens.
+  if (!items.length) throw AppError.validation('Pedido sem itens.');
 
   const subtotal = round2(sum(items.map((i) => i.total)));
   const discount = round2(D(draft.discount ?? 0));
@@ -100,17 +101,18 @@ export async function createOrder(draft: OrderDraft) {
     // 4c. Estoque — SÓ pelo motor do core.
     await applyStockOnCreate(tx, order, items, policy, warehouseId, userId);
 
-    // 4d. Pagamentos informados na criação (PDV) → título + baixa no financeiro do core.
-    let status: OrderStatus = initialStatus;
+    // 4d. A extensão do módulo (mesa, vendedor, veículo…), no mesmo commit — e ANTES do
+    //     pagamento: a transição para COMPLETED dispara `afterStatusChange`, que precisa da
+    //     extensão já gravada (a comissão lê `ret_sales`). Achado pelo e2e.
+    await strategy.afterCreate?.(tx, order, items, draft);
+
+    // 4e. Pagamentos informados na criação (PDV) → título + baixa no financeiro do core.
     if (draft.payments?.length) {
       const paid = await registerPayments(tx, order, draft.payments);
       if (paid.gte(total) && strategy.completeOnFullPayment(draft)) {
-        status = await transitionWithin(tx, order, OrderStatus.COMPLETED, strategy, policy, 'Pago integralmente na criação.');
+        await transitionWithin(tx, order, OrderStatus.COMPLETED, strategy, policy, 'Pago integralmente na criação.');
       }
     }
-
-    // 4e. A extensão do módulo (mesa, vendedor, veículo…), no mesmo commit.
-    await strategy.afterCreate?.(tx, { ...order, status }, items, draft);
 
     await tx.auditLog.create({ data: { tenantId, userId, action: 'order.create', entity: 'Order', entityId: order.id, details: { number, module: strategy.moduleKey, total } } });
     return order.id;

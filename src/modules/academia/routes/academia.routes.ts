@@ -33,6 +33,7 @@ router.delete('/credenciais/:id', P('gym.acesso:manage'), asyncHandler(c.deleteC
 router.get('/dispositivos', P('gym.acesso:manage'), asyncHandler(c.getDispositivos));
 router.post('/dispositivos', P('gym.acesso:manage'), asyncHandler(c.postDispositivo));
 router.patch('/dispositivos/:id', P('gym.acesso:manage'), asyncHandler(c.patchDispositivo));
+router.post('/dispositivos/:id/girar-token', P('gym.acesso:manage'), asyncHandler(c.postGirarToken));
 router.get('/acessos', P('gym.acesso:manage'), asyncHandler(c.getEventosAcesso));
 
 router.get('/turmas', P('gym.turmas:view'), asyncHandler(c.getTurmas));

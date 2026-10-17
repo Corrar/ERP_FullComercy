@@ -33,3 +33,37 @@ export async function putModule(req: Request, res: Response) {
   if (body.enabled) await moduleRegistry.get(key)?.onEnable?.(ctx().tenantId);
   res.json(row);
 }
+
+const settingsSchema = z.object({
+  defaultSalesModule: z.nativeEnum(ModuleKey).nullable().optional(),
+  currency: z.string().length(3).optional(),
+  name: z.string().min(2).max(160).optional(),
+  document: z.string().max(20).optional(),
+  timezone: z.string().max(40).optional(),
+  /** Qualquer outra chave livre da empresa (impressora, logo, mensagens). */
+  extra: z.record(z.unknown()).optional(),
+});
+
+export async function getSettings(_req: Request, res: Response) {
+  const { prisma } = await import('../../infra/prisma');
+  const t = await prisma.tenant.findUniqueOrThrow({ where: { id: ctx().tenantId }, select: { id: true, slug: true, name: true, document: true, timezone: true, status: true, settings: true, createdAt: true } });
+  res.json(t);
+}
+
+/** PUT /tenant/settings — é aqui que a empresa define `defaultSalesModule` (desempate da venda). */
+export async function putSettings(req: Request, res: Response) {
+  const b = parse(settingsSchema, req.body);
+  const { prisma } = await import('../../infra/prisma');
+  const { invalidateTenantCache } = await import('./tenant-modules.service');
+  const atual = await prisma.tenant.findUniqueOrThrow({ where: { id: ctx().tenantId } });
+  const settings = { ...(atual.settings as Record<string, unknown>), ...(b.extra ?? {}) };
+  if (b.defaultSalesModule !== undefined) {
+    if (b.defaultSalesModule && !ctx().modules.has(b.defaultSalesModule)) return res.status(400).json({ error: `Módulo ${b.defaultSalesModule} não está ativo.`, code: 'VALIDATION' });
+    if (b.defaultSalesModule) settings.defaultSalesModule = b.defaultSalesModule; else delete settings.defaultSalesModule;
+  }
+  if (b.currency) settings.currency = b.currency;
+  const t = await prisma.tenant.update({ where: { id: atual.id }, data: { name: b.name, document: b.document, timezone: b.timezone, settings: settings as never } });
+  invalidateTenantCache(t.id);
+  await ctx().db.auditLog.create({ data: { tenantId: t.id, userId: ctx().userId, action: 'tenant.settings', entity: 'Tenant', entityId: t.id, details: b as never } });
+  res.json({ id: t.id, name: t.name, document: t.document, timezone: t.timezone, settings: t.settings });
+}

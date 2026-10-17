@@ -15,11 +15,10 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "db:seed": "ts-node prisma/seed.ts",
-    "test": "TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register --test 'test/**/*.test.ts'",
-    "smoke:boot": "ts-node -T -e \"require('./src/app').buildApp(); console.log('boot ok')\""
-  },
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "test": "TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register --test 'test/*.test.ts'",
+    "smoke:boot": "ts-node -T -e \"require('./src/app').buildApp(); console.log('boot ok')\"",
+    "test:e2e": "E2E=1 TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register --test-concurrency=1 --test 'test/e2e/*.test.ts'",
+    "test:all": "npm test && npm run test:e2e"
   },
   "engines": {
     "node": ">=20"
