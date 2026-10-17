@@ -43,7 +43,7 @@ Ou tudo em contêiner: `docker compose up -d db && docker compose run --rm api s
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | testes unitários (sem banco): resolução de módulo, placa, ciclo, cardápio, catálogo de permissões |
 | `npm run smoke:boot` | monta o app sem banco e falha se houver chave de permissão órfã |
-| `npm run test:e2e` | 11 fluxos ponta a ponta contra o banco (exige `.env` migrado + seed) |
+| `npm run test:e2e` | 18 fluxos ponta a ponta contra o banco (exige `.env` migrado + seed) |
 | `npm run prisma:migrate` / `prisma:deploy` | migrations, sempre como papel de plataforma |
 | `npm run db:rls` | aplica `prisma/sql/001_rls_tenant.sql` via Prisma (sem psql) |
 | `npm run db:seed` | onboarding das empresas de demonstração |
@@ -54,7 +54,8 @@ Ou tudo em contêiner: `docker compose up -d db && docker compose run --rm api s
 | Prefixo | Autenticação | Conteúdo |
 |---|---|---|
 | `GET /health` | pública | portão de deploy |
-| `/auth/*` | pública (`/me` autenticada) | login por `tenant` + e-mail, refresh, logout |
+| `/auth/*` | pública (`/me` autenticada) | login por `tenant` + e-mail, refresh, logout, esqueci a senha, redefinir |
+| `GET /dashboard` | JWT + tenant | KPIs do dia do core + dos módulos ativos |
 | `/public/food/*` | pública | cardápio online, pedido do cliente final, acompanhamento |
 | `/public/academia/*` | pública (token do aparelho) | webhook da catraca |
 | `/platform/*` | `x-platform-key` | criar empresa, suspender, ligar módulo (só existe com `PLATFORM_API_KEY`) |
@@ -65,6 +66,7 @@ Ou tudo em contêiner: `docker compose up -d db && docker compose run --rm api s
 | `GET /health/ready` | pública | readiness com ping no banco |
 
 Qualquer listagem aceita `?format=csv` (UTF-8 com BOM, `;`, decimal com vírgula). Toda resposta leva `X-Request-Id`.
+E-mail transacional (redefinição de senha, convite de usuário via `POST /users/invite`) sai por SMTP quando `SMTP_HOST` existe; sem ele, provedor `console` loga o link.
 | `/m/varejo`, `/m/food`, `/m/academia`, `/m/servicos` | JWT + tenant + **módulo ativo** | o que é exclusivo de cada módulo |
 | Socket.IO (mesmo JWT) | sala por tenant | `order.*`, `kitchen.ticket`, `delivery.status`, `gym.access`, `os.status`, `stock.low` |
 
@@ -97,7 +99,7 @@ Depois de criado: `POST /orders/:id/items` (nova rodada, peça aprovada), `POST 
 
 | Módulo | Entregue |
 |---|---|
-| **Varejo** `/m/varejo` | caixa (abrir, sangria/suprimento, fechar com conferência), grade tamanho×cor gerando variantes, matriz de estoque, etiquetas com render **ZPL**, vendedores, regras de comissão com vigência, aprovação e pagamento de comissões, devolução/troca com vale, relatórios (vendedor, hora, curva ABC, sem giro) |
+| **Varejo** `/m/varejo` | caixa (abrir, sangria/suprimento, fechar com conferência), grade tamanho×cor gerando variantes, matriz de estoque, etiquetas em **ZPL** e **PDF** com Code128, vendedores, regras de comissão com vigência, aprovação e pagamento de comissões, devolução/troca com vale, relatórios (vendedor, hora, curva ABC, sem giro) |
 | **Food** `/m/food` | mapa do salão, comandas (abrir, conta, transferir mesa, fechar com taxa e rateio), KDS por estação com tempos, entregas (atribuir, mover, acerto do entregador), zonas por CEP, cardápio completo (menus, categorias, itens, adicionais), **pedido online público** com acompanhamento, relatórios |
 | **Academia** `/m/academia` | planos, adesão pelo pedido, recorrência por job (cobrança → financeiro, inadimplência), pausar/retomar/trocar plano, check-in/out, credenciais, dispositivos com token de webhook, log de acessos, turmas com agenda, reservas e chamada, painel (MRR, churn), relatórios (frequência, pico, sumidos) |
 | **Serviços** `/m/servicos` | veículos por placa com histórico, OS com status de manutenção projetado no core, orçamento (itens no pedido) e aprovação com recusa parcial, técnico, checklist de entrada/saída, anexos, agenda com capacidade de boxes e chegada → OS, catálogo, relatórios (técnicos, serviços, retorno de clientes) |

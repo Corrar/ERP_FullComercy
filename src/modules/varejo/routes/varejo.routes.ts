@@ -26,6 +26,7 @@ router.post('/etiquetas/modelos', P('varejo.etiquetas:print'), asyncHandler(c.po
 router.post('/etiquetas/lotes', P('varejo.etiquetas:print'), asyncHandler(c.postLoteEtiquetas));
 router.get('/etiquetas/lotes/:id', P('varejo.etiquetas:print'), asyncHandler(c.getLoteExpandido));
 router.get('/etiquetas/lotes/:id/zpl', P('varejo.etiquetas:print'), asyncHandler(c.getLoteZpl));
+router.get('/etiquetas/lotes/:id/pdf', P('varejo.etiquetas:print'), asyncHandler(c.getLotePdf));
 router.post('/etiquetas/lotes/:id/impresso', P('varejo.etiquetas:print'), asyncHandler(c.postLoteImpresso));
 
 router.get('/vendedores', P('varejo.comissoes:view'), asyncHandler(c.getVendedores));

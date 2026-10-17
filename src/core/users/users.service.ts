@@ -68,3 +68,19 @@ export async function setUserPermissionExceptions(userId: string, items: { permi
   });
   return db.userPermission.findMany({ where: { userId } });
 }
+
+/** CONVITE: cria o usuário sem senha utilizável e manda o link para ele definir a dele (72 h). */
+export async function inviteUser(input: { name: string; email: string; roleIds: string[] }) {
+  const { db, tenantId, tenantSlug } = ctx();
+  const { randomBytes } = await import('node:crypto');
+  const user = await db.user.create({
+    data: { tenantId, name: input.name, email: input.email.toLowerCase().trim(), passwordHash: await hashPassword(randomBytes(32).toString('base64url')), roles: { create: input.roleIds.map((roleId) => ({ roleId })) } },
+    select: { id: true, name: true, email: true },
+  });
+  const { issuePasswordToken } = await import('../auth/auth.service');
+  const { sendMail, appUrl } = await import('../../infra/mailer');
+  const token = await issuePasswordToken(tenantId, user.id, 'INVITE');
+  const link = appUrl(`/definir-senha?tenant=${encodeURIComponent(tenantSlug)}&token=${token}`);
+  await sendMail({ to: user.email, subject: 'Você foi convidado(a) para o FullComercy', text: `Olá, ${user.name}.\n\nSua conta foi criada. Defina sua senha pelo link (vale por 72 horas):\n${link}` });
+  return user;
+}

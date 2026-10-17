@@ -9,6 +9,8 @@ export const SENHA = process.env.SEED_ADMIN_PASSWORD ?? 'Demo-12345678';
 
 let server: Server | null = null;
 let base = '';
+export const baseUrl = () => base;
+export { baseUrl as base };
 
 export async function start() {
   const { buildApp } = await import('../../src/app');

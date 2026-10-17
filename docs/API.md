@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-17. 245 rotas.
+> Gerado por `npm run docs:api` em 2026-10-17. 250 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado.
 
@@ -13,6 +13,8 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `POST` | `/auth/login` |  |
 | `POST` | `/auth/refresh` |  |
 | `POST` | `/auth/logout` |  |
+| `POST` | `/auth/forgot` |  |
+| `POST` | `/auth/reset` |  |
 | `GET` | `/auth/me` |  |
 | `POST` | `/public/payments/:provider/webhook` |  |
 | `GET` | `/public/food/cardapio/:tenant/:menu` |  |
@@ -48,6 +50,12 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `PATCH` | `/customers/:id/active` | `core.customers:manage` |
 | `POST` | `/customers/:id/addresses` | `core.customers:manage` |
 | `DELETE` | `/customers/:id/addresses/:addressId` | `core.customers:manage` |
+
+## Core · dashboard
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/dashboard/` |  |
 
 ## Core · finance
 
@@ -175,6 +183,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 |---|---|---|
 | `GET` | `/users/` | `core.users:view` |
 | `POST` | `/users/` | `core.users:manage` |
+| `POST` | `/users/invite` | `core.users:manage` |
 | `POST` | `/users/me/password` |  |
 | `PATCH` | `/users/:id` | `core.users:manage` |
 | `PUT` | `/users/:id/roles` | `core.users:manage` |
@@ -331,6 +340,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `POST` | `/m/varejo/etiquetas/lotes` | `varejo.etiquetas:print` |
 | `GET` | `/m/varejo/etiquetas/lotes/:id` | `varejo.etiquetas:print` |
 | `GET` | `/m/varejo/etiquetas/lotes/:id/zpl` | `varejo.etiquetas:print` |
+| `GET` | `/m/varejo/etiquetas/lotes/:id/pdf` | `varejo.etiquetas:print` |
 | `POST` | `/m/varejo/etiquetas/lotes/:id/impresso` | `varejo.etiquetas:print` |
 | `GET` | `/m/varejo/vendedores` | `varejo.comissoes:view` |
 | `POST` | `/m/varejo/vendedores` | `varejo.comissoes:manage` |

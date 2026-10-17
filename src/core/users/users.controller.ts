@@ -45,3 +45,7 @@ export async function putUserExceptions(req: Request, res: Response) {
   const b = parse(z.object({ items: z.array(z.object({ permissionKey: z.string(), effect: z.enum(['ALLOW', 'DENY']) })) }), req.body);
   res.json(await users.setUserPermissionExceptions(String(req.params.id), b.items));
 }
+
+export async function postInvite(req: Request, res: Response) {
+  res.status(201).json(await users.inviteUser(parse(z.object({ name: z.string().min(2).max(120), email: z.string().email(), roleIds: z.array(z.string().uuid()).default([]) }), req.body)));
+}

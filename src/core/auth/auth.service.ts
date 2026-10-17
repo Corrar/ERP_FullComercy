@@ -80,3 +80,41 @@ export async function logout(rawToken: string) {
 }
 
 export const hashPassword = (plain: string) => bcrypt.hash(plain, 12);
+
+// ── Esqueci a senha / convite ─────────────────────────────────────────────────────────────
+import { sendMail, appUrl } from '../../infra/mailer';
+
+/** Gera o token de uso único (1 h) e devolve o CRU para ir no link. Invalida os anteriores. */
+export async function issuePasswordToken(tenantId: string, userId: string, purpose: 'RESET' | 'INVITE') {
+  const raw = randomBytes(32).toString('base64url');
+  await prisma.passwordReset.updateMany({ where: { tenantId, userId, usedAt: null }, data: { usedAt: new Date() } });
+  await prisma.passwordReset.create({ data: { tenantId, userId, tokenHash: sha256(raw), purpose, expiresAt: new Date(Date.now() + (purpose === 'INVITE' ? 72 : 1) * 3_600_000) } });
+  return raw;
+}
+
+/** SEMPRE responde igual (quem pediu não descobre se o e-mail existe). */
+export async function forgotPassword(tenantSlug: string, email: string) {
+  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+  const user = tenant ? await prisma.user.findUnique({ where: { tenantId_email: { tenantId: tenant.id, email: email.toLowerCase().trim() } } }) : null;
+  if (!tenant || !user || !user.isActive) return;
+  const token = await issuePasswordToken(tenant.id, user.id, 'RESET');
+  const link = appUrl(`/redefinir-senha?tenant=${encodeURIComponent(tenant.slug)}&token=${token}`);
+  await sendMail({ to: user.email, subject: `${tenant.name} · redefinição de senha`, text: `Olá, ${user.name}.
+
+Para redefinir sua senha, abra o link (vale por 1 hora):
+${link}
+
+Se não foi você, ignore este e-mail.` });
+}
+
+export async function resetPassword(rawToken: string, newPassword: string) {
+  const row = await prisma.passwordReset.findUnique({ where: { tokenHash: sha256(rawToken) } });
+  if (!row || row.usedAt || row.expiresAt < new Date()) throw new AppError('UNAUTHENTICATED', 'Link inválido ou expirado. Peça um novo.');
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: row.userId }, data: { passwordHash: await hashPassword(newPassword), isActive: true } }),
+    prisma.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+    // Senha nova = sessões antigas morrem.
+    prisma.refreshToken.updateMany({ where: { userId: row.userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+  ]);
+  return { userId: row.userId, purpose: row.purpose };
+}

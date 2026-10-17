@@ -57,3 +57,36 @@ export async function renderZpl(batchId: string): Promise<string> {
     '^XZ',
   ].filter(Boolean).join('\n')).join('\n');
 }
+
+/**
+ * Render PDF (impressora comum / folha A4 de etiquetas adesivas). Code128 via bwip-js como PNG
+ * embutido. Grade: calcula quantas etiquetas cabem por linha na largura do papel.
+ */
+export async function renderPdf(batchId: string, papel: { larguraMm: number; alturaMm: number; margemMm: number } = { larguraMm: 210, alturaMm: 297, margemMm: 8 }): Promise<Buffer> {
+  const { template, etiquetas } = await expandirLote(batchId);
+  const PDFDocument = (await import('pdfkit')).default;
+  const bwip = await import('bwip-js');
+  const mm = (v: number) => v * 72 / 25.4;
+  const W = Number(template.widthMm), H = Number(template.heightMm);
+  const porLinha = Math.max(1, Math.floor((papel.larguraMm - 2 * papel.margemMm) / W));
+  const porColuna = Math.max(1, Math.floor((papel.alturaMm - 2 * papel.margemMm) / H));
+  const doc = new PDFDocument({ size: [mm(papel.larguraMm), mm(papel.alturaMm)], margin: 0, autoFirstPage: true });
+  const chunks: Buffer[] = []; doc.on('data', (c: Buffer) => chunks.push(c));
+  const fim = new Promise<Buffer>((r) => doc.on('end', () => r(Buffer.concat(chunks))));
+  const fmt = (v: unknown) => `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
+  for (const [i, e] of etiquetas.entries()) {
+    const slot = i % (porLinha * porColuna);
+    if (i > 0 && slot === 0) doc.addPage();
+    const x = mm(papel.margemMm + (slot % porLinha) * W), y = mm(papel.margemMm + Math.floor(slot / porLinha) * H);
+    doc.rect(x, y, mm(W), mm(H)).strokeColor('#cccccc').lineWidth(0.3).stroke();
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(8).text(e.nome.slice(0, 28), x + mm(2), y + mm(2), { width: mm(W - 4), lineBreak: false });
+    if (e.variante) doc.font('Helvetica').fontSize(7).text(e.variante, x + mm(2), y + mm(6), { width: mm(W - 4), lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(11).text(fmt(e.preco), x + mm(2), y + mm(H) - mm(14), { width: mm(W - 4), lineBreak: false });
+    try {
+      const png = await bwip.toBuffer({ bcid: 'code128', text: e.barcode, scale: 2, height: 6, includetext: true, textsize: 6 });
+      doc.image(png, x + mm(2), y + mm(H) - mm(9.5), { fit: [mm(W - 4), mm(8.5)] });
+    } catch { doc.font('Helvetica').fontSize(6).text(e.barcode, x + mm(2), y + mm(H) - mm(6)); }
+  }
+  doc.end();
+  return fim;
+}

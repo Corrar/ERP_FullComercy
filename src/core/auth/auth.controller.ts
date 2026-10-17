@@ -45,3 +45,13 @@ export async function getMe(req: Request, res: Response) {
     modules: [...snap.modules.keys()],
   });
 }
+
+export async function postForgot(req: Request, res: Response) {
+  const b = parse(z.object({ tenant: z.string().min(1), email: z.string().email() }), req.body);
+  await auth.forgotPassword(b.tenant, b.email);
+  res.status(204).end();
+}
+export async function postReset(req: Request, res: Response) {
+  const b = parse(z.object({ token: z.string().min(20), password: z.string().min(8) }), req.body);
+  res.json(await auth.resetPassword(b.token, b.password));
+}

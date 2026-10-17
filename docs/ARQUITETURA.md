@@ -54,16 +54,18 @@ ERP_FullComercy/
 │   ├── config/env.ts               # env validado com zod no boot
 │   ├── infra/
 │   │   ├── prisma.ts               # DOIS clients (plataforma/tenant), extensão RLS-aware, tenantTransaction()
-│   │   └── realtime.ts             # Socket.IO: sala por tenant derivada do JWT; ponte eventos → sala
+│   │   ├── realtime.ts             # Socket.IO: sala por tenant derivada do JWT; ponte eventos → sala
+│   │   └── mailer.ts               # e-mail transacional: SMTP (nodemailer) ou console
 │   ├── jobs/                       # scheduler em processo; core.jobs (outbox, expiração de pagamento); módulos declaram os seus
-│   ├── shared/                     # errors, http, money, events, crypto, csv (?format=csv), request-log (X-Request-Id)
+│   ├── shared/                     # errors, http, money, events, crypto, csv (?format=csv), request-log (X-Request-Id), audit-http (opt-in)
 │   │
 │   ├── core/                       # ══ NÚCLEO UNIVERSAL ══ (nada de nicho aqui)
 │   │   ├── tenancy/                # ctx() em AsyncLocalStorage, cache de módulos, runAsTenant() p/ jobs e rotas públicas
 │   │   ├── platform/               # /platform: onboarding de empresa, status, módulos (x-platform-key)
-│   │   ├── auth/                   # login (tenant+email), refresh com rotação, /auth/me, authenticate
+│   │   ├── auth/                   # login (tenant+email), refresh com rotação, /auth/me, esqueci/redefinir senha, authenticate
 │   │   ├── rbac/                   # catálogo de permissões, effectivePermissions(), requirePermission, perfis
-│   │   ├── users/                  # CRUD, papéis, exceções individuais, senha
+│   │   ├── users/                  # CRUD, convite por e-mail, papéis, exceções individuais, senha
+│   │   ├── dashboard/              # GET /dashboard: KPIs do core + dos módulos ativos
 │   │   ├── customers/              # CRUD, endereços, resumo comercial
 │   │   ├── finance/                # títulos, baixas, contas, categorias, fluxo de caixa — ÚNICA porta de dinheiro
 │   │   ├── inventory/              # produtos/variantes/categorias/armazéns, MOTOR de estoque, transferência, razão, mínimo, inventário físico
@@ -93,7 +95,7 @@ ERP_FullComercy/
 │       │       ├── retail-sales.strategy.ts   # PDV: OPEN → consome estoque → COMPLETED ao pagar; vale de troca; comissão
 │       │       ├── pdv.service.ts             # abrir/fechar caixa, sangria/suprimento, conferência, resumo
 │       │       ├── grade.service.ts           # eixos/valores, matriz tamanho×cor → variantes do core
-│       │       ├── etiquetas.service.ts       # modelos, lotes, expansão, render ZPL
+│       │       ├── etiquetas.service.ts       # modelos, lotes, expansão, render ZPL e PDF (pdfkit + bwip-js)
 │       │       ├── comissao.service.ts        # cálculo por item com vigência, regras, aprovação, pagamento
 │       │       ├── devolucoes.service.ts      # devolução/troca: reestoque + título a pagar (vale)
 │       │       └── relatorios.service.ts      # vendedor, hora, curva ABC, sem giro
@@ -212,9 +214,9 @@ Escolhida a estratégia, o core delega a ela só os pontos de decisão de nicho 
   com as credenciais do cliente.
 - **Fiscal** (NFC-e/NF-e/SAT): nada. É integração com emissor externo; o ponto natural é um
   listener de `order.status` COMPLETED gravando no outbox para um provedor fiscal.
-- **Render de etiqueta em PDF**: só ZPL (cobre impressoras térmicas de loja).
 - **Barramento em memória entre instâncias**: os eventos são duráveis (outbox) e os webhooks saem de
   qualquer instância, mas o Socket.IO não compartilha salas entre instâncias (precisa do adapter
   Redis se houver mais de uma).
+- **E-mail**: provedor SMTP genérico; templates são texto puro (sem HTML/branding por empresa).
 - **Segredos cifrados exigem `APP_ENCRYPTION_KEY`**: sem ela ficam em claro com prefixo `plain:` e
   um aviso no boot. Rotação de chave (recifrar) não existe.

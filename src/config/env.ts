@@ -27,6 +27,16 @@ const schema = z.object({
   PLATFORM_API_KEY: z.string().min(32).optional(),
   /// Chave da cifra de segredos guardados em JSON (token de catraca, chaves de gateway).
   APP_ENCRYPTION_KEY: z.string().min(16).optional(),
+  /// URL pública do FRONT (links de e-mail: redefinir senha, convite).
+  APP_URL: z.string().url().default('http://localhost:5173'),
+  /// E-mail transacional. Sem SMTP_HOST, provedor `console` (loga o link; nada sai).
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  MAIL_FROM: z.string().default('FullComercy <no-reply@fullcomercy.local>'),
+  /// Auditoria HTTP genérica de toda mutação autenticada (além das auditorias de negócio). "1" liga.
+  AUDIT_HTTP: z.string().default('0').transform((v) => ['1', 'true', 'on'].includes(v.toLowerCase())),
   /// Jobs em processo (cobrança recorrente, sessões de turma…). "0"/"false" desliga.
   JOBS_ENABLED: z.string().default('1').transform((v) => !['0', 'false', 'off'].includes(v.toLowerCase())),
 });

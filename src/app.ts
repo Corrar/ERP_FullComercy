@@ -10,6 +10,8 @@ import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './shared/http';
 import { csvMiddleware } from './shared/csv';
 import { requestLog } from './shared/request-log';
+import { auditHttp } from './shared/audit-http';
+import dashboardRouter from './core/dashboard/dashboard.routes';
 import { prisma } from './infra/prisma';
 import { authenticate } from './core/auth/auth.middleware';
 import { tenantContext } from './core/tenancy/tenant.middleware';
@@ -93,9 +95,9 @@ export function buildApp() {
   collect('/platform', platformRouter, 'platform');
 
   // 2. Privado — core.
-  const priv = [authenticate, tenantContext] as const;
+  const priv = [authenticate, tenantContext, auditHttp] as const;
   const core: [string, import('express').Router][] = [
-    ['/tenant', tenantRouter], ['/users', usersRouter], ['/roles', rolesRouter], ['/customers', customersRouter],
+    ['/dashboard', dashboardRouter], ['/tenant', tenantRouter], ['/users', usersRouter], ['/roles', rolesRouter], ['/customers', customersRouter],
     ['/products', productsRouter], ['/stock', stockRouter], ['/finance', financeRouter], ['/orders', ordersRouter],
     ['/audit', auditRouter], ['/webhooks', webhooksRouter], ['/notifications', notificationsRouter],
     ['/suppliers', suppliersRouter], ['/purchases', purchasesRouter], ['/payments', paymentsRouter],

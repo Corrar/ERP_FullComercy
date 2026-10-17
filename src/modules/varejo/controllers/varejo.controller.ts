@@ -53,6 +53,11 @@ export const postLoteEtiquetas = async (req: Request, res: Response) => {
 };
 export const getLoteExpandido = async (req: Request, res: Response) => res.json(await etiquetas.expandirLote(String(req.params.id)));
 export const getLoteZpl = async (req: Request, res: Response) => { res.type('text/plain').send(await etiquetas.renderZpl(String(req.params.id))); };
+export const getLotePdf = async (req: Request, res: Response) => {
+  const q = parse(z.object({ larguraMm: z.coerce.number().positive().default(210), alturaMm: z.coerce.number().positive().default(297), margemMm: z.coerce.number().nonnegative().default(8) }), req.query);
+  const pdf = await etiquetas.renderPdf(String(req.params.id), q);
+  res.type('application/pdf').setHeader('content-disposition', `inline; filename="etiquetas-${req.params.id}.pdf"`).send(pdf);
+};
 export const postLoteImpresso = async (req: Request, res: Response) => res.json(await etiquetas.marcarImpresso(String(req.params.id)));
 
 // ── Vendedores e comissões ──
