@@ -50,3 +50,25 @@ export const listarGruposAdicionais = () => ctx().db.foodModifierGroup.findMany(
 export const criarGrupoAdicionais = (input: { name: string; minSelect?: number; maxSelect?: number; modifiers?: { name: string; price?: number }[] }) =>
   ctx().db.foodModifierGroup.create({ data: { name: input.name, minSelect: input.minSelect, maxSelect: input.maxSelect, tenantId: ctx().tenantId, modifiers: { create: (input.modifiers ?? []).map((m, i) => ({ ...m, position: i })) } }, include: { modifiers: true } });
 export const ligarGrupoAoItem = (menuItemId: string, groupId: string, position = 0) => ctx().db.foodMenuItemModifierGroup.create({ data: { tenantId: ctx().tenantId, menuItemId, groupId, position } });
+
+// ── Ficha técnica (insumos por item do cardápio) ──
+export async function definirFicha(menuItemId: string, insumos: { ingredientVariantId: string; quantity: number }[]) {
+  const { db, tenantId } = ctx();
+  const { tenantTransaction } = await import('../../../infra/prisma');
+  return tenantTransaction(db, tenantId, async (tx) => {
+    if (!(await tx.foodMenuItem.findUnique({ where: { id: menuItemId } }))) throw AppError.notFound('Item do cardápio');
+    await tx.foodRecipeItem.deleteMany({ where: { menuItemId } });
+    await tx.foodRecipeItem.createMany({ data: insumos.map((i) => ({ tenantId, menuItemId, ingredientVariantId: i.ingredientVariantId, quantity: i.quantity })) });
+    return tx.foodRecipeItem.findMany({ where: { menuItemId }, include: { ingredient: { select: { sku: true, product: { select: { name: true, unit: true, costPrice: true } } } } } });
+  });
+}
+export const fichaDoItem = (menuItemId: string) => ctx().db.foodRecipeItem.findMany({ where: { menuItemId }, include: { ingredient: { select: { sku: true, product: { select: { name: true, unit: true, costPrice: true } } } } } });
+
+/** CMV teórico do item = Σ insumo × custo médio. Para comparar com o preço do cardápio. */
+export async function custoDoItem(menuItemId: string) {
+  const [ficha, item] = await Promise.all([fichaDoItem(menuItemId), ctx().db.foodMenuItem.findUnique({ where: { id: menuItemId } })]);
+  const { D, round2 } = await import('../../../shared/money');
+  const custo = round2(ficha.reduce((s, f) => s.plus(D(f.quantity).mul(f.ingredient.product.costPrice)), D(0)));
+  const preco = D(item?.price ?? 0);
+  return { menuItemId, custo, preco, margem: preco.isZero() ? null : round2(preco.minus(custo).div(preco).mul(100)) };
+}

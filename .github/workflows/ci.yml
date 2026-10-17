@@ -37,7 +37,7 @@ jobs:
       - name: Papéis de banco (plataforma BYPASSRLS, tenant comum)
         run: |
           psql -h localhost -U fc_platform -d fullcomercy -v ON_ERROR_STOP=1 -c "ALTER ROLE fc_platform BYPASSRLS;" -c "CREATE ROLE app_rw LOGIN PASSWORD 'app_rw_ci' NOSUPERUSER NOBYPASSRLS;" -c "GRANT USAGE ON SCHEMA public TO app_rw;"
-      - run: npx prisma migrate deploy
-      - run: psql -h localhost -U fc_platform -d fullcomercy -v ON_ERROR_STOP=1 -f prisma/sql/001_rls_tenant.sql
+      - run: npm run prisma:deploy
+      - run: npm run db:rls
       - run: npm run db:seed
       - run: npm run test:e2e

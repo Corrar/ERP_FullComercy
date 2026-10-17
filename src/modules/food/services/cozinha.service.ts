@@ -8,6 +8,9 @@ import { ctx } from '../../../core/tenancy/tenant-context';
 import { tenantTransaction } from '../../../infra/prisma';
 import { AppError } from '../../../shared/errors';
 import { events } from '../../../shared/events';
+import * as stock from '../../../core/inventory/stock.service';
+import { defaultWarehouseId } from '../../../core/inventory/products.service';
+import { D } from '../../../shared/money';
 
 export async function abrirTicketsDeCozinha(tx: TenantTx, foodOrderId: string, order: OrderWithItems, items: PricedItem[]) {
   // Os itens persistidos (com id) estão em `order.items`, na mesma ordem dos `items` precificados.
@@ -44,6 +47,8 @@ export async function moverTicket(ticketId: string, to: KitchenStatus) {
       where: { id: ticketId },
       data: { status: to, startedAt: to === 'PREPARING' ? new Date() : undefined, readyAt: to === 'READY' ? new Date() : undefined, items: { updateMany: { where: {}, data: { status: to } } } },
     });
+    // Ficha técnica: o prato ficou pronto → os insumos saíram do estoque. Idempotente por item.
+    if (to === 'READY') await baixarInsumos(tx, ticketId);
     // Projeção: pior status entre os tickets vivos define o do pedido.
     const tickets = await tx.foodKitchenTicket.findMany({ where: { foodOrderId: t.foodOrderId, status: { not: 'CANCELLED' } }, select: { status: true } });
     const ordem: KitchenStatus[] = ['QUEUED', 'PREPARING', 'READY', 'SERVED'];
@@ -56,6 +61,24 @@ export async function moverTicket(ticketId: string, to: KitchenStatus) {
     events.emit('kitchen.ticket', { tenantId, ticketId, station: t.station, status: to });
     return { ticketId, status: to, kitchenStatus: pior };
   });
+}
+
+/** Baixa os insumos da ficha técnica de cada item do ticket (se houver ficha). */
+async function baixarInsumos(tx: TenantTx, ticketId: string) {
+  const { tenantId, userId } = ctx();
+  const itens = await tx.foodKitchenTicketItem.findMany({ where: { ticketId }, include: { orderItem: { select: { id: true, quantity: true, metadata: true } } } });
+  const warehouseId = await defaultWarehouseId();
+  for (const it of itens) {
+    const menuItemId = (it.orderItem.metadata as { menuItemId?: string })?.menuItemId;
+    if (!menuItemId) continue;
+    const ficha = await tx.foodRecipeItem.findMany({ where: { menuItemId } });
+    for (const f of ficha) {
+      const qty = D(f.quantity).mul(it.orderItem.quantity);
+      await stock.consume(tx, { tenantId, variantId: f.ingredientVariantId, warehouseId }, qty, { refType: 'RECIPE', refId: it.orderItem.id, userId, idempotencyKey: `recipe:${it.id}:${f.ingredientVariantId}`, note: 'Baixa por ficha técnica' })
+        // Insumo sem saldo NÃO trava a cozinha: registra o furo e segue (o relatório de CMV mostra).
+        .catch((e) => console.warn(`[ficha] insumo ${f.ingredientVariantId} sem saldo: ${e instanceof Error ? e.message : e}`));
+    }
+  }
 }
 
 /** Resumo por estação: quantos na fila, em preparo, e o tempo médio de preparo do dia. */

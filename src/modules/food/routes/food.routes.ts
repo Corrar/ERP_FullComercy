@@ -41,6 +41,8 @@ router.post('/menus/:id/categorias', P('food.cardapio:manage'), asyncHandler(c.p
 router.post('/menus/:id/itens', P('food.cardapio:manage'), asyncHandler(c.postItem));
 router.patch('/menus/:id/itens/:itemId', P('food.cardapio:manage'), asyncHandler(c.patchItem));
 router.post('/menus/:id/itens/:itemId/adicionais', P('food.cardapio:manage'), asyncHandler(c.postLigarGrupo));
+router.get('/menus/:id/itens/:itemId/ficha', P('food.cardapio:manage'), asyncHandler(c.getFicha));
+router.put('/menus/:id/itens/:itemId/ficha', P('food.cardapio:manage'), asyncHandler(c.putFicha));
 router.get('/adicionais', P('food.cardapio:manage'), asyncHandler(c.getGrupos));
 router.post('/adicionais', P('food.cardapio:manage'), asyncHandler(c.postGrupo));
 

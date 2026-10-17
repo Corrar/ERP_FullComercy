@@ -28,6 +28,13 @@ request ─► authenticate (JWT: sub=userId, tid=tenantId; confere is_active no
   `create` de topo; o código passa explicitamente e a extensão fica como rede.
 - **`tenantTransaction()`** abre transação interativa e roda `SET LOCAL app.tenant_id`. Com o RLS
   ligado, uma query que escapar da extensão por bug vê zero linhas, não linhas alheias.
+- **Dois clients, dois papéis de banco.** `prisma` (plataforma, `DATABASE_ADMIN_URL`, `BYPASSRLS`)
+  só para login, refresh, onboarding, jobs e snapshot de módulos. `ctx().db` (tenant,
+  `DATABASE_URL`, papel comum) para o negócio. Fora de transação, a extensão manda a operação num
+  LOTE `[set_config, operação]`; dentro, segue na conexão da transação; e se um service usar o
+  client de fora dentro de uma transação, a extensão redireciona para a transação (detectado por
+  `__internalParams.transaction`). Assim NENHUMA query de negócio chega ao banco sem o GUC — e o
+  RLS pode ser estrito: sem GUC, zero linhas e escrita recusada (provado no e2e, direto no banco).
 - **FK composta** `(tenant_id, x_id) → (tenant_id, id)`: o banco recusa um pedido da empresa A
   apontando para um cliente da empresa B. Consequência: não existe `onDelete: SetNull` (anularia o
   `tenant_id`); cadastro se desativa (`isActive=false`), não se apaga.
@@ -46,10 +53,10 @@ ERP_FullComercy/
 │   ├── app.ts                      # montagem na ordem: público → plataforma → core privado → módulos
 │   ├── config/env.ts               # env validado com zod no boot
 │   ├── infra/
-│   │   ├── prisma.ts               # client base, prismaForTenant(), tenantTransaction() (arma o RLS)
+│   │   ├── prisma.ts               # DOIS clients (plataforma/tenant), extensão RLS-aware, tenantTransaction()
 │   │   └── realtime.ts             # Socket.IO: sala por tenant derivada do JWT; ponte eventos → sala
-│   ├── jobs/scheduler.ts           # agendador em processo; módulos declaram `jobs`
-│   ├── shared/                     # errors (AppError), http (asyncHandler/parse/errorHandler), money (Decimal), events (barramento)
+│   ├── jobs/                       # scheduler em processo; core.jobs (outbox, expiração de pagamento); módulos declaram os seus
+│   ├── shared/                     # errors, http, money (Decimal), events (barramento tipado), crypto (AES-GCM p/ segredos em JSON)
 │   │
 │   ├── core/                       # ══ NÚCLEO UNIVERSAL ══ (nada de nicho aqui)
 │   │   ├── tenancy/                # ctx() em AsyncLocalStorage, cache de módulos, runAsTenant() p/ jobs e rotas públicas
@@ -61,6 +68,10 @@ ERP_FullComercy/
 │   │   ├── finance/                # títulos, baixas, contas, categorias, fluxo de caixa — ÚNICA porta de dinheiro
 │   │   ├── inventory/              # produtos/variantes/categorias/armazéns, MOTOR de estoque, transferência, razão, mínimo
 │   │   ├── audit/                  # leitura do log de auditoria
+│   │   ├── integration/            # outbox durável + webhooks por empresa (HMAC, retry/backoff) + despachante
+│   │   ├── notifications/          # o sino: avisos por evento, leitura por pessoa
+│   │   ├── purchases/              # fornecedores e pedidos de compra (recebimento parcial, custo médio, a pagar, sugestão)
+│   │   ├── payments/               # intenções de pagamento online + providers/ (manual, mock; gateway real = adaptador)
 │   │   └── orders/                 # ══ O PEDIDO GENÉRICO ══
 │   │       ├── sales-strategy.ts   #   contrato SalesStrategy + registry + resolve() + draftFromOrder()
 │   │       ├── core-sales.strategy.ts
@@ -96,7 +107,7 @@ ERP_FullComercy/
 │       │       ├── mesas.service.ts           # mapa do salão, comanda, conta, transferência, fechamento com rateio
 │       │       ├── cozinha.service.ts         # KDS: QUEUED → PREPARING → READY → SERVED; projeção no core; tempos
 │       │       ├── entregadores.service.ts    # entrega, zonas por CEP, acerto do entregador
-│       │       ├── cardapio.service.ts        # menus/categorias/itens/adicionais + cardápio público + janela de horário
+│       │       ├── cardapio.service.ts        # menus/categorias/itens/adicionais + ficha técnica (CMV) + cardápio público
 │       │       ├── pedido-online.service.ts   # pedido do cliente final sem login (runAsTenantSlug) + acompanhamento
 │       │       └── relatorios.service.ts
 │       │
@@ -120,7 +131,10 @@ ERP_FullComercy/
 │               ├── os.service.ts              # máquina de estados, orçamento/aprovação, checklist, anexos, relatórios
 │               ├── agenda.service.ts          # agenda com capacidade de boxes; chegada → OS
 │               └── veiculos.service.ts        # placa normalizada, lista, histórico
-├── docs/ARQUITETURA.md
+├── scripts/                        # prisma-admin.js (CLI como plataforma), apply-rls.js, gerar-api-md.ts
+├── docker/initdb/01-roles.sql      # os dois papéis para o compose
+├── Dockerfile · docker-compose.yml · .github/workflows/ci.yml
+├── docs/ARQUITETURA.md · docs/API.md (gerado)
 ├── CLAUDE.md
 ├── README.md
 └── .env.example
@@ -193,16 +207,18 @@ Escolhida a estratégia, o core delega a ela só os pontos de decisão de nicho 
 
 ## 7. Dívidas declaradas (o que este lote NÃO entrega)
 
-- **Migrations Prisma** não foram geradas (`prisma migrate dev` exige banco). O schema valida
-  (`prisma validate`) e o client gera; a primeira migration nasce no primeiro banco de ensaio.
-- **Segredos de dispositivo** (`gym_access_devices.config.webhookToken`) ficam em texto no JSON.
-  Cifrar com chave de aplicação é o próximo passo antes de produção.
-- **Barramento de eventos é em memória**: não atravessa instâncias nem sobrevive a restart. Para
-  integração externa (fiscal, iFood, gateway de pagamento), nasce um outbox em tabela.
-- **Pagamento online** no pedido público: hoje é "paga na entrega". Gateway (PIX dinâmico, cartão)
-  é integração a plugar no `pedido-online.service.ts`.
-- **Ficha técnica** (baixa de insumo por item de cardápio) no Food: o ponto de extensão é
-  `stockPolicy` + `afterCreate` da estratégia; a tabela de composição ainda não existe.
-- **Render de etiqueta em PDF**: só ZPL por enquanto (cobre impressoras térmicas de loja).
-- **Testes com banco**: há 14 testes unitários sem banco e o boot de fumaça. Smokes com banco
-  seguem o ritual da casa (`ritual-ensaio`) e nascem com o primeiro banco de ensaio.
+- **Gateway de pagamento real**: a abstração e o provedor `mock` existem e estão cobertos por
+  teste; PIX dinâmico de banco / cartão é um adaptador em `core/payments/providers/` a escrever
+  com as credenciais do cliente.
+- **Fiscal** (NFC-e/NF-e/SAT): nada. É integração com emissor externo; o ponto natural é um
+  listener de `order.status` COMPLETED gravando no outbox para um provedor fiscal.
+- **Devolução ao fornecedor** (compra recebida com defeito): a compra recebida não cancela; falta o
+  fluxo inverso (saída de estoque + crédito com o fornecedor).
+- **Pedido público com pagamento online**: o pedido do cardápio nasce "paga na entrega"; ligar o
+  `createIntent` ao fluxo público é um passo curto quando houver gateway real.
+- **Render de etiqueta em PDF**: só ZPL (cobre impressoras térmicas de loja).
+- **Barramento em memória entre instâncias**: os eventos são duráveis (outbox) e os webhooks saem de
+  qualquer instância, mas o Socket.IO não compartilha salas entre instâncias (precisa do adapter
+  Redis se houver mais de uma).
+- **Segredos cifrados exigem `APP_ENCRYPTION_KEY`**: sem ela ficam em claro com prefixo `plain:` e
+  um aviso no boot. Rotação de chave (recifrar) não existe.

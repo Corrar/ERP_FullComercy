@@ -57,6 +57,9 @@ export const getGrupos = async (_req: Request, res: Response) => res.json(await 
 export const postGrupo = async (req: Request, res: Response) => res.status(201).json(await cardapio.criarGrupoAdicionais(parse(z.object({ name: z.string().min(1), minSelect: z.number().int().nonnegative().optional(), maxSelect: z.number().int().positive().optional(), modifiers: z.array(z.object({ name: z.string().min(1), price: z.number().nonnegative().optional() })).optional() }), req.body)));
 export const postLigarGrupo = async (req: Request, res: Response) => { const b = parse(z.object({ groupId: z.string().uuid(), position: z.number().int().optional() }), req.body); res.status(201).json(await cardapio.ligarGrupoAoItem(String(req.params.itemId), b.groupId, b.position)); };
 
+export const putFicha = async (req: Request, res: Response) => res.json(await cardapio.definirFicha(String(req.params.itemId), parse(z.object({ insumos: z.array(z.object({ ingredientVariantId: z.string().uuid(), quantity: z.number().positive() })) }), req.body).insumos));
+export const getFicha = async (req: Request, res: Response) => res.json({ ficha: await cardapio.fichaDoItem(String(req.params.itemId)), cmv: await cardapio.custoDoItem(String(req.params.itemId)) });
+
 // ── Relatórios ──
 export const getRelItens = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.vendasPorItem(a, b)); };
 export const getRelTipos = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.porTipoDeServico(a, b)); };

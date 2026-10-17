@@ -126,6 +126,15 @@ model Tenant {
   orderItems          OrderItem[]
   orderPayments       OrderPayment[]
   orderStatusHistory  OrderStatusHistory[]
+  outboxEvents        OutboxEvent[]
+  webhooks            Webhook[]
+  webhookDeliveries   WebhookDelivery[]
+  notifications       Notification[]
+  notificationReads   NotificationRead[]
+  suppliers           Supplier[]
+  purchaseOrders      PurchaseOrder[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  paymentIntents      PaymentIntent[]
   // módulos
   retailGradeAxes        RetailGradeAxis[]
   retailGradeValues      RetailGradeValue[]
@@ -154,6 +163,7 @@ model Tenant {
   foodCouriers           FoodCourier[]
   foodDeliveryZones      FoodDeliveryZone[]
   foodDeliveries         FoodDelivery[]
+  foodRecipeItems        FoodRecipeItem[]
   gymPlans               GymPlan[]
   gymMemberships         GymMembership[]
   gymMembershipCharges   GymMembershipCharge[]
@@ -223,6 +233,8 @@ model User {
   svcEvents     SvcServiceOrderEvent[]
   gymClassesTaught GymClass[]
   retailReturns RetailReturn[]
+  notifications Notification[]
+  notificationReads NotificationRead[]
 
   @@unique([tenantId, email])
   @@unique([tenantId, id])
@@ -489,6 +501,7 @@ model FinanceEntry {
   order    Order?           @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
   payments FinancePayment[]
   gymCharges GymMembershipCharge[]
+  paymentIntents PaymentIntent[]
 
   @@unique([tenantId, id])
   @@index([tenantId, kind, status, dueDate])
@@ -615,6 +628,8 @@ model ProductVariant {
   retailAttrs   RetailVariantAttribute[]
   labelItems    RetailLabelBatchItem[]
   menuItems     FoodMenuItem[]
+  purchaseItems PurchaseOrderItem[]
+  recipeUses    FoodRecipeItem[]
 
   @@unique([tenantId, sku])
   @@unique([tenantId, barcode])
@@ -636,6 +651,7 @@ model Warehouse {
   tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   balances  StockBalance[]
   movements StockMovement[]
+  purchases PurchaseOrder[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, id])
@@ -774,6 +790,7 @@ model Order {
   foodOrder     FoodOrder?
   serviceOrder  SvcServiceOrder?
   gymMemberships GymMembership[]
+  paymentIntents PaymentIntent[]
 
   @@unique([tenantId, number])
   @@unique([tenantId, id])
@@ -844,6 +861,230 @@ model OrderStatusHistory {
 
   @@index([tenantId, orderId])
   @@map("core_order_status_history")
+}
+
+// ── 1.7 Integração: outbox durável, webhooks, notificações, compras, pagamento online ─────────
+
+enum OutboxStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+/// EVENTO DURÁVEL. O barramento em memória (shared/events.ts) grava aqui; o despachante
+/// (jobs/core.jobs.ts) entrega aos webhooks da empresa com retry e backoff. Sobrevive a restart.
+model OutboxEvent {
+  id            BigInt       @id @default(autoincrement())
+  tenantId      String       @map("tenant_id") @db.Uuid
+  eventType     String       @map("event_type") @db.VarChar(60)
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  nextAttemptAt DateTime     @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lastError     String?      @map("last_error")
+  occurredAt    DateTime     @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  sentAt        DateTime?    @map("sent_at") @db.Timestamptz(6)
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, occurredAt])
+  @@map("core_outbox_events")
+}
+
+/// Webhook da EMPRESA (o cliente do SaaS integrando o ERP dele a outro sistema).
+model Webhook {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  url       String
+  /// Segredo do HMAC, CIFRADO (shared/crypto.ts). Assinatura vai em `X-FC-Signature`.
+  secret    String
+  /// Tipos assinados ('order.completed', 'stock.low'…) ou ['*'].
+  events    String[]
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@unique([tenantId, id])
+  @@map("core_webhooks")
+}
+
+model WebhookDelivery {
+  id             BigInt       @id @default(autoincrement())
+  tenantId       String       @map("tenant_id") @db.Uuid
+  webhookId      String       @map("webhook_id") @db.Uuid
+  outboxEventId  BigInt       @map("outbox_event_id")
+  status         OutboxStatus @default(PENDING)
+  attempts       Int          @default(0)
+  responseStatus Int?         @map("response_status")
+  lastError      String?      @map("last_error")
+  sentAt         DateTime?    @map("sent_at") @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  webhook Webhook     @relation(fields: [tenantId, webhookId], references: [tenantId, id], onDelete: Cascade)
+  event   OutboxEvent @relation(fields: [outboxEventId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, webhookId, createdAt])
+  @@map("core_webhook_deliveries")
+}
+
+/// NOTIFICAÇÃO in-app (o sino). `userId` NULL = para toda a empresa; a leitura por pessoa fica em
+/// `NotificationRead`, para o aviso coletivo não sumir para todos quando um lê.
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  kind      String   @db.VarChar(40) // 'stock.low', 'order.created', 'gym.overdue'…
+  title     String   @db.VarChar(160)
+  body      String?
+  link      String?  @db.VarChar(200) // rota no front
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?              @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  reads  NotificationRead[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, userId, createdAt])
+  @@map("core_notifications")
+}
+
+model NotificationRead {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  notificationId String   @map("notification_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  readAt         DateTime @default(now()) @map("read_at") @db.Timestamptz(6)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  notification Notification @relation(fields: [tenantId, notificationId], references: [tenantId, id], onDelete: Cascade)
+  user         User         @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, notificationId, userId])
+  @@map("core_notification_reads")
+}
+
+/// FORNECEDOR (universal: a loja compra roupa, o restaurante compra insumo, a oficina compra peça).
+model Supplier {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(160)
+  document  String?  @db.VarChar(20)
+  email     String?  @db.VarChar(160)
+  phone     String?  @db.VarChar(30)
+  notes     String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchases PurchaseOrder[]
+
+  @@unique([tenantId, document])
+  @@unique([tenantId, id])
+  @@index([tenantId, name])
+  @@map("core_suppliers")
+}
+
+enum PurchaseStatus {
+  DRAFT
+  ORDERED
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+/// PEDIDO DE COMPRA. Receber = entrada no estoque (motor do core, com custo) + custo médio
+/// do produto + título a PAGAR no financeiro. Recebimento parcial é permitido.
+model PurchaseOrder {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  number        Int
+  supplierId    String         @map("supplier_id") @db.Uuid
+  warehouseId   String         @map("warehouse_id") @db.Uuid
+  status        PurchaseStatus @default(DRAFT)
+  expectedAt    DateTime?      @map("expected_at") @db.Date
+  invoiceNumber String?        @map("invoice_number") @db.VarChar(40)
+  freight       Decimal        @default(0) @db.Decimal(14, 2)
+  total         Decimal        @default(0) @db.Decimal(14, 2)
+  notes         String?
+  orderedAt     DateTime?      @map("ordered_at") @db.Timestamptz(6)
+  receivedAt    DateTime?      @map("received_at") @db.Timestamptz(6)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier  Supplier            @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  warehouse Warehouse           @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict)
+  items     PurchaseOrderItem[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, id])
+  @@index([tenantId, status])
+  @@map("core_purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String  @id @default(uuid()) @db.Uuid
+  tenantId        String  @map("tenant_id") @db.Uuid
+  purchaseOrderId String  @map("purchase_order_id") @db.Uuid
+  variantId       String  @map("variant_id") @db.Uuid
+  quantity        Decimal @db.Decimal(14, 3)
+  receivedQty     Decimal @default(0) @map("received_qty") @db.Decimal(14, 3)
+  unitCost        Decimal @map("unit_cost") @db.Decimal(14, 4)
+  total           Decimal @db.Decimal(14, 2)
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder  @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Cascade)
+  variant       ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, purchaseOrderId, variantId])
+  @@unique([tenantId, id])
+  @@map("core_purchase_order_items")
+}
+
+enum PaymentIntentStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+/// INTENÇÃO DE PAGAMENTO ONLINE (PIX dinâmico, link de cartão). `provider` nomeia o adaptador em
+/// `core/payments/providers/*`. PAID → `orders.addPayments` (que completa o pedido se a política
+/// do módulo mandar). O gateway real é um adaptador; `manual` e `mock` vêm na caixa.
+model PaymentIntent {
+  id             String              @id @default(uuid()) @db.Uuid
+  tenantId       String              @map("tenant_id") @db.Uuid
+  orderId        String?             @map("order_id") @db.Uuid
+  financeEntryId String?             @map("finance_entry_id") @db.Uuid
+  provider       String              @db.VarChar(30)
+  method         PaymentMethod
+  amount         Decimal             @db.Decimal(14, 2)
+  status         PaymentIntentStatus @default(PENDING)
+  externalId     String?             @map("external_id") @db.VarChar(120)
+  qrCode         String?             @map("qr_code")
+  checkoutUrl    String?             @map("checkout_url")
+  expiresAt      DateTime?           @map("expires_at") @db.Timestamptz(6)
+  paidAt         DateTime?           @map("paid_at") @db.Timestamptz(6)
+  raw            Json?
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order        Order?        @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  financeEntry FinanceEntry? @relation(fields: [tenantId, financeEntryId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, provider, externalId])
+  @@unique([tenantId, id])
+  @@index([tenantId, status])
+  @@map("core_payment_intents")
 }
 
 // =====================================================================================
@@ -1272,6 +1513,7 @@ model FoodMenuItem {
   category       FoodMenuCategory?           @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
   variant        ProductVariant              @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
   modifierGroups FoodMenuItemModifierGroup[]
+  recipe         FoodRecipeItem[]
 
   @@unique([tenantId, menuId, variantId])
   @@unique([tenantId, id])
@@ -1488,6 +1730,24 @@ model FoodDelivery {
   @@unique([tenantId, id])
   @@index([tenantId, status, courierId])
   @@map("food_deliveries")
+}
+
+/// FICHA TÉCNICA: insumos (variantes do core com estoque) consumidos por unidade do item do
+/// cardápio. A baixa acontece quando a cozinha marca o ticket como READY (cozinha.service.ts).
+model FoodRecipeItem {
+  id                  String  @id @default(uuid()) @db.Uuid
+  tenantId            String  @map("tenant_id") @db.Uuid
+  menuItemId          String  @map("menu_item_id") @db.Uuid
+  ingredientVariantId String  @map("ingredient_variant_id") @db.Uuid
+  quantity            Decimal @db.Decimal(14, 3)
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  menuItem   FoodMenuItem   @relation(fields: [tenantId, menuItemId], references: [tenantId, id], onDelete: Cascade)
+  ingredient ProductVariant @relation(fields: [tenantId, ingredientVariantId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, menuItemId, ingredientVariantId])
+  @@unique([tenantId, id])
+  @@map("food_recipe_items")
 }
 
 // =====================================================================================

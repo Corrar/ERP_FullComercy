@@ -26,6 +26,23 @@ import financeRouter from './core/finance/finance.routes';
 import ordersRouter from './core/orders/order.routes';
 import auditRouter from './core/audit/audit.routes';
 import platformRouter from './core/platform/platform.routes';
+import webhooksRouter from './core/integration/webhooks.routes';
+import notificationsRouter from './core/notifications/notifications.routes';
+import { purchasesRouter, suppliersRouter } from './core/purchases/purchases.routes';
+import paymentsRouter, { publicRouter as paymentsPublicRouter } from './core/payments/payments.routes';
+import { startOutboxPersistence } from './core/integration/outbox.service';
+import { startNotificationListeners } from './core/notifications/notifications.service';
+
+/** Mapa de rotas montadas (para `scripts/gerar-api-md.ts`). Preenchido por buildApp(). */
+export interface MountedRoute { method: string; path: string; auth: 'public' | 'platform' | 'tenant' | 'module'; module?: string; permission?: string }
+export const MOUNTED_ROUTES: MountedRoute[] = [];
+function collect(prefix: string, router: import('express').Router, auth: MountedRoute['auth'], module?: string) {
+  for (const layer of (router as unknown as { stack: any[] }).stack ?? []) {
+    if (!layer.route) continue;
+    const perm = (layer.route.stack as any[]).map((l) => l.handle?.permissionKey).find(Boolean);
+    for (const m of Object.keys(layer.route.methods)) MOUNTED_ROUTES.push({ method: m.toUpperCase(), path: prefix + layer.route.path, auth, module, permission: perm });
+  }
+}
 
 export const corsOrigins = () => env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
 
@@ -33,6 +50,8 @@ export function buildApp() {
   // 0. Registro: estratégia do core primeiro, depois cada módulo se apresenta.
   salesStrategies.registerCore(coreSalesStrategy);
   registerAllModules();
+  startOutboxPersistence();
+  startNotificationListeners();
 
   const app = express();
   app.set('trust proxy', 1);
@@ -53,25 +72,29 @@ export function buildApp() {
 
   // 1. Público.
   app.get('/health', (_req, res) => res.json({ ok: true, sha: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'dev' }));
-  app.use('/auth', authRouter);
+  MOUNTED_ROUTES.length = 0;
+  MOUNTED_ROUTES.push({ method: 'GET', path: '/health', auth: 'public' });
+  app.use('/auth', authRouter); collect('/auth', authRouter, 'public');
+  app.use('/public/payments', paymentsPublicRouter); collect('/public/payments', paymentsPublicRouter, 'public');
   moduleRegistry.mountPublic(app);
+  for (const m of moduleRegistry.all()) if (m.publicRouter) collect(`/public/${m.basePath}`, m.publicRouter, 'public', m.key);
   // Plataforma: só existe se houver chave configurada.
   if (env.PLATFORM_API_KEY) { app.use('/platform', platformRouter); console.log('[platform] /platform ligado'); }
+  collect('/platform', platformRouter, 'platform');
 
   // 2. Privado — core.
   const priv = [authenticate, tenantContext] as const;
-  app.use('/tenant', ...priv, tenantRouter);
-  app.use('/users', ...priv, usersRouter);
-  app.use('/roles', ...priv, rolesRouter);
-  app.use('/customers', ...priv, customersRouter);
-  app.use('/products', ...priv, productsRouter);
-  app.use('/stock', ...priv, stockRouter);
-  app.use('/finance', ...priv, financeRouter);
-  app.use('/orders', ...priv, ordersRouter);
-  app.use('/audit', ...priv, auditRouter);
+  const core: [string, import('express').Router][] = [
+    ['/tenant', tenantRouter], ['/users', usersRouter], ['/roles', rolesRouter], ['/customers', customersRouter],
+    ['/products', productsRouter], ['/stock', stockRouter], ['/finance', financeRouter], ['/orders', ordersRouter],
+    ['/audit', auditRouter], ['/webhooks', webhooksRouter], ['/notifications', notificationsRouter],
+    ['/suppliers', suppliersRouter], ['/purchases', purchasesRouter], ['/payments', paymentsRouter],
+  ];
+  for (const [prefix, router] of core) { app.use(prefix, ...priv, router); collect(prefix, router, 'tenant'); }
 
   // 3. Privado — módulos, em /m/<módulo>, cada um atrás do seu requireModule.
   moduleRegistry.mountAuthenticated(app, ...priv);
+  for (const m of moduleRegistry.all()) collect(`/m/${m.basePath}`, m.router, 'module', m.key);
 
   // 4. Toda chave cobrada por rota tem de existir no catálogo. Falha no boot, não em produção.
   assertAllRequiredKeysAreDeclared();

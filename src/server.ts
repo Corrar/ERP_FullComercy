@@ -5,11 +5,12 @@ import { prisma } from './infra/prisma';
 import { initRealtime } from './infra/realtime';
 import { startJobs, stopJobs } from './jobs/scheduler';
 import { moduleRegistry } from './modules/module.registry';
+import { coreJobs } from './jobs/core.jobs';
 
 const app = buildApp();
 const server = createServer(app);
 initRealtime(server, corsOrigins());
-startJobs(moduleRegistry.allJobs());
+startJobs([...coreJobs, ...moduleRegistry.allJobs()]);
 
 server.listen(env.PORT, () => {
   console.log(`🚀 FullComercy API na porta ${env.PORT} (${env.NODE_ENV})`);

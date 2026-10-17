@@ -14,12 +14,14 @@ export interface DomainEvents {
   'delivery.status': { tenantId: string; deliveryId: string; status: string };
   'gym.access':      { tenantId: string; customerId: string | null; allowed: boolean; reason: string };
   'os.status':       { tenantId: string; serviceOrderId: string; status: string };
+  'purchase.received': { tenantId: string; purchaseOrderId: string; number: number; total: string };
+  'payment.paid':    { tenantId: string; intentId: string; orderId: string | null; amount: string; provider: string };
 }
 
 class TypedBus {
   private readonly em = new EventEmitter({ captureRejections: true });
   constructor() { this.em.setMaxListeners(50); this.em.on('error', (e) => console.error('[events] listener falhou:', e)); }
-  on<K extends keyof DomainEvents>(event: K, fn: (p: DomainEvents[K]) => void | Promise<void>) { this.em.on(event, fn); return this; }
+  on<K extends keyof DomainEvents>(event: K, fn: (p: DomainEvents[K]) => unknown) { this.em.on(event, fn as (p: DomainEvents[K]) => void); return this; }
   emit<K extends keyof DomainEvents>(event: K, payload: DomainEvents[K]) {
     // setImmediate: o emissor nunca espera os ouvintes, e um ouvinte lento não segura a response.
     setImmediate(() => this.em.emit(event, payload));

@@ -12,17 +12,26 @@ estoque central e pedido genérico) e módulos que cada empresa liga ou desliga.
 
 ## Setup
 
+Dois papéis no Postgres, e a aplicação espera os dois:
+
+| papel | variável | o que faz |
+|---|---|---|
+| plataforma (`BYPASSRLS`) | `DATABASE_ADMIN_URL` | migrations, login, onboarding, jobs |
+| tenant (comum) | `DATABASE_URL` | todo o código de negócio, sujeito ao RLS |
+
 ```bash
 npm install
-cp .env.example .env          # preencha DATABASE_URL e JWT_SECRET
-npx prisma migrate dev        # cria as tabelas
-psql "$DATABASE_URL" -f prisma/sql/001_rls_tenant.sql   # liga o RLS (defesa em profundidade)
+cp .env.example .env          # DATABASE_URL (tenant), DATABASE_ADMIN_URL (plataforma), JWT_SECRET
+npm run prisma:deploy         # migrations, como plataforma
+npm run db:rls                # liga o RLS e dá os grants ao papel do tenant (idempotente)
 npm run db:seed               # 5 empresas de demonstração
 npm run dev                   # http://localhost:3000
 ```
 
-> A regra da casa sobre credencial vale aqui: `DATABASE_URL` entra por variável de ambiente, nunca
-> por argumento de processo. Ver `CLAUDE.md`.
+Ou tudo em contêiner: `docker compose up -d db && docker compose run --rm api sh -c "npm run prisma:deploy && npm run db:rls && npm run db:seed" && docker compose up api`.
+
+> A regra da casa sobre credencial vale aqui: URLs entram por variável de ambiente, nunca por
+> argumento de processo (`scripts/prisma-admin.js` faz isso pelo CLI do Prisma). Ver `CLAUDE.md`.
 
 ## Scripts
 
@@ -34,8 +43,11 @@ npm run dev                   # http://localhost:3000
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | testes unitários (sem banco): resolução de módulo, placa, ciclo, cardápio, catálogo de permissões |
 | `npm run smoke:boot` | monta o app sem banco e falha se houver chave de permissão órfã |
-| `npm run prisma:migrate` / `prisma:deploy` | migrations (dev / produção) |
+| `npm run test:e2e` | 11 fluxos ponta a ponta contra o banco (exige `.env` migrado + seed) |
+| `npm run prisma:migrate` / `prisma:deploy` | migrations, sempre como papel de plataforma |
+| `npm run db:rls` | aplica `prisma/sql/001_rls_tenant.sql` via Prisma (sem psql) |
 | `npm run db:seed` | onboarding das empresas de demonstração |
+| `npm run docs:api` | regenera `docs/API.md` a partir das rotas montadas |
 
 ## Mapa de rotas
 
@@ -46,7 +58,9 @@ npm run dev                   # http://localhost:3000
 | `/public/food/*` | pública | cardápio online, pedido do cliente final, acompanhamento |
 | `/public/academia/*` | pública (token do aparelho) | webhook da catraca |
 | `/platform/*` | `x-platform-key` | criar empresa, suspender, ligar módulo (só existe com `PLATFORM_API_KEY`) |
+| `/public/payments/:provider/webhook` | pública (assinatura do provedor) | confirmação de pagamento online |
 | `/tenant`, `/users`, `/roles`, `/customers`, `/products`, `/stock`, `/finance`, `/orders`, `/audit` | JWT + tenant | o CORE |
+| `/suppliers`, `/purchases`, `/payments`, `/webhooks`, `/notifications` | JWT + tenant | compras com custo médio, cobrança online, integrações, sino |
 | `/m/varejo`, `/m/food`, `/m/academia`, `/m/servicos` | JWT + tenant + **módulo ativo** | o que é exclusivo de cada módulo |
 | Socket.IO (mesmo JWT) | sala por tenant | `order.*`, `kitchen.ticket`, `delivery.status`, `gym.access`, `os.status`, `stock.low` |
 
@@ -83,6 +97,17 @@ Depois de criado: `POST /orders/:id/items` (nova rodada, peça aprovada), `POST 
 | **Food** `/m/food` | mapa do salão, comandas (abrir, conta, transferir mesa, fechar com taxa e rateio), KDS por estação com tempos, entregas (atribuir, mover, acerto do entregador), zonas por CEP, cardápio completo (menus, categorias, itens, adicionais), **pedido online público** com acompanhamento, relatórios |
 | **Academia** `/m/academia` | planos, adesão pelo pedido, recorrência por job (cobrança → financeiro, inadimplência), pausar/retomar/trocar plano, check-in/out, credenciais, dispositivos com token de webhook, log de acessos, turmas com agenda, reservas e chamada, painel (MRR, churn), relatórios (frequência, pico, sumidos) |
 | **Serviços** `/m/servicos` | veículos por placa com histórico, OS com status de manutenção projetado no core, orçamento (itens no pedido) e aprovação com recusa parcial, técnico, checklist de entrada/saída, anexos, agenda com capacidade de boxes e chegada → OS, catálogo, relatórios (técnicos, serviços, retorno de clientes) |
+
+Lista completa, com a permissão de cada rota: **`docs/API.md`** (gerada do código).
+
+## Integrações
+
+- **Webhooks por empresa** (`/webhooks`): eventos duráveis em `core_outbox_events`, entrega assinada
+  com HMAC-SHA256 (`X-FC-Signature`), retry com backoff, reenfileiramento manual.
+- **Socket.IO** com o mesmo JWT: sala por empresa, eventos de pedido, cozinha, entrega, acesso, OS, estoque.
+- **Pagamento online** (`/payments`): abstração de provedor; `manual` e `mock` na caixa, gateway real
+  é um adaptador em `src/core/payments/providers/`.
+- **Catraca** (`/public/academia/dispositivos/:id/eventos`): token por aparelho, cifrado no banco.
 
 ## Empresas de demonstração (seed)
 

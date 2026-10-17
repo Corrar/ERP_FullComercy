@@ -67,7 +67,7 @@ export const foodSalesStrategy: SalesStrategy = {
       // Adicionais escolhidos chegam em metadata.modifiers = [{ name, price }].
       const extras = ((it.metadata.modifiers as { price?: number }[] | undefined) ?? []).reduce((s, x) => s.plus(D(x.price ?? 0)), D(0));
       const unitPrice = round2(D(mi.price).plus(extras));
-      return { ...it, description: mi.displayName, unitPrice, total: round2(unitPrice.mul(it.quantity).minus(it.discount)), metadata: { ...it.metadata, station: mi.station } };
+      return { ...it, description: mi.displayName, unitPrice, total: round2(unitPrice.mul(it.quantity).minus(it.discount)), metadata: { ...it.metadata, station: mi.station, menuItemId: mi.id } };
     });
   },
 

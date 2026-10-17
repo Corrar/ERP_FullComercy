@@ -27,6 +27,11 @@ export const CORE_PERMISSIONS: PermissionDef[] = [
   { key: 'core.orders:cancel',      label: 'Cancelar pedidos/vendas',      module: null },
   { key: 'core.finance:view',       label: 'Ver financeiro',               module: null },
   { key: 'core.finance:manage',     label: 'Lançar/baixar títulos',        module: null },
+  { key: 'core.purchases:view',     label: 'Ver compras e fornecedores',   module: null },
+  { key: 'core.purchases:manage',   label: 'Criar/receber compras',        module: null },
+  { key: 'core.suppliers:manage',   label: 'Cadastrar fornecedores',       module: null },
+  { key: 'core.payments:manage',    label: 'Cobrar online (PIX/link)',     module: null },
+  { key: 'core.webhooks:manage',    label: 'Integrações (webhooks)',       module: null },
 ];
 
 const registry = new Map<string, PermissionDef>(CORE_PERMISSIONS.map((p) => [p.key, p]));

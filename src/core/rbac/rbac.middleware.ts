@@ -11,7 +11,7 @@ export const KEYS_REQUIRED_BY_ROUTES = new Set<string>();
 
 export function requirePermission(key: string) {
   KEYS_REQUIRED_BY_ROUTES.add(key);
-  return async (req: Request, _res: Response, next: NextFunction) => {
+  const guard = async (req: Request, _res: Response, next: NextFunction) => {
     const a = (req as AuthRequest).auth;
     if (!a) return next(new AppError('UNAUTHENTICATED', 'Sessão ausente.'));
     try {
@@ -23,6 +23,9 @@ export function requirePermission(key: string) {
       next(e);
     }
   };
+  // Para o gerador de docs/API.md ler a chave de cada rota sem executar nada.
+  (guard as unknown as { permissionKey: string }).permissionKey = key;
+  return guard;
 }
 
 /** Falha ALTO no boot se uma rota cobrar chave que ninguém declarou: evita a "chave órfã"
