@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/.fluxo-conexoes)",
+      "Read(~/.fluxo-conexoes/**)",
+      "Read(//**/.fluxo-conexoes/**)",
+      "Read(//**/*.fluxo-conexoes*)",
+      "Read(//**/*.fluxo-conexoes*/**)",
+      "Read(**/.fluxo-conexoes/**)",
+      "Read(**/*.fluxo-conexoes*)",
+      "Read(**/*.fluxo-conexoes*/**)",
+      "Bash(*fluxo-conexoes*)",
+      "PowerShell(*fluxo-conexoes*)"
+    ]
+  }
+}

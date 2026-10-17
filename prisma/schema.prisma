@@ -1,0 +1,1772 @@
+// =====================================================================================
+//  FullComercy — schema.prisma
+//  ERP SaaS modular e multi-tenant. Um banco, um schema, isolamento por linha (tenant_id).
+//
+//  COMO LER ESTE ARQUIVO
+//  ─────────────────────
+//  • Seção 1 — CORE: o que TODO comércio tem (tenant, auth, usuários, RBAC, clientes,
+//    financeiro básico, estoque central e o PEDIDO genérico). Nada de nicho entra aqui.
+//  • Seções 2 a 5 — MÓDULOS (Varejo, Food & Delivery, Academia, Serviços/Automotivo).
+//    Cada módulo só ESTENDE o core: nunca adiciona coluna em tabela do core. Quando um módulo
+//    precisa dizer algo sobre um pedido, ele cria a própria tabela 1:1 (`ret_sales`,
+//    `food_orders`, `svc_service_orders`) apontando para `core_orders.id`.
+//
+//  REGRAS QUE VALEM PARA TODAS AS TABELAS (menos `core_tenants`, que É o tenant)
+//  ─────────────────────────────────────────────────────────────────────────────
+//  1. `tenant_id` NOT NULL com FK para `core_tenants` e `onDelete: Cascade`.
+//  2. `@@unique([tenantId, id])` em todo modelo. Parece redundante (id já é PK), mas é o que
+//     permite a regra 3.
+//  3. FK ENTRE TABELAS DE NEGÓCIO É COMPOSTA: `@relation(fields: [tenantId, xId],
+//     references: [tenantId, id])`. Assim o BANCO recusa um pedido da empresa A apontando para
+//     um cliente da empresa B, mesmo que a aplicação erre. A aplicação injeta o tenant (ver
+//     `src/infra/prisma.ts`); o banco garante que a injeção não possa ser contornada por FK.
+//  4. Unicidade de negócio é SEMPRE por tenant: `@@unique([tenantId, email])`, nunca `email`
+//     sozinho — duas empresas podem ter o mesmo e-mail de usuário.
+//  5. Prefixo de tabela diz o dono: `core_*`, `ret_*` (varejo), `food_*`, `gym_*`, `svc_*`.
+//     Hoje tudo vive num schema Postgres só; os prefixos permitem migrar módulo a módulo para
+//     schemas separados (`multiSchema`) sem renomear nada no código.
+//  6. Dinheiro é `Decimal(14,2)`; quantidade é `Decimal(14,3)` (açougue, posto, tecido vendem
+//     fração). Nunca Float.
+//  7. NÃO EXISTE `onDelete: SetNull` neste schema, e não é descuido: com FK composta o Postgres
+//     anularia TODAS as colunas da FK, inclusive `tenant_id` (NOT NULL) — o DELETE falharia com
+//     erro feio em vez de limpar a referência. Cadastro não se apaga: desativa (`isActive=false`).
+//     FK opcional usa `Restrict`; filho que morre com o pai usa `Cascade`.
+//
+//  Defesa em profundidade: `prisma/sql/001_rls_tenant.sql` liga Row Level Security nas mesmas
+//  tabelas, lendo `current_setting('app.tenant_id')`. A aplicação seta esse GUC por transação.
+// =====================================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS TRANSVERSAIS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Chave de cada módulo ativável. É o mesmo vocabulário de `src/modules/*/index.ts`.
+enum ModuleKey {
+  VAREJO
+  FOOD
+  ACADEMIA
+  SERVICOS
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
+
+enum PaymentMethod {
+  CASH
+  DEBIT
+  CREDIT
+  PIX
+  VOUCHER
+  TRANSFER
+  STORE_CREDIT
+  OTHER
+}
+
+// =====================================================================================
+// 1. CORE — NÚCLEO UNIVERSAL
+// =====================================================================================
+
+// ── 1.1 Tenant (a empresa) e módulos ativos ───────────────────────────────────────────
+
+/// A EMPRESA. Única tabela sem `tenant_id` — ela é o tenant.
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  slug      String       @unique @db.VarChar(60)
+  name      String       @db.VarChar(160)
+  document  String?      @map("document") @db.VarChar(20) // CNPJ/CPF
+  status    TenantStatus @default(TRIAL)
+  timezone  String       @default("America/Sao_Paulo") @db.VarChar(40)
+  /// Configurações livres da empresa: módulo de venda padrão, moeda, impressora etc.
+  /// Ex.: { "defaultSalesModule": "VAREJO", "currency": "BRL" }
+  settings  Json         @default("{}")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // ── relações (uma lista por tabela filha; é o preço do `onDelete: Cascade`) ──
+  modules             TenantModule[]
+  users               User[]
+  roles               Role[]
+  rolePermissions     RolePermission[]
+  userRoles           UserRole[]
+  userPermissions     UserPermission[]
+  refreshTokens       RefreshToken[]
+  auditLogs           AuditLog[]
+  customers           Customer[]
+  customerAddresses   CustomerAddress[]
+  financeAccounts     FinanceAccount[]
+  financeCategories   FinanceCategory[]
+  financeEntries      FinanceEntry[]
+  financePayments     FinancePayment[]
+  productCategories   ProductCategory[]
+  products            Product[]
+  productVariants     ProductVariant[]
+  warehouses          Warehouse[]
+  stockBalances       StockBalance[]
+  stockMovements      StockMovement[]
+  orderCounter        OrderCounter?
+  orders              Order[]
+  orderItems          OrderItem[]
+  orderPayments       OrderPayment[]
+  orderStatusHistory  OrderStatusHistory[]
+  // módulos
+  retailGradeAxes        RetailGradeAxis[]
+  retailGradeValues      RetailGradeValue[]
+  retailVariantAttrs     RetailVariantAttribute[]
+  retailSalespeople      RetailSalesperson[]
+  retailCommissionRules  RetailCommissionRule[]
+  retailPosSessions      RetailPosSession[]
+  retailSales            RetailSale[]
+  retailCommissions      RetailCommission[]
+  retailLabelTemplates   RetailLabelTemplate[]
+  retailLabelBatches     RetailLabelBatch[]
+  retailLabelBatchItems  RetailLabelBatchItem[]
+  foodTables             FoodTable[]
+  foodTabs               FoodTab[]
+  foodMenus              FoodMenu[]
+  foodMenuCategories     FoodMenuCategory[]
+  foodMenuItems          FoodMenuItem[]
+  foodModifierGroups     FoodModifierGroup[]
+  foodModifiers          FoodModifier[]
+  foodMenuItemModGroups  FoodMenuItemModifierGroup[]
+  foodOrders             FoodOrder[]
+  foodKitchenTickets     FoodKitchenTicket[]
+  foodKitchenTicketItems FoodKitchenTicketItem[]
+  foodCouriers           FoodCourier[]
+  foodDeliveryZones      FoodDeliveryZone[]
+  foodDeliveries         FoodDelivery[]
+  gymPlans               GymPlan[]
+  gymMemberships         GymMembership[]
+  gymMembershipCharges   GymMembershipCharge[]
+  gymCheckIns            GymCheckIn[]
+  gymAccessDevices       GymAccessDevice[]
+  gymAccessCredentials   GymAccessCredential[]
+  gymAccessEvents        GymAccessEvent[]
+  svcVehicles            SvcVehicle[]
+  svcServiceCatalog      SvcServiceCatalogItem[]
+  svcServiceOrders       SvcServiceOrder[]
+  svcServiceOrderEvents  SvcServiceOrderEvent[]
+  svcChecklistItems      SvcChecklistItem[]
+
+  @@map("core_tenants")
+}
+
+/// Quais módulos a empresa contratou/ativou. Ausência de linha = módulo desligado.
+/// `config` guarda ajustes do módulo para ESTA empresa (ex.: taxa de serviço do Food).
+model TenantModule {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  moduleKey ModuleKey @map("module_key")
+  enabled   Boolean   @default(true)
+  config    Json      @default("{}")
+  enabledAt DateTime  @default(now()) @map("enabled_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, moduleKey])
+  @@unique([tenantId, id])
+  @@map("core_tenant_modules")
+}
+
+// ── 1.2 Autenticação, usuários e RBAC genérico ────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  email        String    @db.VarChar(160)
+  passwordHash String    @map("password_hash")
+  name         String    @db.VarChar(120)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roles         UserRole[]
+  permissions   UserPermission[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+  ordersSold    Order[]          @relation("OrderSeller")
+  stockMoves    StockMovement[]
+  orderStatus   OrderStatusHistory[]
+  posOpened     RetailPosSession[] @relation("PosOpenedBy")
+  posClosed     RetailPosSession[] @relation("PosClosedBy")
+  salesperson   RetailSalesperson?
+  courier       FoodCourier?
+  svcOrdersTech SvcServiceOrder[]
+  svcEvents     SvcServiceOrderEvent[]
+
+  @@unique([tenantId, email])
+  @@unique([tenantId, id])
+  @@map("core_users")
+}
+
+/// Perfil de acesso GENÉRICO ('admin', 'gerente', 'operador', 'caixa', 'financeiro').
+/// Perfis de nicho ('garcom', 'mecanico', 'personal') são criados pelo tenant com as chaves
+/// que o módulo expõe — o core não conhece a profissão, só a permissão.
+model Role {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  key       String   @db.VarChar(40)
+  name      String   @db.VarChar(80)
+  /// Perfil criado pelo sistema no onboarding (admin). Não pode ser apagado pela tela.
+  isSystem  Boolean  @default(false) @map("is_system")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([tenantId, key])
+  @@unique([tenantId, id])
+  @@map("core_roles")
+}
+
+/// A matriz perfil × permissão. `permissionKey` é texto ('core.orders:create',
+/// 'varejo.pdv:open') porque o CATÁLOGO de chaves vive no código (`src/core/rbac/permissions.ts`
+/// + o que cada módulo declara). Tabela de catálogo exigiria semear N linhas por tenant.
+model RolePermission {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  roleId        String   @map("role_id") @db.Uuid
+  permissionKey String   @map("permission_key") @db.VarChar(80)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, roleId, permissionKey])
+  @@unique([tenantId, id])
+  @@map("core_role_permissions")
+}
+
+model UserRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  role   Role   @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, roleId])
+  @@unique([tenantId, id])
+  @@map("core_user_roles")
+}
+
+/// Exceção individual por cima do perfil (ALLOW soma; DENY vence tudo, menos admin).
+model UserPermission {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  userId        String           @map("user_id") @db.Uuid
+  permissionKey String           @map("permission_key") @db.VarChar(80)
+  effect        PermissionEffect @default(ALLOW)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, permissionKey])
+  @@unique([tenantId, id])
+  @@map("core_user_permissions")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  userAgent String?   @map("user_agent")
+  ip        String?   @db.VarChar(45)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@unique([tenantId, id])
+  @@map("core_refresh_tokens")
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  tenantId   String   @map("tenant_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(80) // 'order.create', 'user.role.change'
+  entity     String?  @db.VarChar(60)
+  entityId   String?  @map("entity_id") @db.VarChar(60)
+  ip         String?  @db.VarChar(45)
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action])
+  @@map("core_audit_logs")
+}
+
+// ── 1.3 Clientes ──────────────────────────────────────────────────────────────────────
+
+/// O cliente é universal: quem compra no PDV, pede no delivery, assina a academia ou deixa o
+/// carro na oficina. O que cada módulo sabe a mais sobre ele fica no módulo (veículos → svc_,
+/// matrícula → gym_).
+model Customer {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  code      String?   @db.VarChar(30)
+  name      String    @db.VarChar(160)
+  document  String?   @db.VarChar(20)  // CPF/CNPJ
+  email     String?   @db.VarChar(160)
+  phone     String?   @db.VarChar(30)
+  birthDate DateTime? @map("birth_date") @db.Date
+  notes     String?
+  tags      String[]  @default([])
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  addresses      CustomerAddress[]
+  orders         Order[]
+  financeEntries FinanceEntry[]
+  memberships    GymMembership[]
+  checkIns       GymCheckIn[]
+  credentials    GymAccessCredential[]
+  accessEvents   GymAccessEvent[]
+  vehicles       SvcVehicle[]
+
+  @@unique([tenantId, document])
+  @@unique([tenantId, code])
+  @@unique([tenantId, id])
+  @@index([tenantId, name])
+  @@index([tenantId, phone])
+  @@map("core_customers")
+}
+
+model CustomerAddress {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  customerId   String   @map("customer_id") @db.Uuid
+  label        String?  @db.VarChar(40) // 'Casa', 'Trabalho'
+  street       String   @db.VarChar(160)
+  number       String?  @db.VarChar(20)
+  complement   String?  @db.VarChar(80)
+  district     String?  @db.VarChar(80)
+  city         String   @db.VarChar(80)
+  state        String   @db.VarChar(2)
+  zipCode      String?  @map("zip_code") @db.VarChar(10)
+  lat          Decimal? @db.Decimal(10, 7)
+  lng          Decimal? @db.Decimal(10, 7)
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId])
+  @@map("core_customer_addresses")
+}
+
+// ── 1.4 Financeiro básico ─────────────────────────────────────────────────────────────
+
+enum FinanceAccountKind {
+  CASH
+  BANK
+  DIGITAL
+}
+
+enum FinanceEntryKind {
+  RECEIVABLE
+  PAYABLE
+}
+
+enum FinanceEntryStatus {
+  OPEN
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+/// Caixa, conta bancária, carteira digital.
+model FinanceAccount {
+  id        String             @id @default(uuid()) @db.Uuid
+  tenantId  String             @map("tenant_id") @db.Uuid
+  name      String             @db.VarChar(80)
+  kind      FinanceAccountKind @default(CASH)
+  isDefault Boolean            @default(false) @map("is_default")
+  isActive  Boolean            @default(true) @map("is_active")
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments FinancePayment[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("core_finance_accounts")
+}
+
+model FinanceCategory {
+  id        String           @id @default(uuid()) @db.Uuid
+  tenantId  String           @map("tenant_id") @db.Uuid
+  name      String           @db.VarChar(80)
+  kind      FinanceEntryKind
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries FinanceEntry[]
+
+  @@unique([tenantId, kind, name])
+  @@unique([tenantId, id])
+  @@map("core_finance_categories")
+}
+
+/// Título a receber/pagar. É a ÚNICA porta de entrada de dinheiro no sistema: venda do PDV,
+/// mensalidade da academia e OS da oficina todas viram um `FinanceEntry` (ver `origin`).
+model FinanceEntry {
+  id          String             @id @default(uuid()) @db.Uuid
+  tenantId    String             @map("tenant_id") @db.Uuid
+  kind        FinanceEntryKind
+  status      FinanceEntryStatus @default(OPEN)
+  description String             @db.VarChar(200)
+  amount      Decimal            @db.Decimal(14, 2)
+  paidAmount  Decimal            @default(0) @map("paid_amount") @db.Decimal(14, 2)
+  dueDate     DateTime           @map("due_date") @db.Date
+  paidAt      DateTime?          @map("paid_at") @db.Timestamptz(6)
+  customerId  String?            @map("customer_id") @db.Uuid
+  categoryId  String?            @map("category_id") @db.Uuid
+  orderId     String?            @map("order_id") @db.Uuid
+  /// Quem gerou o título, em texto: 'ORDER', 'GYM_MEMBERSHIP', 'MANUAL'. Mais `originId`.
+  /// O core NÃO tem FK para tabela de módulo — é o módulo que aponta para cá (ver
+  /// `GymMembershipCharge.financeEntryId`). Assim o core compila sem nenhum módulo.
+  origin      String             @default("MANUAL") @db.VarChar(40)
+  originId    String?            @map("origin_id") @db.Uuid
+  notes       String?
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer?        @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  category FinanceCategory? @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  order    Order?           @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  payments FinancePayment[]
+  gymCharges GymMembershipCharge[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, kind, status, dueDate])
+  @@index([tenantId, customerId])
+  @@map("core_finance_entries")
+}
+
+model FinancePayment {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @map("tenant_id") @db.Uuid
+  entryId   String        @map("entry_id") @db.Uuid
+  accountId String        @map("account_id") @db.Uuid
+  method    PaymentMethod
+  amount    Decimal       @db.Decimal(14, 2)
+  paidAt    DateTime      @default(now()) @map("paid_at") @db.Timestamptz(6)
+  reference String?       @db.VarChar(120) // NSU, txid do PIX
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entry   FinanceEntry   @relation(fields: [tenantId, entryId], references: [tenantId, id], onDelete: Cascade)
+  account FinanceAccount @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, entryId])
+  @@map("core_finance_payments")
+}
+
+// ── 1.5 Estoque central ───────────────────────────────────────────────────────────────
+
+enum ProductKind {
+  GOOD
+  SERVICE
+}
+
+enum StockMovementKind {
+  OPENING
+  RECEIVE
+  RESERVE
+  RELEASE
+  CONSUME
+  ADJUST
+  TRANSFER_OUT
+  TRANSFER_IN
+}
+
+model ProductCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
+  name      String   @db.VarChar(80)
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent   ProductCategory?  @relation("CategoryTree", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict)
+  children ProductCategory[] @relation("CategoryTree")
+  products Product[]
+  commissionRules RetailCommissionRule[]
+
+  @@unique([tenantId, parentId, name])
+  @@unique([tenantId, id])
+  @@map("core_product_categories")
+}
+
+/// O PRODUTO é o conceito comercial ("Camiseta Básica", "X-Burger", "Plano Mensal",
+/// "Troca de óleo"). O que se ESTOCA e se VENDE é a VARIANTE (ver abaixo).
+model Product {
+  id          String      @id @default(uuid()) @db.Uuid
+  tenantId    String      @map("tenant_id") @db.Uuid
+  categoryId  String?     @map("category_id") @db.Uuid
+  name        String      @db.VarChar(160)
+  description String?
+  kind        ProductKind @default(GOOD)
+  unit        String      @default("UN") @db.VarChar(6) // UN, KG, L, M, HR
+  /// SERVICE e itens de cardápio produzidos na hora não controlam saldo.
+  trackStock  Boolean     @default(true) @map("track_stock")
+  /// `true` = tem grade (tamanho/cor etc.). `false` = tem exatamente UMA variante "padrão",
+  /// criada junto com o produto. Assim o estoque e o pedido SEMPRE apontam para uma variante
+  /// e não existe o grão nulo "produto sem variante" (que exigiria índice parcial).
+  hasVariants Boolean     @default(false) @map("has_variants")
+  costPrice   Decimal     @default(0) @map("cost_price") @db.Decimal(14, 2)
+  salePrice   Decimal     @default(0) @map("sale_price") @db.Decimal(14, 2)
+  imageUrl    String?     @map("image_url")
+  attributes  Json        @default("{}")
+  isActive    Boolean     @default(true) @map("is_active")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category ProductCategory? @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  variants ProductVariant[]
+  gymPlans GymPlan[]
+  svcCatalog SvcServiceCatalogItem[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, name])
+  @@index([tenantId, categoryId])
+  @@map("core_products")
+}
+
+/// A UNIDADE VENDÁVEL/ESTOCÁVEL (SKU). "Camiseta Básica · M · Azul" é uma variante.
+/// `attributes` guarda o retrato genérico ({"tamanho":"M","cor":"Azul"}); a SEMÂNTICA da grade
+/// (quais eixos existem, ordem, geração em matriz) é do módulo Varejo (`ret_variant_attributes`).
+model ProductVariant {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  productId     String   @map("product_id") @db.Uuid
+  sku           String   @db.VarChar(60)
+  barcode       String?  @db.VarChar(60)
+  name          String?  @db.VarChar(160) // "M / Azul"; NULL na variante padrão
+  attributes    Json     @default("{}")
+  priceOverride Decimal? @map("price_override") @db.Decimal(14, 2)
+  costOverride  Decimal? @map("cost_override") @db.Decimal(14, 2)
+  isDefault     Boolean  @default(false) @map("is_default")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant        Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product       Product                  @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade)
+  balances      StockBalance[]
+  movements     StockMovement[]
+  orderItems    OrderItem[]
+  retailAttrs   RetailVariantAttribute[]
+  labelItems    RetailLabelBatchItem[]
+  menuItems     FoodMenuItem[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, barcode])
+  @@unique([tenantId, id])
+  @@index([tenantId, productId])
+  @@map("core_product_variants")
+}
+
+/// Loja, depósito, cozinha, almoxarifado da oficina. Toda empresa nasce com um `isDefault`.
+model Warehouse {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  code      String   @db.VarChar(20)
+  name      String   @db.VarChar(80)
+  isDefault Boolean  @default(false) @map("is_default")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  balances  StockBalance[]
+  movements StockMovement[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, id])
+  @@map("core_warehouses")
+}
+
+/// PROJEÇÃO do saldo por (variante, armazém). A verdade é o razão (`StockMovement`); esta
+/// tabela existe para a leitura ser O(1) e para a trava `FOR UPDATE` no motor de estoque.
+/// Invariantes (também em CHECK no SQL de migração): onHand >= 0, 0 <= reserved <= onHand.
+model StockBalance {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  variantId   String   @map("variant_id") @db.Uuid
+  warehouseId String   @map("warehouse_id") @db.Uuid
+  onHand      Decimal  @default(0) @map("on_hand") @db.Decimal(14, 3)
+  reserved    Decimal  @default(0) @db.Decimal(14, 3)
+  minLevel    Decimal? @map("min_level") @db.Decimal(14, 3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, variantId, warehouseId])
+  @@unique([tenantId, id])
+  @@map("core_stock_balances")
+}
+
+/// RAZÃO IMUTÁVEL. Só INSERT. `idempotencyKey` impede o mesmo movimento entrar duas vezes
+/// (retry de rede do PDV, webhook do delivery reentregue).
+model StockMovement {
+  id             BigInt            @id @default(autoincrement())
+  tenantId       String            @map("tenant_id") @db.Uuid
+  variantId      String            @map("variant_id") @db.Uuid
+  warehouseId    String            @map("warehouse_id") @db.Uuid
+  kind           StockMovementKind
+  deltaOnHand    Decimal           @default(0) @map("delta_on_hand") @db.Decimal(14, 3)
+  deltaReserved  Decimal           @default(0) @map("delta_reserved") @db.Decimal(14, 3)
+  unitCost       Decimal?          @map("unit_cost") @db.Decimal(14, 4)
+  refType        String?           @map("ref_type") @db.VarChar(40) // 'ORDER', 'OS', 'INVENTORY'
+  refId          String?           @map("ref_id") @db.Uuid
+  idempotencyKey String?           @map("idempotency_key") @db.VarChar(120)
+  userId         String?           @map("user_id") @db.Uuid
+  note           String?
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict)
+  user      User?          @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, variantId, warehouseId, createdAt])
+  @@index([tenantId, refType, refId])
+  @@map("core_stock_ledger")
+}
+
+// ── 1.6 PEDIDO GENÉRICO (a venda que todo módulo compartilha) ─────────────────────────
+
+/// Status UNIVERSAL do pedido. Status de nicho (cozinha, manutenção) vivem na tabela de
+/// extensão do módulo e são projetados para cá pela estratégia de venda.
+enum OrderStatus {
+  DRAFT
+  OPEN
+  CONFIRMED
+  IN_PROGRESS
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+/// Por onde a venda entrou. É dica para a resolução de módulo, não a decisão.
+enum OrderChannel {
+  POS
+  COUNTER
+  TABLE
+  ONLINE
+  DELIVERY
+  SUBSCRIPTION
+  WORKSHOP
+}
+
+enum OrderItemKind {
+  PRODUCT
+  SERVICE
+  FEE
+  DISCOUNT
+}
+
+/// Numeração sequencial por tenant (pedido nº 1, 2, 3… de CADA empresa). Uma linha por
+/// tenant, incrementada com `UPDATE ... RETURNING` dentro da transação do pedido.
+model OrderCounter {
+  tenantId   String @id @map("tenant_id") @db.Uuid
+  lastNumber Int    @default(0) @map("last_number")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("core_order_counters")
+}
+
+/// O cabeçalho que TODA venda tem, seja do PDV, da mesa, do app ou da oficina.
+/// `moduleKey` NULL = venda simples do core (empresa sem módulo de venda ativo).
+model Order {
+  id            String       @id @default(uuid()) @db.Uuid
+  tenantId      String       @map("tenant_id") @db.Uuid
+  number        Int
+  moduleKey     ModuleKey?   @map("module_key")
+  channel       OrderChannel @default(COUNTER)
+  status        OrderStatus  @default(OPEN)
+  customerId    String?      @map("customer_id") @db.Uuid
+  sellerUserId  String?      @map("seller_user_id") @db.Uuid
+  warehouseId   String?      @map("warehouse_id") @db.Uuid
+  subtotal      Decimal      @default(0) @db.Decimal(14, 2)
+  discount      Decimal      @default(0) @db.Decimal(14, 2)
+  surcharge     Decimal      @default(0) @db.Decimal(14, 2) // taxa de serviço / entrega
+  total         Decimal      @default(0) @db.Decimal(14, 2)
+  notes         String?
+  /// Campos que o módulo quer carregar no cabeçalho sem criar coluna no core.
+  metadata      Json         @default("{}")
+  confirmedAt   DateTime?    @map("confirmed_at") @db.Timestamptz(6)
+  completedAt   DateTime?    @map("completed_at") @db.Timestamptz(6)
+  cancelledAt   DateTime?    @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason  String?      @map("cancel_reason")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer      Customer?            @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  seller        User?                @relation("OrderSeller", fields: [tenantId, sellerUserId], references: [tenantId, id], onDelete: Restrict)
+  items         OrderItem[]
+  payments      OrderPayment[]
+  history       OrderStatusHistory[]
+  financeEntries FinanceEntry[]
+  // extensões 1:1 dos módulos (no máximo UMA preenchida por pedido)
+  retailSale    RetailSale?
+  foodOrder     FoodOrder?
+  serviceOrder  SvcServiceOrder?
+  gymMemberships GymMembership[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, id])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, customerId])
+  @@map("core_orders")
+}
+
+model OrderItem {
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  orderId     String        @map("order_id") @db.Uuid
+  variantId   String?       @map("variant_id") @db.Uuid
+  kind        OrderItemKind @default(PRODUCT)
+  description String        @db.VarChar(200)
+  quantity    Decimal       @db.Decimal(14, 3)
+  unitPrice   Decimal       @map("unit_price") @db.Decimal(14, 2)
+  discount    Decimal       @default(0) @db.Decimal(14, 2)
+  total       Decimal       @db.Decimal(14, 2)
+  /// Adicionais do lanche, observação da cozinha, nº da peça na OS…
+  metadata    Json          @default("{}")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order   Order           @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  kitchenItems FoodKitchenTicketItem[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, orderId])
+  @@map("core_order_items")
+}
+
+model OrderPayment {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @map("tenant_id") @db.Uuid
+  orderId   String        @map("order_id") @db.Uuid
+  method    PaymentMethod
+  amount    Decimal       @db.Decimal(14, 2)
+  /// Parcelas (crédito) — 1 à vista.
+  installments Int        @default(1)
+  reference String?       @db.VarChar(120)
+  paidAt    DateTime      @default(now()) @map("paid_at") @db.Timestamptz(6)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, orderId])
+  @@map("core_order_payments")
+}
+
+model OrderStatusHistory {
+  id         BigInt      @id @default(autoincrement())
+  tenantId   String      @map("tenant_id") @db.Uuid
+  orderId    String      @map("order_id") @db.Uuid
+  fromStatus OrderStatus? @map("from_status")
+  toStatus   OrderStatus @map("to_status")
+  userId     String?     @map("user_id") @db.Uuid
+  note       String?
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  user   User?  @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, orderId])
+  @@map("core_order_status_history")
+}
+
+// =====================================================================================
+// 2. MÓDULO VAREJO (ret_) — roupas, sapatos, loja de rua
+//    PDV rápido · grade tamanho/cor · etiquetas · comissionamento
+// =====================================================================================
+
+/// Eixo da grade: "Tamanho", "Cor", "Numeração". A empresa define os seus.
+model RetailGradeAxis {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(40)
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  values RetailGradeValue[]
+  attrs  RetailVariantAttribute[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("ret_grade_axes")
+}
+
+/// Valor do eixo: "P", "M", "G" / "Azul", "Preto" / "38", "40".
+model RetailGradeValue {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  axisId    String   @map("axis_id") @db.Uuid
+  value     String   @db.VarChar(40)
+  position  Int      @default(0)
+  hexColor  String?  @map("hex_color") @db.VarChar(7)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  axis   RetailGradeAxis          @relation(fields: [tenantId, axisId], references: [tenantId, id], onDelete: Cascade)
+  attrs  RetailVariantAttribute[]
+
+  @@unique([tenantId, axisId, value])
+  @@unique([tenantId, id])
+  @@map("ret_grade_values")
+}
+
+/// Liga a VARIANTE do core a uma célula da grade (variante × eixo → valor).
+/// Uma variante "M / Azul" tem duas linhas: (Tamanho→M) e (Cor→Azul).
+model RetailVariantAttribute {
+  id        String @id @default(uuid()) @db.Uuid
+  tenantId  String @map("tenant_id") @db.Uuid
+  variantId String @map("variant_id") @db.Uuid
+  axisId    String @map("axis_id") @db.Uuid
+  valueId   String @map("value_id") @db.Uuid
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  variant ProductVariant   @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Cascade)
+  axis    RetailGradeAxis  @relation(fields: [tenantId, axisId], references: [tenantId, id], onDelete: Cascade)
+  value   RetailGradeValue @relation(fields: [tenantId, valueId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, variantId, axisId])
+  @@unique([tenantId, id])
+  @@map("ret_variant_attributes")
+}
+
+/// Vendedor comissionado. Pode ou não ser usuário do sistema (vendedor sem login existe).
+model RetailSalesperson {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  userId                String?  @map("user_id") @db.Uuid
+  name                  String   @db.VarChar(120)
+  defaultCommissionRate Decimal  @default(0) @map("default_commission_rate") @db.Decimal(5, 2) // %
+  isActive              Boolean  @default(true) @map("is_active")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?                  @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+  rules       RetailCommissionRule[]
+  sales       RetailSale[]
+  commissions RetailCommission[]
+
+  @@unique([tenantId, userId])
+  @@unique([tenantId, id])
+  @@map("ret_salespeople")
+}
+
+/// Regra de comissão: por vendedor e/ou categoria, com vigência. A mais específica vence.
+model RetailCommissionRule {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  salespersonId String?   @map("salesperson_id") @db.Uuid
+  categoryId    String?   @map("category_id") @db.Uuid
+  rate          Decimal   @db.Decimal(5, 2)
+  validFrom     DateTime  @map("valid_from") @db.Date
+  validTo       DateTime? @map("valid_to") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  salesperson RetailSalesperson? @relation(fields: [tenantId, salespersonId], references: [tenantId, id], onDelete: Cascade)
+  category    ProductCategory?   @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, salespersonId, validFrom])
+  @@map("ret_commission_rules")
+}
+
+enum PosSessionStatus {
+  OPEN
+  CLOSED
+}
+
+/// Abertura/fechamento de caixa do PDV.
+model RetailPosSession {
+  id             String           @id @default(uuid()) @db.Uuid
+  tenantId       String           @map("tenant_id") @db.Uuid
+  terminal       String           @default("CAIXA-1") @db.VarChar(40)
+  status         PosSessionStatus @default(OPEN)
+  openedByUserId String           @map("opened_by_user_id") @db.Uuid
+  closedByUserId String?          @map("closed_by_user_id") @db.Uuid
+  openingAmount  Decimal          @default(0) @map("opening_amount") @db.Decimal(14, 2)
+  expectedAmount Decimal?         @map("expected_amount") @db.Decimal(14, 2)
+  closingAmount  Decimal?         @map("closing_amount") @db.Decimal(14, 2)
+  openedAt       DateTime         @default(now()) @map("opened_at") @db.Timestamptz(6)
+  closedAt       DateTime?        @map("closed_at") @db.Timestamptz(6)
+  notes          String?
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  openedBy User         @relation("PosOpenedBy", fields: [tenantId, openedByUserId], references: [tenantId, id], onDelete: Restrict)
+  closedBy User?        @relation("PosClosedBy", fields: [tenantId, closedByUserId], references: [tenantId, id], onDelete: Restrict)
+  sales    RetailSale[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, terminal])
+  @@map("ret_pos_sessions")
+}
+
+/// EXTENSÃO 1:1 de `core_orders` para a venda de varejo.
+model RetailSale {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  orderId          String   @map("order_id") @db.Uuid
+  posSessionId     String?  @map("pos_session_id") @db.Uuid
+  salespersonId    String?  @map("salesperson_id") @db.Uuid
+  commissionAmount Decimal  @default(0) @map("commission_amount") @db.Decimal(14, 2)
+  /// Troca/devolução aponta para a venda original.
+  exchangeOfSaleId String?  @map("exchange_of_sale_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order       Order              @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  posSession  RetailPosSession?  @relation(fields: [tenantId, posSessionId], references: [tenantId, id], onDelete: Restrict)
+  salesperson RetailSalesperson? @relation(fields: [tenantId, salespersonId], references: [tenantId, id], onDelete: Restrict)
+  commissions RetailCommission[]
+
+  @@unique([tenantId, orderId])
+  @@unique([tenantId, id])
+  @@map("ret_sales")
+}
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+model RetailCommission {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  saleId        String           @map("sale_id") @db.Uuid
+  salespersonId String           @map("salesperson_id") @db.Uuid
+  baseAmount    Decimal          @map("base_amount") @db.Decimal(14, 2)
+  rate          Decimal          @db.Decimal(5, 2)
+  amount        Decimal          @db.Decimal(14, 2)
+  status        CommissionStatus @default(PENDING)
+  paidAt        DateTime?        @map("paid_at") @db.Timestamptz(6)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sale        RetailSale        @relation(fields: [tenantId, saleId], references: [tenantId, id], onDelete: Cascade)
+  salesperson RetailSalesperson @relation(fields: [tenantId, salespersonId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, salespersonId, status])
+  @@map("ret_commissions")
+}
+
+/// Modelo de etiqueta (dimensões + layout declarativo: campos, código de barras, preço).
+model RetailLabelTemplate {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(80)
+  widthMm   Decimal  @map("width_mm") @db.Decimal(6, 2)
+  heightMm  Decimal  @map("height_mm") @db.Decimal(6, 2)
+  layout    Json     @default("{}")
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant  Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batches RetailLabelBatch[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("ret_label_templates")
+}
+
+enum LabelBatchStatus {
+  DRAFT
+  GENERATED
+  PRINTED
+}
+
+/// Lote de impressão: "imprimir 12 etiquetas da camiseta M azul e 8 da G preta".
+model RetailLabelBatch {
+  id         String           @id @default(uuid()) @db.Uuid
+  tenantId   String           @map("tenant_id") @db.Uuid
+  templateId String           @map("template_id") @db.Uuid
+  status     LabelBatchStatus @default(DRAFT)
+  fileUrl    String?          @map("file_url") // PDF/ZPL gerado
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  printedAt  DateTime?        @map("printed_at") @db.Timestamptz(6)
+
+  tenant   Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template RetailLabelTemplate    @relation(fields: [tenantId, templateId], references: [tenantId, id], onDelete: Restrict)
+  items    RetailLabelBatchItem[]
+
+  @@unique([tenantId, id])
+  @@map("ret_label_batches")
+}
+
+model RetailLabelBatchItem {
+  id        String @id @default(uuid()) @db.Uuid
+  tenantId  String @map("tenant_id") @db.Uuid
+  batchId   String @map("batch_id") @db.Uuid
+  variantId String @map("variant_id") @db.Uuid
+  quantity  Int
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batch   RetailLabelBatch @relation(fields: [tenantId, batchId], references: [tenantId, id], onDelete: Cascade)
+  variant ProductVariant   @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, batchId, variantId])
+  @@unique([tenantId, id])
+  @@map("ret_label_batch_items")
+}
+
+// =====================================================================================
+// 3. MÓDULO FOOD & DELIVERY (food_) — restaurantes, lanchonetes, pizzarias
+//    mesas/comandas · cardápio online · fluxo de cozinha · entregadores
+// =====================================================================================
+
+enum TableStatus {
+  FREE
+  OCCUPIED
+  RESERVED
+  CLOSING
+}
+
+model FoodTable {
+  id        String      @id @default(uuid()) @db.Uuid
+  tenantId  String      @map("tenant_id") @db.Uuid
+  number    Int
+  name      String?     @db.VarChar(40)
+  area      String?     @db.VarChar(40) // 'Salão', 'Varanda'
+  seats     Int         @default(4)
+  status    TableStatus @default(FREE)
+  isActive  Boolean     @default(true) @map("is_active")
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tabs   FoodTab[]
+  orders FoodOrder[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, id])
+  @@map("food_tables")
+}
+
+enum TabStatus {
+  OPEN
+  CLOSING
+  CLOSED
+  CANCELLED
+}
+
+/// COMANDA: agrupa N pedidos (rodadas) até o fechamento da conta. Pode estar numa mesa ou
+/// ser avulsa (comanda de balcão com número).
+model FoodTab {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  code           String    @db.VarChar(20) // nº físico da comanda
+  tableId        String?   @map("table_id") @db.Uuid
+  customerName   String?   @map("customer_name") @db.VarChar(80)
+  guests         Int       @default(1)
+  status         TabStatus @default(OPEN)
+  serviceFeeRate Decimal   @default(10) @map("service_fee_rate") @db.Decimal(5, 2) // % garçom
+  openedAt       DateTime  @default(now()) @map("opened_at") @db.Timestamptz(6)
+  closedAt       DateTime? @map("closed_at") @db.Timestamptz(6)
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  table  FoodTable?  @relation(fields: [tenantId, tableId], references: [tenantId, id], onDelete: Restrict)
+  orders FoodOrder[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, code])
+  @@map("food_tabs")
+}
+
+/// Cardápio publicável (online). Uma empresa pode ter vários: "Almoço", "Delivery", "Bar".
+model FoodMenu {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String   @db.VarChar(80)
+  slug         String   @db.VarChar(60) // URL pública: /cardapio/{tenant.slug}/{menu.slug}
+  isPublished  Boolean  @default(false) @map("is_published")
+  /// Janelas de disponibilidade: [{ "days":[1,2,3,4,5], "from":"11:00", "to":"15:00" }]
+  availability Json     @default("[]")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categories FoodMenuCategory[]
+  items      FoodMenuItem[]
+
+  @@unique([tenantId, slug])
+  @@unique([tenantId, id])
+  @@map("food_menus")
+}
+
+model FoodMenuCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  menuId    String   @map("menu_id") @db.Uuid
+  name      String   @db.VarChar(80)
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  menu   FoodMenu       @relation(fields: [tenantId, menuId], references: [tenantId, id], onDelete: Cascade)
+  items  FoodMenuItem[]
+
+  @@unique([tenantId, menuId, name])
+  @@unique([tenantId, id])
+  @@map("food_menu_categories")
+}
+
+/// Item do cardápio = uma VARIANTE do core vestida para o cliente (nome bonito, foto, preço
+/// do cardápio, tempo de preparo, estação).
+model FoodMenuItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  menuId      String   @map("menu_id") @db.Uuid
+  categoryId  String?  @map("category_id") @db.Uuid
+  variantId   String   @map("variant_id") @db.Uuid
+  displayName String   @map("display_name") @db.VarChar(120)
+  description String?
+  price       Decimal  @db.Decimal(14, 2)
+  imageUrl    String?  @map("image_url")
+  station     String   @default("COZINHA") @db.VarChar(30) // COZINHA, BAR, CHAPA, SOBREMESA
+  prepTimeMin Int?     @map("prep_time_min")
+  isAvailable Boolean  @default(true) @map("is_available")
+  position    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant         Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  menu           FoodMenu                    @relation(fields: [tenantId, menuId], references: [tenantId, id], onDelete: Cascade)
+  category       FoodMenuCategory?           @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  variant        ProductVariant              @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  modifierGroups FoodMenuItemModifierGroup[]
+
+  @@unique([tenantId, menuId, variantId])
+  @@unique([tenantId, id])
+  @@map("food_menu_items")
+}
+
+/// Grupo de adicionais/opções: "Ponto da carne" (min 1, max 1), "Extras" (min 0, max 5).
+model FoodModifierGroup {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(80)
+  minSelect Int      @default(0) @map("min_select")
+  maxSelect Int      @default(1) @map("max_select")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  modifiers FoodModifier[]
+  menuItems FoodMenuItemModifierGroup[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("food_modifier_groups")
+}
+
+model FoodModifier {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  groupId   String   @map("group_id") @db.Uuid
+  name      String   @db.VarChar(80)
+  price     Decimal  @default(0) @db.Decimal(14, 2)
+  isActive  Boolean  @default(true) @map("is_active")
+  position  Int      @default(0)
+
+  tenant Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  group  FoodModifierGroup @relation(fields: [tenantId, groupId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, groupId, name])
+  @@unique([tenantId, id])
+  @@map("food_modifiers")
+}
+
+model FoodMenuItemModifierGroup {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @map("tenant_id") @db.Uuid
+  menuItemId String @map("menu_item_id") @db.Uuid
+  groupId    String @map("group_id") @db.Uuid
+  position   Int    @default(0)
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  menuItem FoodMenuItem      @relation(fields: [tenantId, menuItemId], references: [tenantId, id], onDelete: Cascade)
+  group    FoodModifierGroup @relation(fields: [tenantId, groupId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, menuItemId, groupId])
+  @@unique([tenantId, id])
+  @@map("food_menu_item_modifier_groups")
+}
+
+enum FoodServiceType {
+  DINE_IN
+  TAKEOUT
+  DELIVERY
+}
+
+/// O fluxo de status da COZINHA (do pedido como um todo; o detalhe por item fica no ticket).
+enum KitchenStatus {
+  QUEUED
+  PREPARING
+  READY
+  SERVED
+  CANCELLED
+}
+
+/// EXTENSÃO 1:1 de `core_orders` para o pedido de food.
+model FoodOrder {
+  id            String          @id @default(uuid()) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  orderId       String          @map("order_id") @db.Uuid
+  serviceType   FoodServiceType @default(DINE_IN) @map("service_type")
+  tableId       String?         @map("table_id") @db.Uuid
+  tabId         String?         @map("tab_id") @db.Uuid
+  kitchenStatus KitchenStatus   @default(QUEUED) @map("kitchen_status")
+  /// Pedido agendado (delivery para as 20h).
+  scheduledFor  DateTime?       @map("scheduled_for") @db.Timestamptz(6)
+  /// Origem externa: 'IFOOD', 'SITE', 'WHATSAPP' + id de lá, para conciliação.
+  externalSource String?        @map("external_source") @db.VarChar(30)
+  externalId     String?        @map("external_id") @db.VarChar(80)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order    Order               @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  table    FoodTable?          @relation(fields: [tenantId, tableId], references: [tenantId, id], onDelete: Restrict)
+  tab      FoodTab?            @relation(fields: [tenantId, tabId], references: [tenantId, id], onDelete: Restrict)
+  tickets  FoodKitchenTicket[]
+  delivery FoodDelivery?
+
+  @@unique([tenantId, orderId])
+  @@unique([tenantId, externalSource, externalId])
+  @@unique([tenantId, id])
+  @@index([tenantId, kitchenStatus])
+  @@map("food_orders")
+}
+
+/// Ticket por ESTAÇÃO (o pedido com 1 hambúrguer e 1 chope vira 2 tickets: CHAPA e BAR).
+model FoodKitchenTicket {
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  foodOrderId String        @map("food_order_id") @db.Uuid
+  station     String        @db.VarChar(30)
+  status      KitchenStatus @default(QUEUED)
+  startedAt   DateTime?     @map("started_at") @db.Timestamptz(6)
+  readyAt     DateTime?     @map("ready_at") @db.Timestamptz(6)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  foodOrder FoodOrder               @relation(fields: [tenantId, foodOrderId], references: [tenantId, id], onDelete: Cascade)
+  items     FoodKitchenTicketItem[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, station, status])
+  @@map("food_kitchen_tickets")
+}
+
+model FoodKitchenTicketItem {
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  ticketId    String        @map("ticket_id") @db.Uuid
+  orderItemId String        @map("order_item_id") @db.Uuid
+  status      KitchenStatus @default(QUEUED)
+  /// Cópia desnormalizada do que a cozinha precisa ver (nome, adicionais, observação).
+  display     Json          @default("{}")
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket    FoodKitchenTicket @relation(fields: [tenantId, ticketId], references: [tenantId, id], onDelete: Cascade)
+  orderItem OrderItem         @relation(fields: [tenantId, orderItemId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, ticketId, orderItemId])
+  @@unique([tenantId, id])
+  @@map("food_kitchen_ticket_items")
+}
+
+model FoodCourier {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  name      String   @db.VarChar(120)
+  phone     String?  @db.VarChar(30)
+  vehicle   String?  @db.VarChar(40) // 'MOTO', 'BIKE', 'CARRO'
+  plate     String?  @db.VarChar(10)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User?          @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+  deliveries FoodDelivery[]
+
+  @@unique([tenantId, userId])
+  @@unique([tenantId, id])
+  @@map("food_couriers")
+}
+
+/// Zona de entrega (bairros, faixa de CEP ou raio) com taxa e ETA.
+model FoodDeliveryZone {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(80)
+  rule      Json     @default("{}") // { "zipPrefixes":["0100"], "radiusKm": 5 }
+  fee       Decimal  @default(0) @db.Decimal(14, 2)
+  etaMin    Int?     @map("eta_min")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveries FoodDelivery[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("food_delivery_zones")
+}
+
+enum DeliveryStatus {
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+model FoodDelivery {
+  id          String         @id @default(uuid()) @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  foodOrderId String         @map("food_order_id") @db.Uuid
+  courierId   String?        @map("courier_id") @db.Uuid
+  zoneId      String?        @map("zone_id") @db.Uuid
+  /// Retrato do endereço no momento do pedido (o cadastro do cliente pode mudar depois).
+  address     Json
+  fee         Decimal        @default(0) @db.Decimal(14, 2)
+  status      DeliveryStatus @default(PENDING)
+  assignedAt  DateTime?      @map("assigned_at") @db.Timestamptz(6)
+  pickedUpAt  DateTime?      @map("picked_up_at") @db.Timestamptz(6)
+  deliveredAt DateTime?      @map("delivered_at") @db.Timestamptz(6)
+  failReason  String?        @map("fail_reason")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  foodOrder FoodOrder         @relation(fields: [tenantId, foodOrderId], references: [tenantId, id], onDelete: Cascade)
+  courier   FoodCourier?      @relation(fields: [tenantId, courierId], references: [tenantId, id], onDelete: Restrict)
+  zone      FoodDeliveryZone? @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, foodOrderId])
+  @@unique([tenantId, id])
+  @@index([tenantId, status, courierId])
+  @@map("food_deliveries")
+}
+
+// =====================================================================================
+// 4. MÓDULO ACADEMIAS (gym_)
+//    planos/assinaturas recorrentes · frequência · integrações de acesso (catraca)
+// =====================================================================================
+
+enum BillingCycle {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+model GymPlan {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  /// Opcional: o plano também pode existir como produto SERVICE do core para sair no pedido.
+  productId    String?      @map("product_id") @db.Uuid
+  name         String       @db.VarChar(80)
+  description  String?
+  price        Decimal      @db.Decimal(14, 2)
+  billingCycle BillingCycle @default(MONTHLY) @map("billing_cycle")
+  /// Duração do contrato em ciclos (12 = anual pago mensalmente). NULL = sem fidelidade.
+  contractCycles Int?       @map("contract_cycles")
+  enrollmentFee Decimal     @default(0) @map("enrollment_fee") @db.Decimal(14, 2)
+  /// Regras de acesso: { "weekdays":[1,2,3,4,5,6], "from":"06:00", "to":"23:00", "maxCheckInsPerDay":1 }
+  accessRules  Json         @default("{}")
+  isActive     Boolean      @default(true) @map("is_active")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product     Product?        @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  memberships GymMembership[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("gym_plans")
+}
+
+enum MembershipStatus {
+  ACTIVE
+  PAUSED
+  OVERDUE
+  CANCELLED
+  EXPIRED
+}
+
+/// A MATRÍCULA / ASSINATURA. Recorrência: `nextBillingAt` é lido por um job que gera a
+/// próxima `GymMembershipCharge` (→ `FinanceEntry` do core).
+model GymMembership {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  customerId    String           @map("customer_id") @db.Uuid
+  planId        String           @map("plan_id") @db.Uuid
+  /// O pedido do core que registrou a adesão (quando vendida pelo balcão/PDV).
+  orderId       String?          @map("order_id") @db.Uuid
+  status        MembershipStatus @default(ACTIVE)
+  startDate     DateTime         @map("start_date") @db.Date
+  endDate       DateTime?        @map("end_date") @db.Date
+  nextBillingAt DateTime?        @map("next_billing_at") @db.Date
+  autoRenew     Boolean          @default(true) @map("auto_renew")
+  pausedUntil   DateTime?        @map("paused_until") @db.Date
+  cancelledAt   DateTime?        @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason  String?          @map("cancel_reason")
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer              @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  plan     GymPlan               @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict)
+  order    Order?                @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  charges  GymMembershipCharge[]
+  checkIns GymCheckIn[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId, status])
+  @@index([tenantId, status, nextBillingAt])
+  @@map("gym_memberships")
+}
+
+/// Cobrança de um período da assinatura. O DINHEIRO fica no core (`financeEntryId`);
+/// aqui fica só o vínculo com o período.
+model GymMembershipCharge {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  membershipId   String   @map("membership_id") @db.Uuid
+  financeEntryId String   @map("finance_entry_id") @db.Uuid
+  periodStart    DateTime @map("period_start") @db.Date
+  periodEnd      DateTime @map("period_end") @db.Date
+  amount         Decimal  @db.Decimal(14, 2)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  membership   GymMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade)
+  financeEntry FinanceEntry  @relation(fields: [tenantId, financeEntryId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, membershipId, periodStart])
+  @@unique([tenantId, financeEntryId])
+  @@unique([tenantId, id])
+  @@map("gym_membership_charges")
+}
+
+enum CheckInSource {
+  MANUAL
+  TURNSTILE
+  APP
+  QR
+}
+
+model GymCheckIn {
+  id           String        @id @default(uuid()) @db.Uuid
+  tenantId     String        @map("tenant_id") @db.Uuid
+  customerId   String        @map("customer_id") @db.Uuid
+  membershipId String?       @map("membership_id") @db.Uuid
+  deviceId     String?       @map("device_id") @db.Uuid
+  source       CheckInSource @default(MANUAL)
+  checkedInAt  DateTime      @default(now()) @map("checked_in_at") @db.Timestamptz(6)
+  checkedOutAt DateTime?     @map("checked_out_at") @db.Timestamptz(6)
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer   Customer         @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  membership GymMembership?   @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Restrict)
+  device     GymAccessDevice? @relation(fields: [tenantId, deviceId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId, checkedInAt])
+  @@index([tenantId, checkedInAt])
+  @@map("gym_check_ins")
+}
+
+enum AccessDeviceKind {
+  TURNSTILE
+  DOOR
+  BIOMETRIC
+  QR_READER
+}
+
+/// Catraca / porta / leitor. `provider` nomeia o adaptador em
+/// `src/modules/academia/services/acesso/providers/*` (controlid, hikvision, webhook…).
+model GymAccessDevice {
+  id         String           @id @default(uuid()) @db.Uuid
+  tenantId   String           @map("tenant_id") @db.Uuid
+  name       String           @db.VarChar(80)
+  kind       AccessDeviceKind @default(TURNSTILE)
+  provider   String           @db.VarChar(40)
+  /// Config do adaptador (IP, porta, token…). Segredos: cifrados pela aplicação antes de gravar.
+  config     Json             @default("{}")
+  isActive   Boolean          @default(true) @map("is_active")
+  lastSeenAt DateTime?        @map("last_seen_at") @db.Timestamptz(6)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  checkIns GymCheckIn[]
+  events   GymAccessEvent[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("gym_access_devices")
+}
+
+enum CredentialKind {
+  CARD
+  BIOMETRIC
+  QR
+  PIN
+  FACE
+}
+
+model GymAccessCredential {
+  id         String         @id @default(uuid()) @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  customerId String         @map("customer_id") @db.Uuid
+  kind       CredentialKind
+  /// Hash/identificador da credencial (nunca a biometria crua).
+  valueHash  String         @map("value_hash") @db.VarChar(200)
+  isActive   Boolean        @default(true) @map("is_active")
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt  DateTime?      @map("revoked_at") @db.Timestamptz(6)
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer         @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  events   GymAccessEvent[]
+
+  @@unique([tenantId, kind, valueHash])
+  @@unique([tenantId, id])
+  @@map("gym_access_credentials")
+}
+
+/// Tudo que o dispositivo reportou, liberado ou não. É o log de auditoria da catraca.
+model GymAccessEvent {
+  id           BigInt   @id @default(autoincrement())
+  tenantId     String   @map("tenant_id") @db.Uuid
+  deviceId     String   @map("device_id") @db.Uuid
+  credentialId String?  @map("credential_id") @db.Uuid
+  customerId   String?  @map("customer_id") @db.Uuid
+  allowed      Boolean
+  reason       String?  @db.VarChar(80) // 'OK', 'OVERDUE', 'OUT_OF_HOURS', 'UNKNOWN_CREDENTIAL'
+  occurredAt   DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  raw          Json?
+
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  device     GymAccessDevice      @relation(fields: [tenantId, deviceId], references: [tenantId, id], onDelete: Cascade)
+  credential GymAccessCredential? @relation(fields: [tenantId, credentialId], references: [tenantId, id], onDelete: Restrict)
+  customer   Customer?            @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, deviceId, occurredAt])
+  @@index([tenantId, customerId, occurredAt])
+  @@map("gym_access_events")
+}
+
+// =====================================================================================
+// 5. MÓDULO AUTOMOTIVO / SERVIÇOS (svc_) — oficinas, assistência técnica, lava-rápido
+//    ordens de serviço (OS) · controle de placas · status de manutenção
+// =====================================================================================
+
+model SvcVehicle {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  plate      String   @db.VarChar(10) // normalizada: sem hífen, maiúscula (Mercosul ou antiga)
+  brand      String?  @db.VarChar(40)
+  model      String?  @db.VarChar(60)
+  year       Int?
+  color      String?  @db.VarChar(30)
+  vin        String?  @db.VarChar(20) // chassi
+  mileage    Int?     // último km conhecido
+  notes      String?
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer      Customer          @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  serviceOrders SvcServiceOrder[]
+
+  @@unique([tenantId, plate])
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId])
+  @@map("svc_vehicles")
+}
+
+/// Catálogo de mão de obra ("Troca de óleo", "Alinhamento") com preço e tempo padrão.
+/// Opcionalmente ligado a um `Product` SERVICE do core para relatórios unificados.
+model SvcServiceCatalogItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  productId        String?  @map("product_id") @db.Uuid
+  name             String   @db.VarChar(120)
+  defaultPrice     Decimal  @map("default_price") @db.Decimal(14, 2)
+  estimatedMinutes Int?     @map("estimated_minutes")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("svc_service_catalog")
+}
+
+/// O STATUS DE MANUTENÇÃO da OS. Mais fino que o `OrderStatus` do core; a estratégia de
+/// venda do módulo projeta cada um deles num status do core (ver `os-sales.strategy.ts`).
+enum MaintenanceStatus {
+  RECEIVED
+  DIAGNOSING
+  AWAITING_APPROVAL
+  APPROVED
+  AWAITING_PARTS
+  IN_SERVICE
+  QUALITY_CHECK
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+/// EXTENSÃO 1:1 de `core_orders`: a ORDEM DE SERVIÇO. Os itens (peças e mão de obra) são
+/// `core_order_items` (kind PRODUCT / SERVICE); aqui fica só o que é de oficina.
+model SvcServiceOrder {
+  id                String            @id @default(uuid()) @db.Uuid
+  tenantId          String            @map("tenant_id") @db.Uuid
+  orderId           String            @map("order_id") @db.Uuid
+  vehicleId         String?           @map("vehicle_id") @db.Uuid
+  technicianUserId  String?           @map("technician_user_id") @db.Uuid
+  maintenanceStatus MaintenanceStatus @default(RECEIVED) @map("maintenance_status")
+  mileageIn         Int?              @map("mileage_in")
+  fuelLevel         String?           @map("fuel_level") @db.VarChar(10) // '1/4', '1/2'…
+  complaint         String?           // relato do cliente
+  diagnosis         String?           // laudo do técnico
+  promisedAt        DateTime?         @map("promised_at") @db.Timestamptz(6)
+  approvedAt        DateTime?         @map("approved_at") @db.Timestamptz(6)
+  startedAt         DateTime?         @map("started_at") @db.Timestamptz(6)
+  finishedAt        DateTime?         @map("finished_at") @db.Timestamptz(6)
+  deliveredAt       DateTime?         @map("delivered_at") @db.Timestamptz(6)
+  warrantyDays      Int?              @map("warranty_days")
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant     Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order      Order                  @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  vehicle    SvcVehicle?            @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict)
+  technician User?                  @relation(fields: [tenantId, technicianUserId], references: [tenantId, id], onDelete: Restrict)
+  events     SvcServiceOrderEvent[]
+  checklist  SvcChecklistItem[]
+
+  @@unique([tenantId, orderId])
+  @@unique([tenantId, id])
+  @@index([tenantId, maintenanceStatus])
+  @@index([tenantId, vehicleId])
+  @@map("svc_service_orders")
+}
+
+/// Histórico de cada transição de status da OS (quem, quando, por quê).
+model SvcServiceOrderEvent {
+  id             BigInt             @id @default(autoincrement())
+  tenantId       String             @map("tenant_id") @db.Uuid
+  serviceOrderId String             @map("service_order_id") @db.Uuid
+  fromStatus     MaintenanceStatus? @map("from_status")
+  toStatus       MaintenanceStatus  @map("to_status")
+  userId         String?            @map("user_id") @db.Uuid
+  note           String?
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceOrder SvcServiceOrder @relation(fields: [tenantId, serviceOrderId], references: [tenantId, id], onDelete: Cascade)
+  user         User?           @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, serviceOrderId])
+  @@map("svc_service_order_events")
+}
+
+/// Checklist de entrada/saída do veículo (estepe, macaco, riscos, nível de combustível…).
+model SvcChecklistItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  tenantId       String  @map("tenant_id") @db.Uuid
+  serviceOrderId String  @map("service_order_id") @db.Uuid
+  phase          String  @default("IN") @db.VarChar(5) // IN | OUT
+  label          String  @db.VarChar(80)
+  checked        Boolean @default(false)
+  note           String?
+  photoUrl       String? @map("photo_url")
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceOrder SvcServiceOrder @relation(fields: [tenantId, serviceOrderId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, serviceOrderId])
+  @@map("svc_checklist_items")
+}

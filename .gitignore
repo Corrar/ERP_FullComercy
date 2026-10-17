@@ -1,0 +1,25 @@
+# Dependências e build
+node_modules
+dist
+*.tsbuildinfo
+
+# Variáveis de ambiente (segurança!)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor / SO
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# Saídas cruas de recon / dumps (regra da casa: por padrão, nunca por nome literal)
+*.out
+*.out.txt
+*.dump
