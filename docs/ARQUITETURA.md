@@ -41,9 +41,43 @@ request ─► authenticate (JWT: sub=userId, tid=tenantId; confere is_active no
 
 ## 3. Árvore de diretórios
 
+Monorepo (npm workspaces): `apps/api` e `apps/web`. A raiz tem só o `package.json` que delega,
+`docker-compose.yml`, CI e docs.
+
 ```
 ERP_FullComercy/
-├── prisma/
+├── package.json                    # workspaces: apps/* — scripts delegam (dev, build, test, prisma:*)
+├── docker-compose.yml              # db (dois papéis) + api + web (nginx com proxy /api)
+├── .github/workflows/ci.yml        # unit → build web → migrate → RLS → seed → e2e
+├── docs/ARQUITETURA.md · docs/API.md (gerado)
+├── CLAUDE.md · README.md
+│
+├── apps/web/                       # ══ FRONT ══ React 18 + Vite + TS, sem framework de UI
+│   ├── index.html · vite.config.ts (proxy /api, /socket.io; alias @) · nginx.conf · Dockerfile
+│   └── src/
+│       ├── main.tsx · styles.css   # tokens e utilitários (trocar o visual = este arquivo)
+│       ├── app/
+│       │   ├── modules.ts          # REGISTRO DE MÓDULOS do front (espelha o da API) + menus do core
+│       │   ├── Shell.tsx           # sidebar gated por módulo ativo + permissão; sino; conta
+│       │   └── router.tsx          # rotas do core + rotas de cada módulo (RequireAuth, RequireModule)
+│       ├── lib/
+│       │   ├── api.ts              # fetch com Bearer, refresh automático em 401, ApiError
+│       │   ├── session.ts          # tokens/usuário/tenant/permissões/módulos; can(), hasModule()
+│       │   ├── socket.ts           # Socket.IO lazy com o mesmo JWT; useSocketEvent()
+│       │   ├── use-api.ts          # useGet / useAction (sem react-query)
+│       │   └── format.ts           # R$, datas, rótulos de status em PT
+│       ├── components/ui.tsx       # Card, Kpi, Badge, Table, Modal, Form, Tabs, Toast
+│       ├── core/                   # auth (login, esqueci, redefinir, conta), dashboard, orders,
+│       │                           # customers, products, stock, purchases, finance, users, roles,
+│       │                           # integrations, company (módulos/configurações), notifications (sino)
+│       └── modules/
+│           ├── varejo/             # Pdv, Caixa, Grade, Etiquetas, Comissoes, Relatorios
+│           ├── food/               # Salao (mesas → comanda → rodada → conta), Kds, Entregas, Cardapio
+│           ├── academia/           # Painel, Recepcao (check-in + catraca ao vivo), Matriculas, Planos, Turmas, Acesso
+│           └── servicos/           # PainelOS (kanban), NovaOS, OsDetalhe (orçamento/aprovação/checklist), Agenda, Veiculos
+│
+└── apps/api/                       # ══ API ══
+        ├── prisma/
 │   ├── schema.prisma               # CORE (seção 1) + MÓDULOS (seções 2–5), tenant_id em tudo
 │   ├── seed.ts                     # 5 empresas de demonstração, pelo MESMO onboarding da plataforma
 │   └── sql/001_rls_tenant.sql      # Row Level Security + CHECKs de estoque
@@ -133,14 +167,23 @@ ERP_FullComercy/
 │               ├── os.service.ts              # máquina de estados, orçamento/aprovação, checklist, anexos, relatórios
 │               ├── agenda.service.ts          # agenda com capacidade de boxes; chegada → OS
 │               └── veiculos.service.ts        # placa normalizada, lista, histórico
-├── scripts/                        # prisma-admin.js (CLI como plataforma), apply-rls.js, gerar-api-md.ts
-├── docker/initdb/01-roles.sql      # os dois papéis para o compose
-├── Dockerfile · docker-compose.yml · .github/workflows/ci.yml
-├── docs/ARQUITETURA.md · docs/API.md (gerado)
-├── CLAUDE.md
-├── README.md
-└── .env.example
+    ├── scripts/                    # prisma-admin.js (CLI como plataforma), apply-rls.js, gerar-api-md.ts
+    ├── Dockerfile · prisma.config.ts · .env.example
+    └── (docker/initdb/01-roles.sql na raiz: os dois papéis para o compose)
 ```
+
+### 3.1 Como o front espelha a modularidade
+
+- `/auth/login` e `/auth/me` devolvem `modules` (ativos na empresa) e `permissions` (efetivas, ou
+  `['*']` para admin). A sessão guarda os dois; `hasModule()` e `can()` decidem o que aparece.
+- `MODULES` em `app/modules.ts` tem, por módulo, `nav` (itens com a permissão exigida) e `routes`.
+  O `Shell` só desenha grupos de módulos ativos; o `router` envolve as rotas do módulo em
+  `RequireModule`, que explica e aponta para "Empresa e módulos" se a empresa não o tem.
+- As telas de venda de cada módulo chamam o MESMO `POST /orders` da API, com `moduleData` próprio:
+  o PDV manda `posSessionId`; o salão manda `tabId` e `menuId`; a adesão manda `planId`; a OS manda
+  `plate` e `complaint`. Nenhuma tela sabe de estoque ou financeiro — isso é a API.
+- Tempo real: `useSocketEvent` liga a tela ao evento (`kitchen.ticket` no KDS, `delivery.status`
+  nas entregas, `gym.access` na recepção, `os.status` no painel, `notification` no sino).
 
 ## 4. Como o sistema escolhe o módulo de venda
 

@@ -1,7 +1,7 @@
 # Ambiente local completo: Postgres com os DOIS papéis (plataforma com BYPASSRLS, tenant comum) + API.
 #   docker compose up -d db
-#   docker compose run --rm api sh -c "npx prisma migrate deploy && npm run db:seed"
-#   docker compose up api
+#   docker compose run --rm api sh -c "npm run prisma:deploy && npm run db:rls && npm run db:seed"
+#   docker compose up api web      →  http://localhost:8080
 services:
   db:
     image: postgres:16-alpine
@@ -18,7 +18,7 @@ services:
       interval: 5s
       retries: 10
   api:
-    build: .
+    build: { context: ., dockerfile: apps/api/Dockerfile }
     depends_on:
       db: { condition: service_healthy }
     environment:
@@ -32,5 +32,9 @@ services:
       APP_ENCRYPTION_KEY: dev-only-encryption-key-0123456789
       SEED_ADMIN_PASSWORD: Demo-12345678
     ports: ["3000:3000"]
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    depends_on: [api]
+    ports: ["8080:80"]
 volumes:
   pgdata:

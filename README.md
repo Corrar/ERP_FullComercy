@@ -1,16 +1,39 @@
-# FullComercy — Backend
+# FullComercy
 
 ERP SaaS **modular e multi-tenant** para qualquer comércio: varejo, food & delivery, academias e
 serviços/automotivo. Um núcleo universal (auth, usuários, RBAC, clientes, financeiro básico,
 estoque central e pedido genérico) e módulos que cada empresa liga ou desliga.
 
-## Stack
+Monorepo com dois aplicativos (npm workspaces):
+
+| pasta | o quê | stack |
+|---|---|---|
+| `apps/api` | a API | Node 20 · TypeScript · Express 5 · Prisma · PostgreSQL (RLS) · Socket.IO |
+| `apps/web` | o front | React 18 · Vite · TypeScript · react-router · socket.io-client (sem framework de UI) |
+
+O front espelha a modularidade da API: um registro de módulos (`apps/web/src/app/modules.ts`)
+monta o menu e as rotas só do que a empresa tem **ativo** e o usuário **pode**. Cada módulo é
+uma pasta em `apps/web/src/modules/<módulo>` com suas telas; o núcleo fica em `apps/web/src/core`.
+
+## Rodar tudo
+
+```bash
+npm install                    # instala os dois workspaces
+cp apps/api/.env.example apps/api/.env   # DATABASE_URL, DATABASE_ADMIN_URL, JWT_SECRET
+npm run prisma:deploy && npm run db:rls && npm run db:seed
+npm run dev                    # API em :3000
+npm run dev:web                # front em :5173 (proxy /api e /socket.io para :3000)
+```
+
+Login de demonstração: empresa `posto-demo`, `admin@posto-demo.local`, senha do `SEED_ADMIN_PASSWORD`.
+
+## Stack da API
 
 - **Node.js 20+ · TypeScript · Express 5 · Socket.IO**
 - **PostgreSQL** via **Prisma** (um banco, um schema, isolamento por `tenant_id` + RLS)
 - **JWT** (access + refresh com rotação), **Helmet**, **express-rate-limit**, **zod**
 
-## Setup
+## Setup da API em detalhe
 
 Dois papéis no Postgres, e a aplicação espera os dois:
 
@@ -20,27 +43,25 @@ Dois papéis no Postgres, e a aplicação espera os dois:
 | tenant (comum) | `DATABASE_URL` | todo o código de negócio, sujeito ao RLS |
 
 ```bash
-npm install
-cp .env.example .env          # DATABASE_URL (tenant), DATABASE_ADMIN_URL (plataforma), JWT_SECRET
 npm run prisma:deploy         # migrations, como plataforma
 npm run db:rls                # liga o RLS e dá os grants ao papel do tenant (idempotente)
 npm run db:seed               # 5 empresas de demonstração
 npm run dev                   # http://localhost:3000
 ```
 
-Ou tudo em contêiner: `docker compose up -d db && docker compose run --rm api sh -c "npm run prisma:deploy && npm run db:rls && npm run db:seed" && docker compose up api`.
+Ou tudo em contêiner (API + front atrás de nginx em :8080):
+`docker compose up -d db && docker compose run --rm api sh -c "npm run prisma:deploy && npm run db:rls && npm run db:seed" && docker compose up api web`.
 
 > A regra da casa sobre credencial vale aqui: URLs entram por variável de ambiente, nunca por
 > argumento de processo (`scripts/prisma-admin.js` faz isso pelo CLI do Prisma). Ver `CLAUDE.md`.
 
-## Scripts
+## Scripts (na raiz; cada um delega ao workspace)
 
 | Comando | O que faz |
 |---|---|
-| `npm run dev` | sobe a API com `ts-node` |
-| `npm run build` | `prisma generate` + `tsc` → `dist/` |
-| `npm start` | roda o build |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run dev` / `npm run dev:web` | API com `ts-node` / front com Vite |
+| `npm run build` | API (`prisma generate` + `tsc`) e front (`vite build`) |
+| `npm run typecheck` | `tsc --noEmit` nos dois |
 | `npm test` | testes unitários (sem banco): resolução de módulo, placa, ciclo, cardápio, catálogo de permissões |
 | `npm run smoke:boot` | monta o app sem banco e falha se houver chave de permissão órfã |
 | `npm run test:e2e` | 18 fluxos ponta a ponta contra o banco (exige `.env` migrado + seed) |

@@ -31,9 +31,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm ci
-      - run: npx prisma validate
+      - run: npx prisma validate --schema apps/api/prisma/schema.prisma
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build -w apps/web
       - name: Papéis de banco (plataforma BYPASSRLS, tenant comum)
         run: |
           psql -h localhost -U fc_platform -d fullcomercy -v ON_ERROR_STOP=1 -c "ALTER ROLE fc_platform BYPASSRLS;" -c "CREATE ROLE app_rw LOGIN PASSWORD 'app_rw_ci' NOSUPERUSER NOBYPASSRLS;" -c "GRANT USAGE ON SCHEMA public TO app_rw;"

@@ -56,3 +56,12 @@ Detalhe e justificativa em `docs/ARQUITETURA.md`. O resumo que não pode ser esq
 7. **Permissão é texto no catálogo do código.** Rota que cobra chave fora do catálogo derruba o
    boot (`assertAllRequiredKeysAreDeclared`).
 8. **Service não conhece HTTP.** Lança `AppError`; quem traduz é `shared/http.ts`.
+
+### Front (`apps/web`)
+
+9. **O front não decide acesso; ele só esconde.** `can()`/`hasModule()` filtram menu e rotas, mas a
+   API é quem nega (403). Nunca duplicar regra de negócio no front.
+10. **Toda chamada passa por `lib/api.ts`** (Bearer, refresh, `ApiError`). Nada de `fetch` solto.
+11. **Módulo novo no front = pasta em `src/modules/<módulo>` + uma linha em `app/modules.ts`.** Suas
+    telas de venda usam `POST /orders` com `moduleData`, como no back.
+12. **Tempo real por `useSocketEvent`**, nunca `setInterval` para "atualizar a tela".
