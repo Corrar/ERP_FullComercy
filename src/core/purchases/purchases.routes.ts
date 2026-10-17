@@ -16,4 +16,5 @@ purchasesRouter.post('/', requirePermission('core.purchases:manage'), asyncHandl
 purchasesRouter.put('/:id/items', requirePermission('core.purchases:manage'), asyncHandler(c.putItems));
 purchasesRouter.post('/:id/ordered', requirePermission('core.purchases:manage'), asyncHandler(c.postOrdered));
 purchasesRouter.post('/:id/receive', requirePermission('core.purchases:manage'), asyncHandler(c.postReceive));
+purchasesRouter.post('/:id/returns', requirePermission('core.purchases:manage'), asyncHandler(c.postReturn));
 purchasesRouter.post('/:id/cancel', requirePermission('core.purchases:manage'), asyncHandler(c.postCancel));

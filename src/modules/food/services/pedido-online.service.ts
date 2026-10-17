@@ -18,6 +18,9 @@ export interface PedidoOnlineInput {
   observacoes?: string;
   pagamentoNaEntrega: 'CASH' | 'DEBIT' | 'CREDIT' | 'PIX';
   trocoPara?: number;
+  /** Pagar AGORA pelo provedor configurado na empresa (`settings.payments.<provider>`): devolve o
+   *  QR/link junto do pedido. Sem provedor configurado → 400. */
+  pagarOnline?: { provider: string; method: 'PIX' | 'CREDIT' };
 }
 
 export function pedidoOnline(tenantSlug: string, input: PedidoOnlineInput) {
@@ -44,13 +47,19 @@ export function pedidoOnline(tenantSlug: string, input: PedidoOnlineInput) {
     });
     const zona = input.zoneId ? await db.foodDeliveryZone.findUnique({ where: { id: input.zoneId } }) : null;
 
-    return orders.createOrder({
+    const pedido = await orders.createOrder({
       moduleKey: 'FOOD', channel: 'ONLINE', customerId: cliente.id, items,
       surcharge: input.serviceType === 'DELIVERY' ? Number(zona?.fee ?? 0) : 0,
       notes: [input.observacoes, input.trocoPara ? `Troco para R$ ${input.trocoPara}` : null].filter(Boolean).join(' · ') || null,
-      metadata: { pagamentoNaEntrega: input.pagamentoNaEntrega, origem: 'cardapio-online' },
+      metadata: { pagamentoNaEntrega: input.pagarOnline ? 'ONLINE' : input.pagamentoNaEntrega, origem: 'cardapio-online' },
       moduleData: { serviceType: input.serviceType, menuId: menu.id, address: input.endereco, zoneId: input.zoneId, externalSource: 'SITE' },
     });
+    if (!input.pagarOnline) return pedido;
+    const cfg = (ctx().tenantSettings.payments as Record<string, unknown> | undefined)?.[input.pagarOnline.provider];
+    if (!cfg) throw AppError.validation('Esta loja não aceita pagamento online por este provedor.');
+    const { createIntent } = await import('../../../core/payments/payments.service');
+    const intent = await createIntent({ provider: input.pagarOnline.provider, method: input.pagarOnline.method, orderId: pedido.id });
+    return { ...pedido, pagamento: { intentId: intent.id, status: intent.status, qrCode: intent.qrCode, checkoutUrl: intent.checkoutUrl, expiresAt: intent.expiresAt } };
   });
 }
 

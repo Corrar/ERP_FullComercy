@@ -46,3 +46,11 @@ export const postTransfer = async (req: Request, res: Response) => {
   const out = await tenantTransaction(db, tenantId, (tx) => stock.transfer(tx, { tenantId, variantId: b.variantId, warehouseId: b.fromWarehouseId }, b.toWarehouseId, D(b.quantity), { refType: 'TRANSFER', userId, note: b.note, idempotencyKey: b.idempotencyKey ?? req.get('x-idempotency-key') ?? null }));
   res.status(out ? 201 : 200).json(out ?? { applied: false, reason: 'idempotent' });
 };
+
+import * as counts from './counts.service';
+export const getCounts = async (_req: Request, res: Response) => res.json(await counts.listar());
+export const postCount = async (req: Request, res: Response) => res.status(201).json(await counts.abrir(parse(z.object({ warehouseId: z.string().uuid().optional(), categoryId: z.string().uuid().optional(), notes: z.string().optional() }), req.body ?? {})));
+export const getCount = async (req: Request, res: Response) => res.json(await counts.detalhe(String(req.params.id)));
+export const postCountItems = async (req: Request, res: Response) => res.json(await counts.contar(String(req.params.id), parse(z.object({ lancamentos: z.array(z.object({ itemId: z.string().uuid().optional(), variantId: z.string().uuid().optional(), code: z.string().optional(), quantity: z.number().nonnegative(), note: z.string().optional(), somar: z.boolean().optional() })).min(1) }), req.body).lancamentos));
+export const postCountApply = async (req: Request, res: Response) => res.json(await counts.aplicar(String(req.params.id), parse(z.object({ tratarNaoContadosComoZero: z.boolean().optional() }), req.body ?? {})));
+export const postCountCancel = async (req: Request, res: Response) => res.json(await counts.cancelar(String(req.params.id)));

@@ -60,7 +60,11 @@ Ou tudo em contêiner: `docker compose up -d db && docker compose run --rm api s
 | `/platform/*` | `x-platform-key` | criar empresa, suspender, ligar módulo (só existe com `PLATFORM_API_KEY`) |
 | `/public/payments/:provider/webhook` | pública (assinatura do provedor) | confirmação de pagamento online |
 | `/tenant`, `/users`, `/roles`, `/customers`, `/products`, `/stock`, `/finance`, `/orders`, `/audit` | JWT + tenant | o CORE |
-| `/suppliers`, `/purchases`, `/payments`, `/webhooks`, `/notifications` | JWT + tenant | compras com custo médio, cobrança online, integrações, sino |
+| `/suppliers`, `/purchases`, `/payments`, `/webhooks`, `/notifications` | JWT + tenant | compras com custo médio e devolução ao fornecedor, cobrança online, integrações, sino |
+| `/stock/counts` | JWT + tenant | inventário físico: abrir, contar bipando, aplicar ajustes |
+| `GET /health/ready` | pública | readiness com ping no banco |
+
+Qualquer listagem aceita `?format=csv` (UTF-8 com BOM, `;`, decimal com vírgula). Toda resposta leva `X-Request-Id`.
 | `/m/varejo`, `/m/food`, `/m/academia`, `/m/servicos` | JWT + tenant + **módulo ativo** | o que é exclusivo de cada módulo |
 | Socket.IO (mesmo JWT) | sala por tenant | `order.*`, `kitchen.ticket`, `delivery.status`, `gym.access`, `os.status`, `stock.low` |
 
@@ -108,6 +112,8 @@ Lista completa, com a permissão de cada rota: **`docs/API.md`** (gerada do cód
 - **Pagamento online** (`/payments`): abstração de provedor; `manual` e `mock` na caixa, gateway real
   é um adaptador em `src/core/payments/providers/`.
 - **Catraca** (`/public/academia/dispositivos/:id/eventos`): token por aparelho, cifrado no banco.
+- **Pedido online pago no ato** (`pagarOnline` em `/public/food/pedidos/:tenant`): devolve QR/link do provedor
+  configurado na empresa; o webhook do provedor completa o pedido.
 
 ## Empresas de demonstração (seed)
 

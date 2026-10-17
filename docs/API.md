@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-17. 237 rotas.
+> Gerado por `npm run docs:api` em 2026-10-17. 245 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado.
 
@@ -9,6 +9,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | Método | Rota | Permissão |
 |---|---|---|
 | `GET` | `/health` |  |
+| `GET` | `/health/ready` |  |
 | `POST` | `/auth/login` |  |
 | `POST` | `/auth/refresh` |  |
 | `POST` | `/auth/logout` |  |
@@ -121,6 +122,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `PUT` | `/purchases/:id/items` | `core.purchases:manage` |
 | `POST` | `/purchases/:id/ordered` | `core.purchases:manage` |
 | `POST` | `/purchases/:id/receive` | `core.purchases:manage` |
+| `POST` | `/purchases/:id/returns` | `core.purchases:manage` |
 | `POST` | `/purchases/:id/cancel` | `core.purchases:manage` |
 
 ## Core · roles
@@ -143,6 +145,12 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `GET` | `/stock/warehouses` | `core.stock:view` |
 | `POST` | `/stock/warehouses` | `core.stock:move` |
 | `PATCH` | `/stock/warehouses/:id` | `core.stock:move` |
+| `GET` | `/stock/counts` | `core.stock:view` |
+| `POST` | `/stock/counts` | `core.stock:move` |
+| `GET` | `/stock/counts/:id` | `core.stock:view` |
+| `POST` | `/stock/counts/:id/items` | `core.stock:move` |
+| `POST` | `/stock/counts/:id/apply` | `core.stock:move` |
+| `POST` | `/stock/counts/:id/cancel` | `core.stock:move` |
 
 ## Core · suppliers
 

@@ -134,3 +134,42 @@ export async function sugestaoDeCompra() {
      ORDER BY p.name`;
 }
 export { Prisma };
+
+/** DEVOLUÇÃO AO FORNECEDOR: só do que foi recebido. Saída do estoque (CONSUME) e crédito:
+ *  abate dos títulos a PAGAR em aberto da compra; o que sobrar vira título a RECEBER do fornecedor. */
+export async function devolverAoFornecedor(purchaseOrderId: string, input: { reason?: string; items: { variantId: string; quantity: number }[] }) {
+  const { db, tenantId, userId } = ctx();
+  return tenantTransaction(db, tenantId, async (tx) => {
+    const po = await tx.purchaseOrder.findUnique({ where: { id: purchaseOrderId }, include: { items: true, supplier: true, returns: { include: { items: true } } } });
+    if (!po) throw AppError.notFound('Compra');
+    if (!(['RECEIVED', 'PARTIAL'] as PurchaseStatus[]).includes(po.status)) throw AppError.conflict('Só compra recebida aceita devolução.');
+    const jaDevolvido = new Map<string, ReturnType<typeof D>>();
+    for (const r of po.returns) for (const it of r.items) jaDevolvido.set(it.variantId, (jaDevolvido.get(it.variantId) ?? D(0)).plus(it.quantity));
+    const linhas = input.items.map((i) => {
+      const poi = po.items.find((x) => x.variantId === i.variantId);
+      if (!poi) throw AppError.notFound(`Variante ${i.variantId} nesta compra`);
+      const qty = D(i.quantity); const max = D(poi.receivedQty).minus(jaDevolvido.get(i.variantId) ?? 0);
+      if (qty.lte(0) || qty.gt(max)) throw AppError.validation(`Pode devolver no máximo ${max} de ${i.variantId}.`);
+      return { variantId: i.variantId, quantity: qty, unitCost: D(poi.unitCost), amount: round2(qty.mul(poi.unitCost)) };
+    });
+    const total = round2(sum(linhas.map((l) => l.amount)));
+    const ret = await tx.purchaseReturn.create({ data: { tenantId, purchaseOrderId, supplierId: po.supplierId, reason: input.reason, totalAmount: total, items: { create: linhas } } });
+    for (const l of linhas) {
+      await stock.consume(tx, { tenantId, variantId: l.variantId, warehouseId: po.warehouseId }, l.quantity, { refType: 'PURCHASE_RETURN', refId: ret.id, userId, idempotencyKey: `pret:${ret.id}:${l.variantId}`, note: `Devolução ao fornecedor ${po.supplier.name}` });
+    }
+    // Crédito: abate títulos a pagar em aberto desta compra; sobra vira a receber.
+    let credito = total;
+    const abertos = await tx.financeEntry.findMany({ where: { origin: 'PURCHASE', originId: po.id, kind: 'PAYABLE', status: { in: ['OPEN', 'PARTIAL'] } }, orderBy: { dueDate: 'asc' } });
+    for (const e of abertos) {
+      if (credito.lte(0)) break;
+      const saldo = D(e.amount).minus(e.paidAmount);
+      const usa = saldo.lt(credito) ? saldo : credito;
+      await finance.settle(tx, tenantId, { entryId: e.id, amount: usa, method: 'OTHER', reference: `devolucao:${ret.id}` });
+      credito = credito.minus(usa);
+    }
+    if (credito.gt(0)) {
+      await finance.createEntry(tx, tenantId, { kind: FinanceEntryKind.RECEIVABLE, description: `Crédito devolução compra #${po.number} · ${po.supplier.name}`, amount: credito, dueDate: new Date(), origin: 'PURCHASE_RETURN', originId: ret.id });
+    }
+    return { devolucao: ret, abatidoEmTitulos: total.minus(credito), creditoAReceber: credito };
+  });
+}

@@ -8,6 +8,9 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './shared/http';
+import { csvMiddleware } from './shared/csv';
+import { requestLog } from './shared/request-log';
+import { prisma } from './infra/prisma';
 import { authenticate } from './core/auth/auth.middleware';
 import { tenantContext } from './core/tenancy/tenant.middleware';
 import { assertAllRequiredKeysAreDeclared } from './core/rbac/rbac.middleware';
@@ -58,6 +61,8 @@ export function buildApp() {
   app.use(helmet());
   app.use(compression());
   app.use(express.json({ limit: '5mb' }));
+  app.use(requestLog);
+  app.use(csvMiddleware);
   app.use(rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: true, legacyHeaders: false }));
 
   const origins = corsOrigins();
@@ -72,8 +77,13 @@ export function buildApp() {
 
   // 1. Público.
   app.get('/health', (_req, res) => res.json({ ok: true, sha: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'dev' }));
+  // Readiness: só diz "pronto" com o banco respondendo (o balanceador tira a instância se falhar).
+  app.get('/health/ready', async (_req, res) => {
+    try { await prisma.$queryRaw`SELECT 1`; res.json({ ok: true, db: 'up' }); }
+    catch { res.status(503).json({ ok: false, db: 'down' }); }
+  });
   MOUNTED_ROUTES.length = 0;
-  MOUNTED_ROUTES.push({ method: 'GET', path: '/health', auth: 'public' });
+  MOUNTED_ROUTES.push({ method: 'GET', path: '/health', auth: 'public' }, { method: 'GET', path: '/health/ready', auth: 'public' });
   app.use('/auth', authRouter); collect('/auth', authRouter, 'public');
   app.use('/public/payments', paymentsPublicRouter); collect('/public/payments', paymentsPublicRouter, 'public');
   moduleRegistry.mountPublic(app);

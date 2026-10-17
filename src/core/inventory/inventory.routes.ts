@@ -25,3 +25,9 @@ stockRouter.post('/transfers', requirePermission('core.stock:move'), asyncHandle
 stockRouter.get('/warehouses', requirePermission('core.stock:view'), asyncHandler(c.getWarehouses));
 stockRouter.post('/warehouses', requirePermission('core.stock:move'), asyncHandler(c.postWarehouse));
 stockRouter.patch('/warehouses/:id', requirePermission('core.stock:move'), asyncHandler(c.patchWarehouse));
+stockRouter.get('/counts', requirePermission('core.stock:view'), asyncHandler(c.getCounts));
+stockRouter.post('/counts', requirePermission('core.stock:move'), asyncHandler(c.postCount));
+stockRouter.get('/counts/:id', requirePermission('core.stock:view'), asyncHandler(c.getCount));
+stockRouter.post('/counts/:id/items', requirePermission('core.stock:move'), asyncHandler(c.postCountItems));
+stockRouter.post('/counts/:id/apply', requirePermission('core.stock:move'), asyncHandler(c.postCountApply));
+stockRouter.post('/counts/:id/cancel', requirePermission('core.stock:move'), asyncHandler(c.postCountCancel));

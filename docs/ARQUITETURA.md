@@ -56,7 +56,7 @@ ERP_FullComercy/
 │   │   ├── prisma.ts               # DOIS clients (plataforma/tenant), extensão RLS-aware, tenantTransaction()
 │   │   └── realtime.ts             # Socket.IO: sala por tenant derivada do JWT; ponte eventos → sala
 │   ├── jobs/                       # scheduler em processo; core.jobs (outbox, expiração de pagamento); módulos declaram os seus
-│   ├── shared/                     # errors, http, money (Decimal), events (barramento tipado), crypto (AES-GCM p/ segredos em JSON)
+│   ├── shared/                     # errors, http, money, events, crypto, csv (?format=csv), request-log (X-Request-Id)
 │   │
 │   ├── core/                       # ══ NÚCLEO UNIVERSAL ══ (nada de nicho aqui)
 │   │   ├── tenancy/                # ctx() em AsyncLocalStorage, cache de módulos, runAsTenant() p/ jobs e rotas públicas
@@ -66,11 +66,11 @@ ERP_FullComercy/
 │   │   ├── users/                  # CRUD, papéis, exceções individuais, senha
 │   │   ├── customers/              # CRUD, endereços, resumo comercial
 │   │   ├── finance/                # títulos, baixas, contas, categorias, fluxo de caixa — ÚNICA porta de dinheiro
-│   │   ├── inventory/              # produtos/variantes/categorias/armazéns, MOTOR de estoque, transferência, razão, mínimo
+│   │   ├── inventory/              # produtos/variantes/categorias/armazéns, MOTOR de estoque, transferência, razão, mínimo, inventário físico
 │   │   ├── audit/                  # leitura do log de auditoria
 │   │   ├── integration/            # outbox durável + webhooks por empresa (HMAC, retry/backoff) + despachante
 │   │   ├── notifications/          # o sino: avisos por evento, leitura por pessoa
-│   │   ├── purchases/              # fornecedores e pedidos de compra (recebimento parcial, custo médio, a pagar, sugestão)
+│   │   ├── purchases/              # fornecedores, pedidos de compra (recebimento parcial, custo médio, a pagar, sugestão), devolução ao fornecedor
 │   │   ├── payments/               # intenções de pagamento online + providers/ (manual, mock; gateway real = adaptador)
 │   │   └── orders/                 # ══ O PEDIDO GENÉRICO ══
 │   │       ├── sales-strategy.ts   #   contrato SalesStrategy + registry + resolve() + draftFromOrder()
@@ -212,10 +212,6 @@ Escolhida a estratégia, o core delega a ela só os pontos de decisão de nicho 
   com as credenciais do cliente.
 - **Fiscal** (NFC-e/NF-e/SAT): nada. É integração com emissor externo; o ponto natural é um
   listener de `order.status` COMPLETED gravando no outbox para um provedor fiscal.
-- **Devolução ao fornecedor** (compra recebida com defeito): a compra recebida não cancela; falta o
-  fluxo inverso (saída de estoque + crédito com o fornecedor).
-- **Pedido público com pagamento online**: o pedido do cardápio nasce "paga na entrega"; ligar o
-  `createIntent` ao fluxo público é um passo curto quando houver gateway real.
 - **Render de etiqueta em PDF**: só ZPL (cobre impressoras térmicas de loja).
 - **Barramento em memória entre instâncias**: os eventos são duráveis (outbox) e os webhooks saem de
   qualquer instância, mas o Socket.IO não compartilha salas entre instâncias (precisa do adapter

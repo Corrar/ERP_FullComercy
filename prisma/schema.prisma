@@ -135,6 +135,10 @@ model Tenant {
   purchaseOrders      PurchaseOrder[]
   purchaseOrderItems  PurchaseOrderItem[]
   paymentIntents      PaymentIntent[]
+  stockCounts         StockCount[]
+  stockCountItems     StockCountItem[]
+  purchaseReturns     PurchaseReturn[]
+  purchaseReturnItems PurchaseReturnItem[]
   // módulos
   retailGradeAxes        RetailGradeAxis[]
   retailGradeValues      RetailGradeValue[]
@@ -630,6 +634,8 @@ model ProductVariant {
   menuItems     FoodMenuItem[]
   purchaseItems PurchaseOrderItem[]
   recipeUses    FoodRecipeItem[]
+  countItems    StockCountItem[]
+  purchaseReturnItems PurchaseReturnItem[]
 
   @@unique([tenantId, sku])
   @@unique([tenantId, barcode])
@@ -652,6 +658,7 @@ model Warehouse {
   balances  StockBalance[]
   movements StockMovement[]
   purchases PurchaseOrder[]
+  counts    StockCount[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, id])
@@ -982,8 +989,9 @@ model Supplier {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   purchases PurchaseOrder[]
+  returns   PurchaseReturn[]
 
   @@unique([tenantId, document])
   @@unique([tenantId, id])
@@ -1022,6 +1030,7 @@ model PurchaseOrder {
   supplier  Supplier            @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
   warehouse Warehouse           @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict)
   items     PurchaseOrderItem[]
+  returns   PurchaseReturn[]
 
   @@unique([tenantId, number])
   @@unique([tenantId, id])
@@ -1085,6 +1094,92 @@ model PaymentIntent {
   @@unique([tenantId, id])
   @@index([tenantId, status])
   @@map("core_payment_intents")
+}
+
+enum StockCountStatus {
+  OPEN
+  APPLIED
+  CANCELLED
+}
+
+/// INVENTÁRIO FÍSICO: contagem por armazém. Abre com o retrato do sistema (snapshotQty), o
+/// operador digita o contado, e APLICAR gera um AJUSTE no motor de estoque por divergência.
+model StockCount {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  warehouseId String           @map("warehouse_id") @db.Uuid
+  status      StockCountStatus @default(OPEN)
+  notes       String?
+  /// Filtro de escopo: contagem parcial por categoria (NULL = armazém inteiro).
+  categoryId  String?          @map("category_id") @db.Uuid
+  openedAt    DateTime         @default(now()) @map("opened_at") @db.Timestamptz(6)
+  appliedAt   DateTime?        @map("applied_at") @db.Timestamptz(6)
+  openedByUserId String?       @map("opened_by_user_id") @db.Uuid
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  warehouse Warehouse        @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict)
+  items     StockCountItem[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status])
+  @@map("core_stock_counts")
+}
+
+model StockCountItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  countId     String   @map("count_id") @db.Uuid
+  variantId   String   @map("variant_id") @db.Uuid
+  snapshotQty Decimal  @map("snapshot_qty") @db.Decimal(14, 3)
+  countedQty  Decimal? @map("counted_qty") @db.Decimal(14, 3)
+  countedAt   DateTime? @map("counted_at") @db.Timestamptz(6)
+  note        String?
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  count   StockCount     @relation(fields: [tenantId, countId], references: [tenantId, id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, countId, variantId])
+  @@unique([tenantId, id])
+  @@map("core_stock_count_items")
+}
+
+/// DEVOLUÇÃO AO FORNECEDOR: saída do estoque + crédito (título a receber do fornecedor ou
+/// abatimento do título a pagar em aberto da compra).
+model PurchaseReturn {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
+  supplierId      String   @map("supplier_id") @db.Uuid
+  reason          String?
+  totalAmount     Decimal  @default(0) @map("total_amount") @db.Decimal(14, 2)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder        @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Restrict)
+  supplier      Supplier             @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  items         PurchaseReturnItem[]
+
+  @@unique([tenantId, id])
+  @@map("core_purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  returnId  String  @map("return_id") @db.Uuid
+  variantId String  @map("variant_id") @db.Uuid
+  quantity  Decimal @db.Decimal(14, 3)
+  unitCost  Decimal @map("unit_cost") @db.Decimal(14, 4)
+  amount    Decimal @db.Decimal(14, 2)
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  return  PurchaseReturn @relation(fields: [tenantId, returnId], references: [tenantId, id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, returnId, variantId])
+  @@unique([tenantId, id])
+  @@map("core_purchase_return_items")
 }
 
 // =====================================================================================
