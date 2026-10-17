@@ -7,6 +7,7 @@ import type { OrderWithItems, PricedItem } from '../../../core/orders/sales-stra
 import { ctx } from '../../../core/tenancy/tenant-context';
 import { tenantTransaction } from '../../../infra/prisma';
 import { AppError } from '../../../shared/errors';
+import { events } from '../../../shared/events';
 
 export async function abrirTicketsDeCozinha(tx: TenantTx, foodOrderId: string, order: OrderWithItems, items: PricedItem[]) {
   // Os itens persistidos (com id) estão em `order.items`, na mesma ordem dos `items` precificados.
@@ -52,8 +53,26 @@ export async function moverTicket(ticketId: string, to: KitchenStatus) {
     if (coreStatus) {
       await tx.order.updateMany({ where: { id: t.foodOrder.orderId, status: { in: ['OPEN', 'CONFIRMED', 'IN_PROGRESS'] } }, data: { status: coreStatus } });
     }
+    events.emit('kitchen.ticket', { tenantId, ticketId, station: t.station, status: to });
     return { ticketId, status: to, kitchenStatus: pior };
   });
+}
+
+/** Resumo por estação: quantos na fila, em preparo, e o tempo médio de preparo do dia. */
+export async function resumoEstacoes() {
+  const { db, tenantId } = ctx();
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const [fila, tempos] = await Promise.all([
+    db.foodKitchenTicket.groupBy({ by: ['station', 'status'], where: { status: { in: ['QUEUED', 'PREPARING'] } }, _count: true }),
+    db.$queryRaw<{ station: string; media_min: number; prontos: number }[]>`
+      SELECT station, AVG(EXTRACT(EPOCH FROM (ready_at - created_at)) / 60)::float AS media_min, COUNT(*)::int AS prontos
+        FROM food_kitchen_tickets WHERE tenant_id = ${tenantId}::uuid AND ready_at IS NOT NULL AND created_at >= ${hoje}
+       GROUP BY station`,
+  ]);
+  const estacoes = new Map<string, { station: string; fila: number; preparando: number; tempoMedioMin: number | null; prontosHoje: number }>();
+  for (const f of fila) { const e = estacoes.get(f.station) ?? { station: f.station, fila: 0, preparando: 0, tempoMedioMin: null, prontosHoje: 0 }; if (f.status === 'QUEUED') e.fila += f._count; else e.preparando += f._count; estacoes.set(f.station, e); }
+  for (const t of tempos) { const e = estacoes.get(t.station) ?? { station: t.station, fila: 0, preparando: 0, tempoMedioMin: null, prontosHoje: 0 }; e.tempoMedioMin = Math.round(t.media_min * 10) / 10; e.prontosHoje = t.prontos; estacoes.set(t.station, e); }
+  return [...estacoes.values()];
 }
 
 export async function filaDaEstacao(station?: string) {

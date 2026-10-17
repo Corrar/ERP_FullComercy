@@ -46,3 +46,15 @@ export async function postSettle(req: Request, res: Response) {
     finance.settle(tx, tenantId, { entryId: String(req.params.id), ...b, amount: D(b.amount) }));
   res.json(row);
 }
+
+export const getAccounts = async (_req: Request, res: Response) => res.json(await finance.listAccounts());
+export const postAccount = async (req: Request, res: Response) => res.status(201).json(await finance.createAccount(parse(z.object({ name: z.string().min(1).max(80), kind: z.enum(['CASH', 'BANK', 'DIGITAL']).default('CASH'), isDefault: z.boolean().optional() }), req.body)));
+export const getCategories = async (_req: Request, res: Response) => res.json(await finance.listCategories());
+export const postCategory = async (req: Request, res: Response) => res.status(201).json(await finance.createCategory(parse(z.object({ name: z.string().min(1).max(80), kind: z.nativeEnum(FinanceEntryKind) }), req.body)));
+export const postCancel = async (req: Request, res: Response) => res.json(await finance.cancelEntry(String(req.params.id), parse(z.object({ reason: z.string().min(3) }), req.body).reason));
+export const patchEntry = async (req: Request, res: Response) => res.json(await finance.updateEntry(String(req.params.id), parse(z.object({ description: z.string().max(200).optional(), dueDate: z.coerce.date().optional(), categoryId: z.string().uuid().nullable().optional(), notes: z.string().optional(), amount: z.number().positive().optional() }), req.body)));
+export const getSummary = async (req: Request, res: Response) => {
+  const q = parse(z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }), req.query);
+  const ini = q.from ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  res.json(await finance.summary(ini, q.to ?? new Date()));
+};

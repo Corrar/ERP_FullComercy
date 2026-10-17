@@ -48,6 +48,13 @@ export interface OrderDraft {
   idempotencyKey?: string | null;
 }
 
+/** Reconstrói um rascunho mínimo a partir de um pedido gravado, para os ganchos que recebem
+ *  `draft` em transições posteriores (pagamento, status). `moduleData` vem de `metadata`. */
+export function draftFromOrder(order: { channel: OrderChannel; moduleKey: ModuleKey | null; metadata: unknown }): OrderDraft {
+  const meta = (order.metadata ?? {}) as { moduleData?: Record<string, unknown> };
+  return { items: [], channel: order.channel, moduleKey: order.moduleKey, moduleData: meta.moduleData ?? {} };
+}
+
 /** Item já resolvido e precificado pelo core, antes de persistir. */
 export interface PricedItem {
   variantId: string | null;
@@ -87,6 +94,8 @@ export interface SalesStrategy {
   price?(items: PricedItem[], draft: OrderDraft): Promise<PricedItem[]>;
   /** Cria a extensão 1:1 e efeitos do módulo. MESMA transação do pedido. */
   afterCreate?(tx: TenantTx, order: OrderWithItems, items: PricedItem[], draft: OrderDraft): Promise<void>;
+  /** Itens acrescentados a um pedido ABERTO (nova rodada da mesa, peça aprovada no orçamento). */
+  afterItemsAdded?(tx: TenantTx, order: OrderWithItems, newItems: PricedItem[], newRows: { id: string }[]): Promise<void>;
   /** Reage a transição do status do core (ex.: COMPLETED → gera comissão). */
   afterStatusChange?(tx: TenantTx, order: OrderWithItems, from: OrderStatus, to: OrderStatus): Promise<void>;
   /** Transições extras/restritas além do padrão do core. */

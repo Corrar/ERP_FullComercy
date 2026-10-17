@@ -13,6 +13,7 @@ import { Prisma, StockMovementKind } from '@prisma/client';
 import type { TenantTx } from '../../infra/prisma';
 import { AppError } from '../../shared/errors';
 import { D } from '../../shared/money';
+import { events } from '../../shared/events';
 
 export interface StockRef {
   refType: string;          // 'ORDER' | 'OS' | 'INVENTORY' | 'TRANSFER' …
@@ -24,7 +25,7 @@ export interface StockRef {
 }
 
 interface Grain { tenantId: string; variantId: string; warehouseId: string }
-interface Balance { id: string; onHand: Prisma.Decimal; reserved: Prisma.Decimal }
+interface Balance { id: string; onHand: Prisma.Decimal; reserved: Prisma.Decimal; minLevel: Prisma.Decimal | null }
 
 async function lock(tx: TenantTx, g: Grain): Promise<Balance> {
   // A linha nasce preguiçosa (não se cria N×M linhas vazias no cadastro).
@@ -32,12 +33,12 @@ async function lock(tx: TenantTx, g: Grain): Promise<Balance> {
     INSERT INTO core_stock_balances (id, tenant_id, variant_id, warehouse_id, on_hand, reserved, updated_at)
     VALUES (gen_random_uuid(), ${g.tenantId}::uuid, ${g.variantId}::uuid, ${g.warehouseId}::uuid, 0, 0, now())
     ON CONFLICT (tenant_id, variant_id, warehouse_id) DO NOTHING`;
-  const rows = await tx.$queryRaw<{ id: string; on_hand: Prisma.Decimal; reserved: Prisma.Decimal }[]>`
-    SELECT id, on_hand, reserved FROM core_stock_balances
+  const rows = await tx.$queryRaw<{ id: string; on_hand: Prisma.Decimal; reserved: Prisma.Decimal; min_level: Prisma.Decimal | null }[]>`
+    SELECT id, on_hand, reserved, min_level FROM core_stock_balances
      WHERE tenant_id = ${g.tenantId}::uuid AND variant_id = ${g.variantId}::uuid AND warehouse_id = ${g.warehouseId}::uuid
      FOR UPDATE`;
   const r = rows[0];
-  return { id: r.id, onHand: D(r.on_hand), reserved: D(r.reserved) };
+  return { id: r.id, onHand: D(r.on_hand), reserved: D(r.reserved), minLevel: r.min_level === null ? null : D(r.min_level) };
 }
 
 async function alreadyApplied(tx: TenantTx, tenantId: string, key?: string | null): Promise<boolean> {
@@ -58,6 +59,10 @@ async function persist(
     throw new AppError('STOCK_INSUFFICIENT', 'Reserva inconsistente com o saldo.', { ...g, ...next });
   }
   await tx.stockBalance.update({ where: { id: bal.id }, data: next });
+  // Cruzou o mínimo nesta saída? Avisa (a tela de reposição ouve). Só na descida, para não repetir.
+  if (bal.minLevel && dOnHand.lt(0) && bal.onHand.gt(bal.minLevel) && next.onHand.lte(bal.minLevel)) {
+    events.emit('stock.low', { tenantId: g.tenantId, variantId: g.variantId, warehouseId: g.warehouseId, onHand: next.onHand.toString(), minLevel: bal.minLevel.toString() });
+  }
   await tx.stockMovement.create({
     data: {
       tenantId: g.tenantId, variantId: g.variantId, warehouseId: g.warehouseId, kind,

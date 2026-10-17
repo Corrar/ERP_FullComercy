@@ -15,6 +15,11 @@ const schema = z.object({
   /// TTL (ms) do cache em memória de "tenant + módulos ativos". Curto de propósito: ligar um
   /// módulo tem de aparecer em segundos, não em minutos.
   TENANT_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(15_000),
+  /// Chave da API de PLATAFORMA (`/platform/*`: criar empresa, suspender, ligar módulo). Sem ela
+  /// as rotas respondem 404 — a plataforma simplesmente não existe nesse deploy.
+  PLATFORM_API_KEY: z.string().min(32).optional(),
+  /// Jobs em processo (cobrança recorrente, sessões de turma…). "0"/"false" desliga.
+  JOBS_ENABLED: z.string().default('1').transform((v) => !['0', 'false', 'off'].includes(v.toLowerCase())),
 });
 
 const parsed = schema.safeParse(process.env);

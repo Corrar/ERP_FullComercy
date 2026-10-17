@@ -138,6 +138,8 @@ model Tenant {
   retailLabelTemplates   RetailLabelTemplate[]
   retailLabelBatches     RetailLabelBatch[]
   retailLabelBatchItems  RetailLabelBatchItem[]
+  retailReturns          RetailReturn[]
+  retailReturnItems      RetailReturnItem[]
   foodTables             FoodTable[]
   foodTabs               FoodTab[]
   foodMenus              FoodMenu[]
@@ -159,11 +161,16 @@ model Tenant {
   gymAccessDevices       GymAccessDevice[]
   gymAccessCredentials   GymAccessCredential[]
   gymAccessEvents        GymAccessEvent[]
+  gymClasses             GymClass[]
+  gymClassSessions       GymClassSession[]
+  gymClassBookings       GymClassBooking[]
   svcVehicles            SvcVehicle[]
   svcServiceCatalog      SvcServiceCatalogItem[]
   svcServiceOrders       SvcServiceOrder[]
   svcServiceOrderEvents  SvcServiceOrderEvent[]
   svcChecklistItems      SvcChecklistItem[]
+  svcAppointments        SvcAppointment[]
+  svcAttachments         SvcAttachment[]
 
   @@map("core_tenants")
 }
@@ -214,6 +221,8 @@ model User {
   courier       FoodCourier?
   svcOrdersTech SvcServiceOrder[]
   svcEvents     SvcServiceOrderEvent[]
+  gymClassesTaught GymClass[]
+  retailReturns RetailReturn[]
 
   @@unique([tenantId, email])
   @@unique([tenantId, id])
@@ -360,6 +369,8 @@ model Customer {
   credentials    GymAccessCredential[]
   accessEvents   GymAccessEvent[]
   vehicles       SvcVehicle[]
+  classBookings  GymClassBooking[]
+  appointments   SvcAppointment[]
 
   @@unique([tenantId, document])
   @@unique([tenantId, code])
@@ -790,6 +801,7 @@ model OrderItem {
   order   Order           @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
   variant ProductVariant? @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
   kitchenItems FoodKitchenTicketItem[]
+  returnItems  RetailReturnItem[]
 
   @@unique([tenantId, id])
   @@index([tenantId, orderId])
@@ -983,6 +995,7 @@ model RetailSale {
   posSession  RetailPosSession?  @relation(fields: [tenantId, posSessionId], references: [tenantId, id], onDelete: Restrict)
   salesperson RetailSalesperson? @relation(fields: [tenantId, salespersonId], references: [tenantId, id], onDelete: Restrict)
   commissions RetailCommission[]
+  returns     RetailReturn[]
 
   @@unique([tenantId, orderId])
   @@unique([tenantId, id])
@@ -1074,6 +1087,64 @@ model RetailLabelBatchItem {
   @@unique([tenantId, batchId, variantId])
   @@unique([tenantId, id])
   @@map("ret_label_batch_items")
+}
+
+enum ReturnStatus {
+  OPEN
+  APPROVED
+  REFUNDED
+  REJECTED
+}
+
+enum RefundMethod {
+  CASH
+  PIX
+  CARD_REVERSAL
+  STORE_CREDIT
+  EXCHANGE
+}
+
+/// DEVOLUÇÃO/TROCA de uma venda. Itens voltam ao estoque (se `restock`), o valor sai por
+/// `refundMethod`; troca gera um pedido novo apontando `exchangeOfSaleId` para a venda original.
+model RetailReturn {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  saleId       String       @map("sale_id") @db.Uuid
+  status       ReturnStatus @default(OPEN)
+  refundMethod RefundMethod @default(STORE_CREDIT) @map("refund_method")
+  totalAmount  Decimal      @default(0) @map("total_amount") @db.Decimal(14, 2)
+  reason       String?
+  userId       String?      @map("user_id") @db.Uuid
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt   DateTime?    @map("resolved_at") @db.Timestamptz(6)
+
+  tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sale   RetailSale         @relation(fields: [tenantId, saleId], references: [tenantId, id], onDelete: Restrict)
+  user   User?              @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+  items  RetailReturnItem[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, saleId])
+  @@map("ret_returns")
+}
+
+model RetailReturnItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  tenantId    String  @map("tenant_id") @db.Uuid
+  returnId    String  @map("return_id") @db.Uuid
+  orderItemId String  @map("order_item_id") @db.Uuid
+  quantity    Decimal @db.Decimal(14, 3)
+  amount      Decimal @db.Decimal(14, 2)
+  restock     Boolean @default(true)
+  condition   String? @db.VarChar(40) // 'NOVO', 'DEFEITO', 'USADO'
+
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  return    RetailReturn @relation(fields: [tenantId, returnId], references: [tenantId, id], onDelete: Cascade)
+  orderItem OrderItem    @relation(fields: [tenantId, orderItemId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, returnId, orderItemId])
+  @@unique([tenantId, id])
+  @@map("ret_return_items")
 }
 
 // =====================================================================================
@@ -1631,6 +1702,73 @@ model GymAccessEvent {
   @@map("gym_access_events")
 }
 
+/// TURMA (aula coletiva): "Spinning 18h", com instrutor e capacidade.
+model GymClass {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  name             String   @db.VarChar(80)
+  instructorUserId String?  @map("instructor_user_id") @db.Uuid
+  capacity         Int      @default(20)
+  durationMin      Int      @default(60) @map("duration_min")
+  /// Recorrência semanal: [{ "weekday": 1, "time": "18:00" }, …]
+  schedule         Json     @default("[]")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instructor User?             @relation(fields: [tenantId, instructorUserId], references: [tenantId, id], onDelete: Restrict)
+  sessions   GymClassSession[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("gym_classes")
+}
+
+/// Uma ocorrência da turma numa data/hora. Nasce do `schedule` (job) ou avulsa.
+model GymClassSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  classId   String   @map("class_id") @db.Uuid
+  startsAt  DateTime @map("starts_at") @db.Timestamptz(6)
+  capacity  Int
+  cancelled Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  class    GymClass          @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Cascade)
+  bookings GymClassBooking[]
+
+  @@unique([tenantId, classId, startsAt])
+  @@unique([tenantId, id])
+  @@index([tenantId, startsAt])
+  @@map("gym_class_sessions")
+}
+
+enum BookingStatus {
+  BOOKED
+  ATTENDED
+  NO_SHOW
+  CANCELLED
+}
+
+model GymClassBooking {
+  id         String        @id @default(uuid()) @db.Uuid
+  tenantId   String        @map("tenant_id") @db.Uuid
+  sessionId  String        @map("session_id") @db.Uuid
+  customerId String        @map("customer_id") @db.Uuid
+  status     BookingStatus @default(BOOKED)
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session  GymClassSession @relation(fields: [tenantId, sessionId], references: [tenantId, id], onDelete: Cascade)
+  customer Customer        @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, sessionId, customerId])
+  @@unique([tenantId, id])
+  @@map("gym_class_bookings")
+}
+
 // =====================================================================================
 // 5. MÓDULO AUTOMOTIVO / SERVIÇOS (svc_) — oficinas, assistência técnica, lava-rápido
 //    ordens de serviço (OS) · controle de placas · status de manutenção
@@ -1655,6 +1793,7 @@ model SvcVehicle {
   tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer      Customer          @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
   serviceOrders SvcServiceOrder[]
+  appointments  SvcAppointment[]
 
   @@unique([tenantId, plate])
   @@unique([tenantId, id])
@@ -1723,8 +1862,9 @@ model SvcServiceOrder {
   order      Order                  @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
   vehicle    SvcVehicle?            @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict)
   technician User?                  @relation(fields: [tenantId, technicianUserId], references: [tenantId, id], onDelete: Restrict)
-  events     SvcServiceOrderEvent[]
-  checklist  SvcChecklistItem[]
+  events      SvcServiceOrderEvent[]
+  checklist   SvcChecklistItem[]
+  attachments SvcAttachment[]
 
   @@unique([tenantId, orderId])
   @@unique([tenantId, id])
@@ -1769,4 +1909,54 @@ model SvcChecklistItem {
   @@unique([tenantId, id])
   @@index([tenantId, serviceOrderId])
   @@map("svc_checklist_items")
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  ARRIVED
+  NO_SHOW
+  CANCELLED
+}
+
+/// AGENDA da oficina: horário reservado para um cliente/veículo. Ao chegar, vira OS.
+model SvcAppointment {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  customerId  String            @map("customer_id") @db.Uuid
+  vehicleId   String?           @map("vehicle_id") @db.Uuid
+  scheduledAt DateTime          @map("scheduled_at") @db.Timestamptz(6)
+  durationMin Int               @default(60) @map("duration_min")
+  status      AppointmentStatus @default(SCHEDULED)
+  service     String?           @db.VarChar(160) // o que o cliente pediu
+  notes       String?
+  orderId     String?           @map("order_id") @db.Uuid // a OS gerada na chegada
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer    @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  vehicle  SvcVehicle? @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, scheduledAt])
+  @@map("svc_appointments")
+}
+
+/// Fotos e documentos da OS (laudo, foto da peça, assinatura do cliente).
+model SvcAttachment {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  serviceOrderId String   @map("service_order_id") @db.Uuid
+  kind           String   @default("PHOTO") @db.VarChar(20) // PHOTO | DOCUMENT | SIGNATURE
+  url            String
+  caption        String?  @db.VarChar(160)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceOrder SvcServiceOrder @relation(fields: [tenantId, serviceOrderId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, serviceOrderId])
+  @@map("svc_attachments")
 }

@@ -27,3 +27,21 @@ export async function patchUserActive(req: Request, res: Response) {
   const b = parse(z.object({ isActive: z.boolean() }), req.body);
   res.json(await users.setActive(String(req.params.id), b.isActive));
 }
+
+export async function patchUser(req: Request, res: Response) {
+  res.json(await users.updateUser(String(req.params.id), parse(z.object({ name: z.string().min(2).max(120).optional(), email: z.string().email().optional() }), req.body)));
+}
+export async function postChangePassword(req: Request, res: Response) {
+  const b = parse(z.object({ current: z.string().min(1), next: z.string().min(8) }), req.body);
+  await users.changeOwnPassword(b.current, b.next);
+  res.status(204).end();
+}
+export async function postResetPassword(req: Request, res: Response) {
+  const b = parse(z.object({ next: z.string().min(8) }), req.body);
+  await users.resetPassword(String(req.params.id), b.next);
+  res.status(204).end();
+}
+export async function putUserExceptions(req: Request, res: Response) {
+  const b = parse(z.object({ items: z.array(z.object({ permissionKey: z.string(), effect: z.enum(['ALLOW', 'DENY']) })) }), req.body);
+  res.json(await users.setUserPermissionExceptions(String(req.params.id), b.items));
+}

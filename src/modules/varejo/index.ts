@@ -19,6 +19,8 @@ export const varejoModule: ModuleDefinition = {
     { key: 'varejo.etiquetas:print',  label: 'Gerar etiquetas',                  module: ModuleKey.VAREJO },
     { key: 'varejo.comissoes:view',   label: 'Ver comissões',                    module: ModuleKey.VAREJO },
     { key: 'varejo.comissoes:manage', label: 'Gerir vendedores e regras',        module: ModuleKey.VAREJO },
+    { key: 'varejo.devolucoes:manage',label: 'Registrar devoluções e trocas',    module: ModuleKey.VAREJO },
+    { key: 'varejo.relatorios:view',  label: 'Ver relatórios da loja',           module: ModuleKey.VAREJO },
   ],
   async onEnable(tenantId) {
     // Semente mínima: eixos clássicos e um modelo de etiqueta padrão.

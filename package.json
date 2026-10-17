@@ -14,7 +14,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "db:seed": "ts-node prisma/seed.ts"
+    "db:seed": "ts-node prisma/seed.ts",
+    "test": "TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register --test 'test/**/*.test.ts'",
+    "smoke:boot": "ts-node -T -e \"require('./src/app').buildApp(); console.log('boot ok')\""
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -32,6 +34,7 @@
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "socket.io": "^4.8.4",
     "zod": "^3.25.0"
   },
   "devDependencies": {

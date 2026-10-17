@@ -38,80 +38,88 @@ request ─► authenticate (JWT: sub=userId, tid=tenantId; confere is_active no
 ERP_FullComercy/
 ├── prisma/
 │   ├── schema.prisma               # CORE (seção 1) + MÓDULOS (seções 2–5), tenant_id em tudo
-│   ├── seed.ts                     # onboarding de empresa: admin, perfil, armazém, caixa, módulos
+│   ├── seed.ts                     # 5 empresas de demonstração, pelo MESMO onboarding da plataforma
 │   └── sql/001_rls_tenant.sql      # Row Level Security + CHECKs de estoque
+├── test/                           # node:test, sem banco (resolução de módulo, funções puras, catálogo)
 ├── src/
-│   ├── server.ts                   # listen + shutdown
-│   ├── app.ts                      # montagem na ordem: público → core privado → módulos
+│   ├── server.ts                   # listen + Socket.IO + jobs + shutdown
+│   ├── app.ts                      # montagem na ordem: público → plataforma → core privado → módulos
 │   ├── config/env.ts               # env validado com zod no boot
-│   ├── infra/prisma.ts             # client base, prismaForTenant(), tenantTransaction()
-│   ├── shared/                     # errors (AppError), http (asyncHandler/parse/errorHandler), money (Decimal)
+│   ├── infra/
+│   │   ├── prisma.ts               # client base, prismaForTenant(), tenantTransaction() (arma o RLS)
+│   │   └── realtime.ts             # Socket.IO: sala por tenant derivada do JWT; ponte eventos → sala
+│   ├── jobs/scheduler.ts           # agendador em processo; módulos declaram `jobs`
+│   ├── shared/                     # errors (AppError), http (asyncHandler/parse/errorHandler), money (Decimal), events (barramento)
 │   │
 │   ├── core/                       # ══ NÚCLEO UNIVERSAL ══ (nada de nicho aqui)
-│   │   ├── tenancy/                # contexto da request, cache de módulos ativos, rotas de ligar/desligar
-│   │   │   ├── tenant-context.ts   #   ctx(), runWithContext(), isModuleActive(), moduleConfig()
-│   │   │   ├── tenant-modules.service.ts
-│   │   │   ├── tenant.middleware.ts
-│   │   │   ├── tenant.controller.ts
-│   │   │   └── tenant.routes.ts    #   GET/PUT /tenant/modules
+│   │   ├── tenancy/                # ctx() em AsyncLocalStorage, cache de módulos, runAsTenant() p/ jobs e rotas públicas
+│   │   ├── platform/               # /platform: onboarding de empresa, status, módulos (x-platform-key)
 │   │   ├── auth/                   # login (tenant+email), refresh com rotação, /auth/me, authenticate
 │   │   ├── rbac/                   # catálogo de permissões, effectivePermissions(), requirePermission, perfis
-│   │   ├── users/
-│   │   ├── customers/
-│   │   ├── finance/                # títulos (receber/pagar) e baixas — ÚNICA porta de dinheiro
-│   │   ├── inventory/              # produtos (sempre com variante) e o MOTOR de estoque (razão imutável)
+│   │   ├── users/                  # CRUD, papéis, exceções individuais, senha
+│   │   ├── customers/              # CRUD, endereços, resumo comercial
+│   │   ├── finance/                # títulos, baixas, contas, categorias, fluxo de caixa — ÚNICA porta de dinheiro
+│   │   ├── inventory/              # produtos/variantes/categorias/armazéns, MOTOR de estoque, transferência, razão, mínimo
+│   │   ├── audit/                  # leitura do log de auditoria
 │   │   └── orders/                 # ══ O PEDIDO GENÉRICO ══
-│   │       ├── sales-strategy.ts   #   contrato SalesStrategy + registry + resolve()
-│   │       ├── core-sales.strategy.ts  # venda simples (sem módulo)
-│   │       ├── order.service.ts    #   createOrder / addPayments / transition / cancel
+│   │       ├── sales-strategy.ts   #   contrato SalesStrategy + registry + resolve() + draftFromOrder()
+│   │       ├── core-sales.strategy.ts
+│   │       ├── order.service.ts    #   createOrder / addItems / removeItem / addPayments / transition / cancel / dashboard
 │   │       ├── order.controller.ts
 │   │       └── order.routes.ts     #   POST /orders é a porta única de venda
 │   │
 │   └── modules/                    # ══ MÓDULOS ══ (cada pasta é autocontida)
-│       ├── module.contract.ts      # ModuleDefinition: key, router, permissions, salesStrategy, onEnable
-│       ├── module.registry.ts      # registra permissões + estratégia; monta /m/<módulo> e /public/<módulo>
+│       ├── module.contract.ts      # ModuleDefinition: key, router, publicRouter, permissions, salesStrategy, onEnable, jobs
+│       ├── module.registry.ts      # registra permissões + estratégia + jobs; monta /m/<módulo> e /public/<módulo>
 │       ├── require-module.middleware.ts
 │       ├── index.ts                # A LISTA: varejo, food, academia, servicos
 │       │
 │       ├── varejo/                 # tabelas ret_*
-│       │   ├── index.ts            #   definição do módulo (+ onEnable: eixos Tamanho/Cor, etiqueta padrão)
+│       │   ├── index.ts            #   definição (+ onEnable: eixos Tamanho/Cor, etiqueta padrão)
 │       │   ├── routes/varejo.routes.ts
 │       │   ├── controllers/varejo.controller.ts
 │       │   └── services/
-│       │       ├── retail-sales.strategy.ts   # PDV: OPEN → consome estoque → COMPLETED ao pagar; comissão
-│       │       ├── pdv.service.ts             # abrir/fechar caixa, resumo por meio de pagamento
-│       │       ├── grade.service.ts           # matriz tamanho×cor → variantes do core
-│       │       ├── etiquetas.service.ts       # lote de etiquetas (estrutura; render é adaptador)
-│       │       └── comissao.service.ts        # regra mais específica vence, por item, com vigência
+│       │       ├── retail-sales.strategy.ts   # PDV: OPEN → consome estoque → COMPLETED ao pagar; vale de troca; comissão
+│       │       ├── pdv.service.ts             # abrir/fechar caixa, sangria/suprimento, conferência, resumo
+│       │       ├── grade.service.ts           # eixos/valores, matriz tamanho×cor → variantes do core
+│       │       ├── etiquetas.service.ts       # modelos, lotes, expansão, render ZPL
+│       │       ├── comissao.service.ts        # cálculo por item com vigência, regras, aprovação, pagamento
+│       │       ├── devolucoes.service.ts      # devolução/troca: reestoque + título a pagar (vale)
+│       │       └── relatorios.service.ts      # vendedor, hora, curva ABC, sem giro
 │       │
 │       ├── food/                   # tabelas food_*
-│       │   ├── index.ts            #   (+ publicRouter: cardápio online)
+│       │   ├── index.ts            #   (+ publicRouter; onEnable: 10 mesas, grupos de adicionais)
 │       │   ├── routes/food.routes.ts
 │       │   ├── controllers/food.controller.ts
 │       │   └── services/
-│       │       ├── food-sales.strategy.ts     # OPEN → tickets por estação; comanda fecha no caixa
-│       │       ├── mesas.service.ts           # comanda, conta, fechamento com taxa de serviço e rateio
-│       │       ├── cozinha.service.ts         # KDS: QUEUED → PREPARING → READY → SERVED; projeção no core
-│       │       ├── entregadores.service.ts    # entrega: PENDING → ASSIGNED → PICKED_UP → DELIVERED
-│       │       └── cardapio.service.ts        # cardápio público por slug
+│       │       ├── food-sales.strategy.ts     # OPEN → tickets por estação; comanda fecha no caixa; rodada = afterItemsAdded
+│       │       ├── mesas.service.ts           # mapa do salão, comanda, conta, transferência, fechamento com rateio
+│       │       ├── cozinha.service.ts         # KDS: QUEUED → PREPARING → READY → SERVED; projeção no core; tempos
+│       │       ├── entregadores.service.ts    # entrega, zonas por CEP, acerto do entregador
+│       │       ├── cardapio.service.ts        # menus/categorias/itens/adicionais + cardápio público + janela de horário
+│       │       ├── pedido-online.service.ts   # pedido do cliente final sem login (runAsTenantSlug) + acompanhamento
+│       │       └── relatorios.service.ts
 │       │
 │       ├── academia/               # tabelas gym_*
-│       │   ├── index.ts            #   (+ publicRouter: webhook da catraca)
+│       │   ├── index.ts            #   (+ publicRouter: webhook da catraca; jobs: cobrança recorrente, sessões de turma)
 │       │   ├── routes/academia.routes.ts
 │       │   ├── controllers/academia.controller.ts
 │       │   └── services/
-│       │       ├── gym-sales.strategy.ts      # adesão: taxa + 1ª mensalidade; matrícula nasce ao PAGAR
-│       │       ├── assinaturas.service.ts     # recorrência: job gera cobrança → FinanceEntry; inadimplência
-│       │       └── acesso.service.ts          # decidirAcesso() única para recepção e catraca; credenciais
+│       │       ├── gym-sales.strategy.ts      # adesão: taxa + 1º período; matrícula nasce ao PAGAR
+│       │       ├── assinaturas.service.ts     # recorrência, inadimplência, pausar/retomar/trocar plano
+│       │       ├── acesso.service.ts          # decidirAcesso() única p/ recepção e catraca; credenciais; dispositivos
+│       │       ├── turmas.service.ts          # turmas, geração de sessões, reservas, chamada
+│       │       └── relatorios.service.ts      # painel (MRR, churn), frequência, pico, sumidos
 │       │
 │       └── servicos/               # tabelas svc_*
-│           ├── index.ts
+│           ├── index.ts            #   (+ onEnable: catálogo básico)
 │           ├── routes/servicos.routes.ts
 │           ├── controllers/servicos.controller.ts
 │           └── services/
-│               ├── os-sales.strategy.ts       # OS: CONFIRMED + RESERVA peças; fecha por ENTREGA, não por pagamento
-│               ├── os.service.ts              # máquina de estados de manutenção + projeção no core
-│               └── veiculos.service.ts        # placa normalizada (antiga e Mercosul), histórico
+│               ├── os-sales.strategy.ts       # OS: CONFIRMED + RESERVA peças; fecha por ENTREGA; placa nova vira veículo
+│               ├── os.service.ts              # máquina de estados, orçamento/aprovação, checklist, anexos, relatórios
+│               ├── agenda.service.ts          # agenda com capacidade de boxes; chegada → OS
+│               └── veiculos.service.ts        # placa normalizada, lista, histórico
 ├── docs/ARQUITETURA.md
 ├── CLAUDE.md
 ├── README.md
@@ -159,6 +167,7 @@ Escolhida a estratégia, o core delega a ela só os pontos de decisão de nicho 
 | `validate` | caixa aberto, vendedor | mesa/comanda/endereço | plano, aluno sem matrícula | cliente, veículo |
 | `price` | — | preço do cardápio + adicionais | taxa de adesão + 1º período | — |
 | `afterCreate` | `ret_sales` | `food_orders` + tickets + entrega | — | `svc_service_orders` (+ veículo por placa) |
+| `afterItemsAdded` | — | tickets só dos itens novos | — | evento no histórico da OS |
 | `afterStatusChange` | comissão ao COMPLETED | cancela cozinha | matrícula ao COMPLETED | cancela OS |
 
 ## 5. O que é do core e o que é do módulo (a linha que não se cruza)
@@ -186,12 +195,14 @@ Escolhida a estratégia, o core delega a ela só os pontos de decisão de nicho 
 
 - **Migrations Prisma** não foram geradas (`prisma migrate dev` exige banco). O schema valida
   (`prisma validate`) e o client gera; a primeira migration nasce no primeiro banco de ensaio.
-- **Rotas de plataforma** (`POST /platform/tenants`): o onboarding vive em `prisma/seed.ts` como
-  função `onboardTenant`, pronta para virar service.
-- **Job de recorrência** (`gerarCobrancasVencidas`) existe como função; o agendador (cron) não.
-- **Render de etiqueta** (PDF/ZPL) e **ficha técnica** (baixa de insumo no Food) são adaptadores
-  a plugar; os pontos de extensão estão marcados nos services.
-- **Cardápio online** só lê; o pedido público do cliente final (sem login) exige canal de
-  pagamento e antifraude — fora deste lote.
-- **Testes automatizados**: há o boot de fumaça sem banco (registro + resolução de módulo).
-  Smokes com banco seguem o ritual da casa (`ritual-ensaio`) e nascem com o primeiro banco.
+- **Segredos de dispositivo** (`gym_access_devices.config.webhookToken`) ficam em texto no JSON.
+  Cifrar com chave de aplicação é o próximo passo antes de produção.
+- **Barramento de eventos é em memória**: não atravessa instâncias nem sobrevive a restart. Para
+  integração externa (fiscal, iFood, gateway de pagamento), nasce um outbox em tabela.
+- **Pagamento online** no pedido público: hoje é "paga na entrega". Gateway (PIX dinâmico, cartão)
+  é integração a plugar no `pedido-online.service.ts`.
+- **Ficha técnica** (baixa de insumo por item de cardápio) no Food: o ponto de extensão é
+  `stockPolicy` + `afterCreate` da estratégia; a tabela de composição ainda não existe.
+- **Render de etiqueta em PDF**: só ZPL por enquanto (cobre impressoras térmicas de loja).
+- **Testes com banco**: há 14 testes unitários sem banco e o boot de fumaça. Smokes com banco
+  seguem o ritual da casa (`ritual-ensaio`) e nascem com o primeiro banco de ensaio.

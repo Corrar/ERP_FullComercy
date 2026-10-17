@@ -53,6 +53,13 @@ export const osSalesStrategy: SalesStrategy = {
     });
   },
 
+  /** Peça/serviço acrescentado ao orçamento: fica no histórico da OS. */
+  async afterItemsAdded(tx, order, newItems) {
+    const os = await tx.svcServiceOrder.findFirst({ where: { orderId: order.id } });
+    if (!os) return;
+    await tx.svcServiceOrderEvent.create({ data: { tenantId: order.tenantId, serviceOrderId: os.id, fromStatus: os.maintenanceStatus, toStatus: os.maintenanceStatus, userId: ctx().userId, note: `Itens adicionados: ${newItems.map((i) => i.description).join(', ')}` } });
+  },
+
   // A OS controla as próprias transições do core (os.service.ts); por fora só se cancela.
   allowedTransitions: () => ({
     CONFIRMED: [OrderStatus.CANCELLED],

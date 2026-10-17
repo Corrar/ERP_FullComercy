@@ -19,3 +19,15 @@ export async function cadastrar(input: { customerId: string; plate: string; bran
   if (!plate) throw AppError.validation('Placa inválida.');
   return ctx().db.svcVehicle.create({ data: { ...input, plate, tenantId: ctx().tenantId } });
 }
+
+export const listar = (filter: { customerId?: string; q?: string }) => ctx().db.svcVehicle.findMany({
+  where: { isActive: true, customerId: filter.customerId, ...(filter.q ? { OR: [{ plate: { contains: filter.q.toUpperCase().replace(/[^A-Z0-9]/g, '') } }, { model: { contains: filter.q, mode: 'insensitive' } }, { customer: { name: { contains: filter.q, mode: 'insensitive' } } }] } : {}) },
+  include: { customer: { select: { name: true, phone: true } } }, orderBy: { updatedAt: 'desc' }, take: 100,
+});
+export const atualizar = (id: string, input: { brand?: string; model?: string; year?: number; color?: string; vin?: string; mileage?: number; notes?: string; isActive?: boolean; customerId?: string }) =>
+  ctx().db.svcVehicle.update({ where: { id }, data: input });
+export async function historico(id: string) {
+  const v = await ctx().db.svcVehicle.findUnique({ where: { id }, include: { customer: true, serviceOrders: { orderBy: { createdAt: 'desc' }, include: { order: { include: { items: true } }, technician: { select: { name: true } } } } } });
+  if (!v) throw AppError.notFound('Veículo');
+  return v;
+}

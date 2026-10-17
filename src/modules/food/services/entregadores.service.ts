@@ -4,6 +4,8 @@ import type { TenantTx } from '../../../infra/prisma';
 import { ctx } from '../../../core/tenancy/tenant-context';
 import { tenantTransaction } from '../../../infra/prisma';
 import { AppError } from '../../../shared/errors';
+import { D } from '../../../shared/money';
+import { events } from '../../../shared/events';
 
 export async function criarEntrega(tx: TenantTx, foodOrderId: string, address: Record<string, unknown>, zoneId?: string) {
   const { tenantId } = ctx();
@@ -43,11 +45,12 @@ export async function moverEntrega(deliveryId: string, to: DeliveryStatus, extra
     // Entregue = pedido completo no core (se já pago). Se não pago, fica READY aguardando baixa.
     if (to === 'DELIVERED') {
       const o = await tx.order.findUnique({ where: { id: d.foodOrder.orderId }, include: { payments: true } });
-      const pago = o?.payments.reduce((s, p) => s.plus(p.amount), o.total.minus(o.total)) ?? null;
+      const pago = o ? o.payments.reduce((s, p) => s.plus(p.amount), D(0)) : null;
       if (o && pago && pago.gte(o.total)) {
         await tx.order.update({ where: { id: o.id }, data: { status: OrderStatus.COMPLETED, completedAt: new Date() } });
       }
     }
+    events.emit('delivery.status', { tenantId, deliveryId, status: to });
     return upd;
   });
 }
@@ -58,4 +61,24 @@ export async function painelEntregas() {
     include: { courier: { select: { name: true, phone: true } }, foodOrder: { include: { order: { select: { number: true, total: true, customer: { select: { name: true, phone: true } } } } } } },
     orderBy: { createdAt: 'asc' },
   });
+}
+
+export const listarZonas = () => ctx().db.foodDeliveryZone.findMany({ orderBy: { name: 'asc' } });
+export const criarZona = (input: { name: string; fee: number; etaMin?: number; rule?: Record<string, unknown> }) => ctx().db.foodDeliveryZone.create({ data: { ...input, tenantId: ctx().tenantId, rule: (input.rule ?? {}) as never } });
+export const atualizarZona = (id: string, input: { name?: string; fee?: number; etaMin?: number | null; isActive?: boolean; rule?: Record<string, unknown> }) => ctx().db.foodDeliveryZone.update({ where: { id }, data: { ...input, rule: input.rule as never } });
+
+/** Localiza a zona pelo CEP (prefixos em `rule.zipPrefixes`). */
+export async function zonaPorCep(cep: string) {
+  const digits = cep.replace(/\D/g, '');
+  const zonas = await ctx().db.foodDeliveryZone.findMany({ where: { isActive: true } });
+  return zonas.find((z) => ((z.rule as { zipPrefixes?: string[] })?.zipPrefixes ?? []).some((p) => digits.startsWith(p))) ?? null;
+}
+
+/** ACERTO do entregador: entregas concluídas no período, taxas e o que ele recebeu em dinheiro. */
+export async function acertoDoEntregador(courierId: string, from: Date, to: Date) {
+  const { db } = ctx();
+  const entregas = await db.foodDelivery.findMany({ where: { courierId, status: 'DELIVERED', deliveredAt: { gte: from, lte: to } }, include: { foodOrder: { include: { order: { include: { payments: true } } } } } });
+  const taxas = entregas.reduce((s, e) => s.plus(e.fee), D(0));
+  const dinheiroRecebido = entregas.reduce((s, e) => s.plus(e.foodOrder.order.payments.filter((p) => p.method === 'CASH').reduce((a, p) => a.plus(p.amount), D(0))), D(0));
+  return { courierId, periodo: { from, to }, entregas: entregas.length, taxasDeEntrega: taxas, dinheiroEmMaos: dinheiroRecebido, aRepassarParaLoja: dinheiroRecebido.minus(taxas) };
 }

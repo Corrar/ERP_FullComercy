@@ -1,10 +1,15 @@
 import { createServer } from 'node:http';
 import { env } from './config/env';
-import { buildApp } from './app';
+import { buildApp, corsOrigins } from './app';
 import { prisma } from './infra/prisma';
+import { initRealtime } from './infra/realtime';
+import { startJobs, stopJobs } from './jobs/scheduler';
+import { moduleRegistry } from './modules/module.registry';
 
 const app = buildApp();
 const server = createServer(app);
+initRealtime(server, corsOrigins());
+startJobs(moduleRegistry.allJobs());
 
 server.listen(env.PORT, () => {
   console.log(`🚀 FullComercy API na porta ${env.PORT} (${env.NODE_ENV})`);
@@ -14,6 +19,7 @@ server.listen(env.PORT, () => {
 
 const shutdown = (sig: string) => {
   console.log(`[${sig}] encerrando…`);
+  stopJobs();
   server.close(() => prisma.$disconnect().finally(() => process.exit(0)));
   setTimeout(() => process.exit(1), 10_000).unref();
 };

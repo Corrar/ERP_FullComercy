@@ -24,3 +24,6 @@ export const getCustomer = async (req: Request, res: Response) => res.json(await
 export const postCustomer = async (req: Request, res: Response) => res.status(201).json(await customers.create(parse(schema, req.body)));
 export const putCustomer = async (req: Request, res: Response) => res.json(await customers.update(String(req.params.id), parse(schema.partial(), req.body)));
 export const postAddress = async (req: Request, res: Response) => res.status(201).json(await customers.addAddress(String(req.params.id), parse(addressSchema, req.body)));
+export const patchActive = async (req: Request, res: Response) => res.json(await customers.setActive(String(req.params.id), parse(z.object({ isActive: z.boolean() }), req.body).isActive));
+export const deleteAddress = async (req: Request, res: Response) => { await customers.removeAddress(String(req.params.id), String(req.params.addressId)); res.status(204).end(); };
+export const getSummary = async (req: Request, res: Response) => res.json(await customers.summary(String(req.params.id)));

@@ -87,6 +87,13 @@ export const foodSalesStrategy: SalesStrategy = {
     if (t === 'DELIVERY') await criarEntrega(tx, food.id, m.address!, m.zoneId);
   },
 
+  /** Nova rodada na mesma comanda/pedido: só os itens novos viram tickets. */
+  async afterItemsAdded(tx, order, newItems, newRows) {
+    const food = await tx.foodOrder.findFirst({ where: { orderId: order.id } });
+    if (!food) return;
+    await abrirTicketsDeCozinha(tx, food.id, { ...order, items: newRows.map((r) => ({ id: r.id, variantId: null, quantity: D(0), kind: 'PRODUCT' as const })) }, newItems);
+  },
+
   async afterStatusChange(tx, order, _from, to) {
     if (to === OrderStatus.CANCELLED) {
       await tx.foodOrder.updateMany({ where: { orderId: order.id }, data: { kitchenStatus: 'CANCELLED' } });

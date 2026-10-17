@@ -20,7 +20,10 @@ export async function fecharCaixa(sessionId: string, closingAmount: number, note
     where: { method: 'CASH', order: { status: 'COMPLETED', retailSale: { posSessionId: sessionId } } },
     _sum: { amount: true },
   });
-  const expected = round2(D(s.openingAmount).plus(D(dinheiro._sum.amount ?? 0)));
+  const mov = await db.financeEntry.findMany({ where: { origin: 'POS_CASH', originId: sessionId }, select: { kind: true, amount: true } });
+  const suprimentos = mov.filter((m) => m.kind === 'RECEIVABLE').reduce((a, m) => a.plus(m.amount), D(0));
+  const sangrias = mov.filter((m) => m.kind === 'PAYABLE').reduce((a, m) => a.plus(m.amount), D(0));
+  const expected = round2(D(s.openingAmount).plus(D(dinheiro._sum.amount ?? 0)).plus(suprimentos).minus(sangrias));
   return db.retailPosSession.update({
     where: { id: sessionId },
     data: { status: 'CLOSED', closedAt: new Date(), closedByUserId: userId, expectedAmount: expected, closingAmount: round2(D(closingAmount)), notes },
@@ -35,4 +38,25 @@ export async function resumoCaixa(sessionId: string) {
     by: ['method'], where: { order: { status: 'COMPLETED', retailSale: { posSessionId: sessionId } } }, _sum: { amount: true }, _count: true,
   });
   return { sessao: s, porMetodo: porMetodo.map((p) => ({ method: p.method, total: p._sum.amount ?? new Prisma.Decimal(0), qtd: p._count })) };
+}
+
+export const listarSessoes = (filter: { status?: 'OPEN' | 'CLOSED'; terminal?: string }) =>
+  ctx().db.retailPosSession.findMany({ where: filter, include: { openedBy: { select: { name: true } }, closedBy: { select: { name: true } }, _count: { select: { sales: true } } }, orderBy: { openedAt: 'desc' }, take: 100 });
+
+export const sessaoAbertaDoTerminal = (terminal: string) => ctx().db.retailPosSession.findFirst({ where: { terminal, status: 'OPEN' } });
+
+/** Sangria (retira dinheiro do caixa) / suprimento (põe). Fica no financeiro, com a sessão como origem. */
+export async function movimentoDeCaixa(sessionId: string, kind: 'SANGRIA' | 'SUPRIMENTO', amount: number, note?: string) {
+  const { db, tenantId } = ctx();
+  const s = await db.retailPosSession.findUnique({ where: { id: sessionId } });
+  if (!s || s.status !== 'OPEN') throw AppError.conflict('Caixa não está aberto.');
+  const { tenantTransaction } = await import('../../../infra/prisma');
+  const finance = await import('../../../core/finance/finance.service');
+  return tenantTransaction(db, tenantId, async (tx) => {
+    const entry = await finance.createEntry(tx, tenantId, {
+      kind: kind === 'SANGRIA' ? 'PAYABLE' : 'RECEIVABLE', description: `${kind} caixa ${s.terminal}${note ? ` · ${note}` : ''}`,
+      amount: D(amount), dueDate: new Date(), origin: 'POS_CASH', originId: sessionId,
+    });
+    return finance.settle(tx, tenantId, { entryId: entry.id, amount: D(amount), method: 'CASH' });
+  });
 }

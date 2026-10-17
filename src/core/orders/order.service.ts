@@ -21,8 +21,9 @@ import { ctx } from '../tenancy/tenant-context';
 import * as stock from '../inventory/stock.service';
 import * as finance from '../finance/finance.service';
 import { defaultWarehouseId } from '../inventory/products.service';
+import { events } from '../../shared/events';
 import {
-  salesStrategies, type DraftPayment, type OrderDraft, type OrderWithItems, type PricedItem, type SalesStrategy,
+  salesStrategies, draftFromOrder, type DraftItem, type DraftPayment, type OrderDraft, type OrderWithItems, type PricedItem, type SalesStrategy,
 } from './sales-strategy';
 
 const ORDER_INCLUDE = {
@@ -47,7 +48,7 @@ export async function createOrder(draft: OrderDraft) {
   const channel = draft.channel ?? strategy.channels[0] ?? OrderChannel.COUNTER;
 
   // 2. Itens: variante + preço de tabela.
-  let items = await priceItems(draft);
+  let items = await priceItems(draft.items);
 
   // 3. O módulo opina.
   await strategy.validate?.(draft);
@@ -82,7 +83,8 @@ export async function createOrder(draft: OrderDraft) {
         warehouseId,
         subtotal, discount, surcharge, total,
         notes: draft.notes ?? null,
-        metadata: { ...(draft.metadata ?? {}), ...(draft.idempotencyKey ? { idempotencyKey: draft.idempotencyKey } : {}) } as Prisma.InputJsonValue,
+        // `moduleData` fica guardado: ganchos posteriores (pagamento, status) o releem via draftFromOrder().
+        metadata: { ...(draft.metadata ?? {}), moduleData: draft.moduleData ?? {}, ...(draft.idempotencyKey ? { idempotencyKey: draft.idempotencyKey } : {}) } as Prisma.InputJsonValue,
         items: {
           create: items.map((i) => ({
             variantId: i.variantId, kind: i.kind, description: i.description,
@@ -114,14 +116,85 @@ export async function createOrder(draft: OrderDraft) {
     return order.id;
   });
 
+  events.emit('order.created', { tenantId, orderId, moduleKey: strategy.moduleKey, total: total.toString() });
   return getOrder(orderId);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ITENS EM PEDIDO ABERTO (rodada da mesa, peça aprovada no orçamento da OS)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EDITABLE: OrderStatus[] = [OrderStatus.DRAFT, OrderStatus.OPEN, OrderStatus.CONFIRMED, OrderStatus.IN_PROGRESS];
+
+export async function addItems(orderId: string, draftItems: DraftItem[]) {
+  const { db, tenantId, userId } = ctx();
+  if (!draftItems.length) throw AppError.validation('Nenhum item.');
+  await tenantTransaction(db, tenantId, async (tx) => {
+    const order = await loadForUpdate(tx, orderId);
+    if (!EDITABLE.includes(order.status)) throw AppError.conflict(`Pedido ${order.status} não aceita itens.`);
+    const strategy = salesStrategies.forOrder(order.moduleKey);
+    const draft = draftFromOrder(order);
+    let items = await priceItems(draftItems);
+    if (strategy.price) items = await strategy.price(items, draft);
+
+    const rows: { id: string }[] = [];
+    for (const i of items) {
+      rows.push(await tx.orderItem.create({
+        data: { tenantId, orderId, variantId: i.variantId, kind: i.kind, description: i.description, quantity: i.quantity, unitPrice: i.unitPrice, discount: i.discount, total: i.total, metadata: i.metadata as Prisma.InputJsonValue },
+        select: { id: true },
+      }));
+    }
+    const policy = strategy.stockPolicy(draft);
+    const warehouseId = order.warehouseId ?? (await defaultWarehouseId());
+    for (const [i, it] of items.entries()) {
+      if (!it.variantId || !it.trackStock || policy === 'NONE') continue;
+      const g = { tenantId, variantId: it.variantId, warehouseId };
+      const ref = { refType: 'ORDER', refId: orderId, userId, idempotencyKey: `order:${orderId}:add:${rows[i].id}` };
+      if (policy === 'CONSUME') await stock.consume(tx, g, it.quantity, ref); else await stock.reserve(tx, g, it.quantity, ref);
+    }
+    await recalcTotals(tx, orderId);
+    await strategy.afterItemsAdded?.(tx, order, items, rows);
+  });
+  return getOrder(orderId);
+}
+
+export async function removeItem(orderId: string, itemId: string, reason?: string) {
+  const { db, tenantId, userId } = ctx();
+  await tenantTransaction(db, tenantId, async (tx) => {
+    const order = await loadForUpdate(tx, orderId);
+    if (!EDITABLE.includes(order.status)) throw AppError.conflict(`Pedido ${order.status} não aceita alteração.`);
+    const item = await tx.orderItem.findFirst({ where: { id: itemId, orderId }, include: { variant: { include: { product: { select: { trackStock: true } } } } } });
+    if (!item) throw AppError.notFound('Item');
+    const strategy = salesStrategies.forOrder(order.moduleKey);
+    const policy = strategy.stockPolicy(draftFromOrder(order));
+    if (item.variantId && item.variant?.product.trackStock && policy !== 'NONE') {
+      const g = { tenantId, variantId: item.variantId, warehouseId: order.warehouseId ?? (await defaultWarehouseId()) };
+      const ref = { refType: 'ORDER', refId: orderId, userId, idempotencyKey: `order:${orderId}:remove:${itemId}`, note: reason ?? 'Item removido' };
+      if (policy === 'CONSUME') await stock.receive(tx, g, D(item.quantity), ref); else await stock.release(tx, g, D(item.quantity), ref);
+    }
+    await tx.orderItem.delete({ where: { id: itemId } });
+    await recalcTotals(tx, orderId);
+    await tx.auditLog.create({ data: { tenantId, userId, action: 'order.item.remove', entity: 'Order', entityId: orderId, details: { itemId, reason } } });
+  });
+  return getOrder(orderId);
+}
+
+/** Recalcula subtotal/total a partir das linhas. O desconto/acréscimo do cabeçalho é mantido. */
+async function recalcTotals(tx: TenantTx, orderId: string) {
+  const o = await tx.order.findUnique({ where: { id: orderId }, include: { items: { select: { total: true } } } });
+  if (!o) return;
+  const subtotal = round2(sum(o.items.map((i) => D(i.total))));
+  const total = round2(subtotal.minus(o.discount).plus(o.surcharge));
+  await tx.order.update({ where: { id: orderId }, data: { subtotal, total } });
+  // O título a receber (se já nasceu) acompanha o novo total.
+  await tx.financeEntry.updateMany({ where: { orderId, origin: 'ORDER', status: { in: ['OPEN', 'PARTIAL'] } }, data: { amount: total } });
+}
+
 /** Resolve cada linha do rascunho numa linha precificada. Linha sem variante exige descrição. */
-async function priceItems(draft: OrderDraft): Promise<PricedItem[]> {
+async function priceItems(draftItems: DraftItem[]): Promise<PricedItem[]> {
   const { db } = ctx();
   const out: PricedItem[] = [];
-  for (const [idx, it] of draft.items.entries()) {
+  for (const [idx, it] of draftItems.entries()) {
     const quantity = D(it.quantity);
     if (!quantity.isFinite() || quantity.lte(0)) throw AppError.validation(`Item ${idx + 1}: quantidade inválida.`);
     const discount = round2(D(it.discount ?? 0));
@@ -208,9 +281,11 @@ export async function addPayments(orderId: string, payments: DraftPayment[]) {
     const order = await loadForUpdate(tx, orderId);
     if (order.status === OrderStatus.CANCELLED) throw AppError.conflict('Pedido cancelado.');
     const strategy = salesStrategies.forOrder(order.moduleKey);
+    const draft = draftFromOrder(order);
     const paid = await registerPayments(tx, order, payments);
-    if (paid.gte(order.total) && strategy.completeOnFullPayment({ items: [] }) && order.status !== OrderStatus.COMPLETED) {
-      await transitionWithin(tx, order, OrderStatus.COMPLETED, strategy, strategy.stockPolicy({ items: [] }), 'Pago integralmente.');
+    events.emit('order.paid', { tenantId, orderId, amount: paid.toString() });
+    if (paid.gte(order.total) && strategy.completeOnFullPayment(draft) && order.status !== OrderStatus.COMPLETED) {
+      await transitionWithin(tx, order, OrderStatus.COMPLETED, strategy, strategy.stockPolicy(draft), 'Pago integralmente.');
     }
   });
   return getOrder(orderId);
@@ -236,7 +311,7 @@ export async function transition(orderId: string, to: OrderStatus, note?: string
   await tenantTransaction(db, tenantId, async (tx) => {
     const order = await loadForUpdate(tx, orderId);
     const strategy = salesStrategies.forOrder(order.moduleKey);
-    await transitionWithin(tx, order, to, strategy, strategy.stockPolicy({ items: [] }), note);
+    await transitionWithin(tx, order, to, strategy, strategy.stockPolicy(draftFromOrder(order)), note);
   });
   return getOrder(orderId);
 }
@@ -280,6 +355,7 @@ async function transitionWithin(tx: TenantTx, order: OrderWithItems, to: OrderSt
   await tx.order.update({ where: { id: order.id }, data: stamp });
   await tx.orderStatusHistory.create({ data: { tenantId: order.tenantId, orderId: order.id, fromStatus: from, toStatus: to, userId, note: note ?? null } });
   await strategy.afterStatusChange?.(tx, { ...order, status: to }, from, to);
+  events.emit('order.status', { tenantId: order.tenantId, orderId: order.id, from, to });
   return to;
 }
 
@@ -301,17 +377,42 @@ export async function getOrder(id: string) {
   return o;
 }
 
-export async function listOrders(filter: { status?: OrderStatus; moduleKey?: string; from?: Date; to?: Date; customerId?: string }) {
-  return ctx().db.order.findMany({
-    where: {
-      status: filter.status,
-      moduleKey: filter.moduleKey as never,
-      customerId: filter.customerId,
-      createdAt: { gte: filter.from, lte: filter.to },
-    },
-    include: { customer: { select: { name: true } }, _count: { select: { items: true } } },
-    orderBy: { createdAt: 'desc' }, take: 200,
-  });
+export async function listOrders(filter: { status?: OrderStatus; moduleKey?: string; from?: Date; to?: Date; customerId?: string; page?: number; pageSize?: number; q?: string }) {
+  const page = Math.max(1, filter.page ?? 1);
+  const pageSize = Math.min(200, Math.max(1, filter.pageSize ?? 50));
+  const where: Prisma.OrderWhereInput = {
+    status: filter.status,
+    moduleKey: filter.moduleKey as never,
+    customerId: filter.customerId,
+    createdAt: { gte: filter.from, lte: filter.to },
+    ...(filter.q ? (/^\d+$/.test(filter.q) ? { number: Number(filter.q) } : { customer: { name: { contains: filter.q, mode: 'insensitive' } } }) : {}),
+  };
+  const [rows, total] = await Promise.all([
+    ctx().db.order.findMany({ where, include: { customer: { select: { name: true } }, _count: { select: { items: true } } }, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
+    ctx().db.order.count({ where }),
+  ]);
+  return { rows, page, pageSize, total };
+}
+
+/** O painel do dia: vendas por status, por módulo, por meio de pagamento, ticket médio. */
+export async function dashboard(from: Date, to: Date) {
+  const { db } = ctx();
+  const base = { createdAt: { gte: from, lte: to } };
+  const [porStatus, porModulo, porMeio, concluidos, topItens] = await Promise.all([
+    db.order.groupBy({ by: ['status'], where: base, _count: true, _sum: { total: true } }),
+    db.order.groupBy({ by: ['moduleKey'], where: { ...base, status: 'COMPLETED' }, _count: true, _sum: { total: true } }),
+    db.orderPayment.groupBy({ by: ['method'], where: { paidAt: { gte: from, lte: to } }, _count: true, _sum: { amount: true } }),
+    db.order.aggregate({ where: { ...base, status: 'COMPLETED' }, _count: true, _sum: { total: true }, _avg: { total: true } }),
+    db.orderItem.groupBy({ by: ['description'], where: { order: { ...base, status: 'COMPLETED' } }, _sum: { quantity: true, total: true }, orderBy: { _sum: { total: 'desc' } }, take: 10 }),
+  ]);
+  return {
+    periodo: { from, to },
+    concluidos: { pedidos: concluidos._count, faturamento: concluidos._sum.total ?? 0, ticketMedio: concluidos._avg.total ?? 0 },
+    porStatus: porStatus.map((r) => ({ status: r.status, pedidos: r._count, total: r._sum.total ?? 0 })),
+    porModulo: porModulo.map((r) => ({ modulo: r.moduleKey ?? 'CORE', pedidos: r._count, total: r._sum.total ?? 0 })),
+    porMeioPagamento: porMeio.map((r) => ({ metodo: r.method, pagamentos: r._count, total: r._sum.amount ?? 0 })),
+    topItens: topItens.map((r) => ({ item: r.description, quantidade: r._sum.quantity ?? 0, total: r._sum.total ?? 0 })),
+  };
 }
 
 export { ZERO };

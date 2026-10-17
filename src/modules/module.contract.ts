@@ -9,6 +9,7 @@ import type { Router } from 'express';
 import type { ModuleKey } from '@prisma/client';
 import type { PermissionDef } from '../core/rbac/permissions';
 import type { SalesStrategy } from '../core/orders/sales-strategy';
+import type { JobDefinition } from '../jobs/scheduler';
 
 export interface ModuleDefinition {
   key: ModuleKey;
@@ -27,4 +28,6 @@ export interface ModuleDefinition {
   publicRouter?: Router;
   /** Gancho de onboarding: semear dados padrão quando a empresa liga o módulo. */
   onEnable?(tenantId: string): Promise<void>;
+  /** Tarefas periódicas do módulo (varrem TODOS os tenants com o módulo ativo). */
+  jobs?: JobDefinition[];
 }

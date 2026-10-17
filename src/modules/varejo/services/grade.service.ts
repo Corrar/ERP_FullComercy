@@ -73,3 +73,8 @@ export async function matrizDeEstoque(productId: string, warehouseId?: string) {
     onHand: v.balances.reduce((s, b) => s.plus(b.onHand), v.balances.length ? v.balances[0].onHand.minus(v.balances[0].onHand) : (0 as never)),
   }));
 }
+
+export const listarEixos = () => ctx().db.retailGradeAxis.findMany({ include: { values: { orderBy: { position: 'asc' } } }, orderBy: { position: 'asc' } });
+export const criarEixo = (name: string) => ctx().db.retailGradeAxis.create({ data: { tenantId: ctx().tenantId, name } });
+export const criarValor = (axisId: string, value: string, hexColor?: string) =>
+  ctx().db.retailGradeValue.create({ data: { tenantId: ctx().tenantId, axisId, value, hexColor } });

@@ -4,10 +4,11 @@
 // (controlid, hikvision, webhook genérico) só traduzem o payload do aparelho para
 // `{ deviceId, credencial }` e entregam aqui.
 import { CheckInSource, CredentialKind } from '@prisma/client';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { prisma, prismaForTenant } from '../../../infra/prisma';
 import { ctx } from '../../../core/tenancy/tenant-context';
 import { AppError } from '../../../shared/errors';
+import { events } from '../../../shared/events';
 
 interface AccessRules { weekdays?: number[]; from?: string; to?: string; maxCheckInsPerDay?: number }
 export const hashCredencial = (v: string) => createHash('sha256').update(v).digest('hex');
@@ -56,6 +57,7 @@ export async function eventoDoDispositivo(input: { deviceId: string; token: stri
     return { allowed: false, reason: 'CREDENCIAL_DESCONHECIDA' };
   }
   const d = await decidirAcesso(db, device.tenantId, cred.customerId);
+  events.emit('gym.access', { tenantId: device.tenantId, customerId: cred.customerId, allowed: d.allowed, reason: d.reason });
   await db.gymAccessEvent.create({ data: { tenantId: device.tenantId, deviceId: device.id, credentialId: cred.id, customerId: cred.customerId, allowed: d.allowed, reason: d.reason, raw: input.raw as never } });
   if (d.allowed) await db.gymCheckIn.create({ data: { tenantId: device.tenantId, customerId: cred.customerId, membershipId: d.membershipId, deviceId: device.id, source: CheckInSource.TURNSTILE } });
   return d;
@@ -65,3 +67,23 @@ export async function frequencia(customerId: string, dias = 30) {
   const desde = new Date(); desde.setDate(desde.getDate() - dias);
   return ctx().db.gymCheckIn.findMany({ where: { customerId, checkedInAt: { gte: desde } }, orderBy: { checkedInAt: 'desc' } });
 }
+
+export async function checkOut(checkInId: string) {
+  return ctx().db.gymCheckIn.update({ where: { id: checkInId }, data: { checkedOutAt: new Date() } });
+}
+
+export const presentesAgora = () => ctx().db.gymCheckIn.findMany({ where: { checkedOutAt: null, checkedInAt: { gte: new Date(Date.now() - 6 * 3_600_000) } }, include: { customer: { select: { name: true } } }, orderBy: { checkedInAt: 'desc' } });
+
+// ── Dispositivos ──
+export const listarDispositivos = () => ctx().db.gymAccessDevice.findMany({ select: { id: true, name: true, kind: true, provider: true, isActive: true, lastSeenAt: true, createdAt: true } });
+/** Cria o aparelho e devolve o token UMA vez (fica só o hash de nada: o token em si na config, cifrar é dívida declarada). */
+export async function criarDispositivo(input: { name: string; kind: 'TURNSTILE' | 'DOOR' | 'BIOMETRIC' | 'QR_READER'; provider: string; config?: Record<string, unknown> }) {
+  const webhookToken = randomBytes(24).toString('base64url');
+  const d = await ctx().db.gymAccessDevice.create({ data: { ...input, tenantId: ctx().tenantId, config: { ...(input.config ?? {}), webhookToken } as never } });
+  return { id: d.id, name: d.name, webhookUrl: `/public/academia/dispositivos/${d.id}/eventos`, webhookToken };
+}
+export const atualizarDispositivo = (id: string, input: { name?: string; isActive?: boolean }) => ctx().db.gymAccessDevice.update({ where: { id }, data: input });
+export const revogarCredencial = (id: string) => ctx().db.gymAccessCredential.update({ where: { id }, data: { isActive: false, revokedAt: new Date() } });
+export const credenciaisDoAluno = (customerId: string) => ctx().db.gymAccessCredential.findMany({ where: { customerId }, select: { id: true, kind: true, isActive: true, createdAt: true, revokedAt: true } });
+export const eventosDeAcesso = (filter: { deviceId?: string; customerId?: string; allowed?: boolean; take?: number }) =>
+  ctx().db.gymAccessEvent.findMany({ where: filter, include: { customer: { select: { name: true } }, device: { select: { name: true } } }, orderBy: { occurredAt: 'desc' }, take: Math.min(filter.take ?? 100, 500) }).then((rows) => rows.map((r) => ({ ...r, id: r.id.toString() })));

@@ -2,11 +2,26 @@ import { Router } from 'express';
 import { asyncHandler } from '../../shared/http';
 import { requirePermission } from '../rbac/rbac.middleware';
 import { getBalances, getProducts, postMovement, postProduct } from './inventory.controller';
+import * as c from './catalog.controller';
 
 export const productsRouter = Router();
 productsRouter.get('/', requirePermission('core.products:view'), asyncHandler(getProducts));
 productsRouter.post('/', requirePermission('core.products:manage'), asyncHandler(postProduct));
+productsRouter.get('/categories', requirePermission('core.products:view'), asyncHandler(c.getCategories));
+productsRouter.post('/categories', requirePermission('core.products:manage'), asyncHandler(c.postCategory));
+productsRouter.patch('/categories/:id', requirePermission('core.products:manage'), asyncHandler(c.patchCategory));
+productsRouter.get('/:id', requirePermission('core.products:view'), asyncHandler(c.getProduct));
+productsRouter.patch('/:id', requirePermission('core.products:manage'), asyncHandler(c.patchProduct));
+productsRouter.post('/:id/variants', requirePermission('core.products:manage'), asyncHandler(c.postVariant));
+productsRouter.patch('/:id/variants/:variantId', requirePermission('core.products:manage'), asyncHandler(c.patchVariant));
+productsRouter.put('/:id/variants/:variantId/min-level', requirePermission('core.stock:move'), asyncHandler(c.putMinLevel));
 
 export const stockRouter = Router();
 stockRouter.get('/balances', requirePermission('core.stock:view'), asyncHandler(getBalances));
+stockRouter.get('/low', requirePermission('core.stock:view'), asyncHandler(c.getLowStock));
+stockRouter.get('/ledger', requirePermission('core.stock:view'), asyncHandler(c.getLedger));
 stockRouter.post('/movements', requirePermission('core.stock:move'), asyncHandler(postMovement));
+stockRouter.post('/transfers', requirePermission('core.stock:move'), asyncHandler(c.postTransfer));
+stockRouter.get('/warehouses', requirePermission('core.stock:view'), asyncHandler(c.getWarehouses));
+stockRouter.post('/warehouses', requirePermission('core.stock:move'), asyncHandler(c.postWarehouse));
+stockRouter.patch('/warehouses/:id', requirePermission('core.stock:move'), asyncHandler(c.patchWarehouse));

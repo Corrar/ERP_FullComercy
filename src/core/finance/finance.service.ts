@@ -68,3 +68,42 @@ export async function listEntries(filter: { kind?: FinanceEntryKind; status?: Fi
     orderBy: { dueDate: 'asc' }, take: 500,
   });
 }
+
+// ── Contas e categorias ──
+export const listAccounts = () => ctx().db.financeAccount.findMany({ orderBy: [{ isDefault: 'desc' }, { name: 'asc' }] });
+export async function createAccount(input: { name: string; kind: 'CASH' | 'BANK' | 'DIGITAL'; isDefault?: boolean }) {
+  const { db, tenantId } = ctx();
+  if (input.isDefault) await db.financeAccount.updateMany({ where: {}, data: { isDefault: false } });
+  return db.financeAccount.create({ data: { ...input, tenantId } });
+}
+export const listCategories = () => ctx().db.financeCategory.findMany({ orderBy: [{ kind: 'asc' }, { name: 'asc' }] });
+export const createCategory = (input: { name: string; kind: FinanceEntryKind }) => ctx().db.financeCategory.create({ data: { ...input, tenantId: ctx().tenantId } });
+
+export async function cancelEntry(id: string, reason: string) {
+  const { db } = ctx();
+  const e = await db.financeEntry.findUnique({ where: { id } });
+  if (!e) throw AppError.notFound('Título');
+  if (D(e.paidAmount).gt(0)) throw AppError.conflict('Título com baixa não pode ser cancelado; estorne os pagamentos.');
+  return db.financeEntry.update({ where: { id }, data: { status: FinanceEntryStatus.CANCELLED, notes: [e.notes, `Cancelado: ${reason}`].filter(Boolean).join('\n') } });
+}
+
+export const updateEntry = (id: string, input: { description?: string; dueDate?: Date; categoryId?: string | null; notes?: string; amount?: number }) =>
+  ctx().db.financeEntry.update({ where: { id }, data: { ...input, amount: input.amount !== undefined ? round2(D(input.amount)) : undefined } });
+
+/** Fluxo de caixa do período: recebido × pago por dia, por conta e por categoria; vencidos. */
+export async function summary(from: Date, to: Date) {
+  const { db, tenantId } = ctx();
+  const porDia = await db.$queryRaw<{ dia: Date; kind: string; total: string }[]>`
+    SELECT date_trunc('day', p.paid_at) AS dia, e.kind, SUM(p.amount)::text AS total
+      FROM core_finance_payments p JOIN core_finance_entries e ON e.id = p.entry_id
+     WHERE p.tenant_id = ${tenantId}::uuid AND p.paid_at BETWEEN ${from} AND ${to}
+     GROUP BY 1, 2 ORDER BY 1`;
+  const [porConta, porCategoria, vencidos, aVencer] = await Promise.all([
+    db.financePayment.groupBy({ by: ['accountId', 'method'], where: { paidAt: { gte: from, lte: to } }, _sum: { amount: true } }),
+    db.financeEntry.groupBy({ by: ['kind', 'categoryId'], where: { paidAt: { gte: from, lte: to }, status: 'PAID' }, _sum: { amount: true }, _count: true }),
+    db.financeEntry.findMany({ where: { status: { in: ['OPEN', 'PARTIAL'] }, dueDate: { lt: new Date() } }, include: { customer: { select: { name: true } } }, orderBy: { dueDate: 'asc' }, take: 100 }),
+    db.financeEntry.aggregate({ where: { status: { in: ['OPEN', 'PARTIAL'] }, dueDate: { gte: new Date() } }, _sum: { amount: true, paidAmount: true }, _count: true }),
+  ]);
+  const totais = porDia.reduce((acc, r) => { acc[r.kind === 'RECEIVABLE' ? 'recebido' : 'pago'] = acc[r.kind === 'RECEIVABLE' ? 'recebido' : 'pago'].plus(D(r.total)); return acc; }, { recebido: D(0), pago: D(0) });
+  return { periodo: { from, to }, recebido: totais.recebido, pago: totais.pago, saldo: totais.recebido.minus(totais.pago), porDia, porConta, porCategoria, vencidos, aVencer };
+}

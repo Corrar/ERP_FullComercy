@@ -24,6 +24,10 @@ import customersRouter from './core/customers/customers.routes';
 import { productsRouter, stockRouter } from './core/inventory/inventory.routes';
 import financeRouter from './core/finance/finance.routes';
 import ordersRouter from './core/orders/order.routes';
+import auditRouter from './core/audit/audit.routes';
+import platformRouter from './core/platform/platform.routes';
+
+export const corsOrigins = () => env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
 
 export function buildApp() {
   // 0. Registro: estratégia do core primeiro, depois cada módulo se apresenta.
@@ -37,7 +41,7 @@ export function buildApp() {
   app.use(express.json({ limit: '5mb' }));
   app.use(rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: true, legacyHeaders: false }));
 
-  const origins = env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
+  const origins = corsOrigins();
   app.use(cors({
     origin: (origin, cb) => {
       if (!origin || origins.includes(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
@@ -51,6 +55,8 @@ export function buildApp() {
   app.get('/health', (_req, res) => res.json({ ok: true, sha: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'dev' }));
   app.use('/auth', authRouter);
   moduleRegistry.mountPublic(app);
+  // Plataforma: só existe se houver chave configurada.
+  if (env.PLATFORM_API_KEY) { app.use('/platform', platformRouter); console.log('[platform] /platform ligado'); }
 
   // 2. Privado — core.
   const priv = [authenticate, tenantContext] as const;
@@ -62,6 +68,7 @@ export function buildApp() {
   app.use('/stock', ...priv, stockRouter);
   app.use('/finance', ...priv, financeRouter);
   app.use('/orders', ...priv, ordersRouter);
+  app.use('/audit', ...priv, auditRouter);
 
   // 3. Privado — módulos, em /m/<módulo>, cada um atrás do seu requireModule.
   moduleRegistry.mountAuthenticated(app, ...priv);

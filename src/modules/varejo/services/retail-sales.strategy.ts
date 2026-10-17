@@ -7,7 +7,7 @@ import { ctx, moduleConfig } from '../../../core/tenancy/tenant-context';
 import { AppError } from '../../../shared/errors';
 import { calcularComissao } from './comissao.service';
 
-interface RetailModuleData { posSessionId?: string; salespersonId?: string; exchangeOfSaleId?: string }
+interface RetailModuleData { posSessionId?: string; salespersonId?: string; exchangeOfSaleId?: string; valeFinanceEntryId?: string }
 interface RetailConfig { exigirCaixaAberto?: boolean }
 
 export const retailSalesStrategy: SalesStrategy = {
@@ -35,6 +35,17 @@ export const retailSalesStrategy: SalesStrategy = {
 
   async afterCreate(tx, order, _items, draft) {
     const md = (draft.moduleData ?? {}) as RetailModuleData;
+    // Troca: a venda nova abate o vale da devolução (título a pagar de origem RETURN).
+    if (md.valeFinanceEntryId) {
+      const vale = await tx.financeEntry.findFirst({ where: { id: md.valeFinanceEntryId, origin: 'RETURN', status: { in: ['OPEN', 'PARTIAL'] } } });
+      if (!vale) throw AppError.conflict('Vale inexistente ou já utilizado.');
+      const { settle } = await import('../../../core/finance/finance.service');
+      const { D } = await import('../../../shared/money');
+      const saldo = D(vale.amount).minus(vale.paidAmount);
+      const usa = saldo.lt(order.total) ? saldo : D(order.total);
+      await settle(tx, order.tenantId, { entryId: vale.id, amount: usa, method: 'STORE_CREDIT', reference: `troca:${order.id}` });
+      await tx.orderPayment.create({ data: { tenantId: order.tenantId, orderId: order.id, method: 'STORE_CREDIT', amount: usa, reference: `vale:${vale.id}` } });
+    }
     await tx.retailSale.create({
       data: {
         tenantId: order.tenantId, orderId: order.id,

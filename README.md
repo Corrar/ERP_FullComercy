@@ -6,7 +6,7 @@ estoque central e pedido genérico) e módulos que cada empresa liga ou desliga.
 
 ## Stack
 
-- **Node.js 20+ · TypeScript · Express 5**
+- **Node.js 20+ · TypeScript · Express 5 · Socket.IO**
 - **PostgreSQL** via **Prisma** (um banco, um schema, isolamento por `tenant_id` + RLS)
 - **JWT** (access + refresh com rotação), **Helmet**, **express-rate-limit**, **zod**
 
@@ -17,7 +17,7 @@ npm install
 cp .env.example .env          # preencha DATABASE_URL e JWT_SECRET
 npx prisma migrate dev        # cria as tabelas
 psql "$DATABASE_URL" -f prisma/sql/001_rls_tenant.sql   # liga o RLS (defesa em profundidade)
-npm run db:seed               # 3 empresas de demonstração
+npm run db:seed               # 5 empresas de demonstração
 npm run dev                   # http://localhost:3000
 ```
 
@@ -32,8 +32,9 @@ npm run dev                   # http://localhost:3000
 | `npm run build` | `prisma generate` + `tsc` → `dist/` |
 | `npm start` | roda o build |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run prisma:migrate` | `prisma migrate dev` |
-| `npm run prisma:deploy` | `prisma migrate deploy` (produção) |
+| `npm test` | testes unitários (sem banco): resolução de módulo, placa, ciclo, cardápio, catálogo de permissões |
+| `npm run smoke:boot` | monta o app sem banco e falha se houver chave de permissão órfã |
+| `npm run prisma:migrate` / `prisma:deploy` | migrations (dev / produção) |
 | `npm run db:seed` | onboarding das empresas de demonstração |
 
 ## Mapa de rotas
@@ -42,9 +43,12 @@ npm run dev                   # http://localhost:3000
 |---|---|---|
 | `GET /health` | pública | portão de deploy |
 | `/auth/*` | pública (`/me` autenticada) | login por `tenant` + e-mail, refresh, logout |
-| `/public/<módulo>/*` | pública | cardápio online (`food`), webhook da catraca (`academia`) |
-| `/tenant`, `/users`, `/roles`, `/customers`, `/products`, `/stock`, `/finance`, `/orders` | JWT + tenant | o CORE |
+| `/public/food/*` | pública | cardápio online, pedido do cliente final, acompanhamento |
+| `/public/academia/*` | pública (token do aparelho) | webhook da catraca |
+| `/platform/*` | `x-platform-key` | criar empresa, suspender, ligar módulo (só existe com `PLATFORM_API_KEY`) |
+| `/tenant`, `/users`, `/roles`, `/customers`, `/products`, `/stock`, `/finance`, `/orders`, `/audit` | JWT + tenant | o CORE |
 | `/m/varejo`, `/m/food`, `/m/academia`, `/m/servicos` | JWT + tenant + **módulo ativo** | o que é exclusivo de cada módulo |
+| Socket.IO (mesmo JWT) | sala por tenant | `order.*`, `kitchen.ticket`, `delivery.status`, `gym.access`, `os.status`, `stock.low` |
 
 A **venda de qualquer módulo** entra por `POST /orders`. O módulo é resolvido pela configuração da
 empresa logada (ver `docs/ARQUITETURA.md`, seção 4). Dados de nicho vão em `moduleData`:
@@ -68,12 +72,26 @@ POST /orders { "customerId":"…", "channel":"SUBSCRIPTION", "items":[], "paymen
                "moduleData":{"planId":"…"} }
 ```
 
+Depois de criado: `POST /orders/:id/items` (nova rodada, peça aprovada), `POST /orders/:id/payments`,
+`POST /orders/:id/transition`, `POST /orders/:id/cancel`, `GET /orders/dashboard`.
+
+## O que cada módulo entrega
+
+| Módulo | Entregue |
+|---|---|
+| **Varejo** `/m/varejo` | caixa (abrir, sangria/suprimento, fechar com conferência), grade tamanho×cor gerando variantes, matriz de estoque, etiquetas com render **ZPL**, vendedores, regras de comissão com vigência, aprovação e pagamento de comissões, devolução/troca com vale, relatórios (vendedor, hora, curva ABC, sem giro) |
+| **Food** `/m/food` | mapa do salão, comandas (abrir, conta, transferir mesa, fechar com taxa e rateio), KDS por estação com tempos, entregas (atribuir, mover, acerto do entregador), zonas por CEP, cardápio completo (menus, categorias, itens, adicionais), **pedido online público** com acompanhamento, relatórios |
+| **Academia** `/m/academia` | planos, adesão pelo pedido, recorrência por job (cobrança → financeiro, inadimplência), pausar/retomar/trocar plano, check-in/out, credenciais, dispositivos com token de webhook, log de acessos, turmas com agenda, reservas e chamada, painel (MRR, churn), relatórios (frequência, pico, sumidos) |
+| **Serviços** `/m/servicos` | veículos por placa com histórico, OS com status de manutenção projetado no core, orçamento (itens no pedido) e aprovação com recusa parcial, técnico, checklist de entrada/saída, anexos, agenda com capacidade de boxes e chegada → OS, catálogo, relatórios (técnicos, serviços, retorno de clientes) |
+
 ## Empresas de demonstração (seed)
 
 | slug | módulos | login |
 |---|---|---|
 | `loja-demo` | VAREJO | `admin@loja-demo.local` |
 | `burger-demo` | FOOD | `admin@burger-demo.local` |
+| `fit-demo` | ACADEMIA | `admin@fit-demo.local` |
+| `oficina-demo` | SERVICOS | `admin@oficina-demo.local` |
 | `posto-demo` | VAREJO + FOOD (`defaultSalesModule: VAREJO`) | `admin@posto-demo.local` |
 
 Senha: `SEED_ADMIN_PASSWORD` do `.env`.

@@ -46,3 +46,27 @@ export async function listarComissoes(filter: { salespersonId?: string; status?:
     orderBy: { createdAt: 'desc' }, take: 500,
   });
 }
+
+export const listarRegras = () => ctx().db.retailCommissionRule.findMany({ include: { salesperson: { select: { name: true } }, category: { select: { name: true } } }, orderBy: { validFrom: 'desc' } });
+export const criarRegra = (input: { salespersonId?: string; categoryId?: string; rate: number; validFrom: Date; validTo?: Date }) =>
+  ctx().db.retailCommissionRule.create({ data: { ...input, tenantId: ctx().tenantId } });
+export const removerRegra = (id: string) => ctx().db.retailCommissionRule.delete({ where: { id } });
+
+export async function aprovarComissoes(ids: string[]) {
+  return ctx().db.retailCommission.updateMany({ where: { id: { in: ids }, status: 'PENDING' }, data: { status: 'APPROVED' } });
+}
+
+/** Pagamento das comissões aprovadas de um vendedor num período: vira UM título a pagar. */
+export async function pagarComissoes(salespersonId: string, until: Date) {
+  const { db, tenantId } = ctx();
+  const { tenantTransaction } = await import('../../../infra/prisma');
+  const finance = await import('../../../core/finance/finance.service');
+  return tenantTransaction(db, tenantId, async (tx) => {
+    const pend = await tx.retailCommission.findMany({ where: { salespersonId, status: 'APPROVED', createdAt: { lte: until } }, include: { salesperson: true } });
+    if (!pend.length) return { pagas: 0, total: D(0) };
+    const total = round2(sum(pend.map((c) => D(c.amount))));
+    const entry = await finance.createEntry(tx, tenantId, { kind: 'PAYABLE', description: `Comissões ${pend[0].salesperson.name} até ${until.toISOString().slice(0, 10)}`, amount: total, dueDate: new Date(), origin: 'COMMISSION', originId: salespersonId });
+    await tx.retailCommission.updateMany({ where: { id: { in: pend.map((c) => c.id) } }, data: { status: 'PAID', paidAt: new Date() } });
+    return { pagas: pend.length, total, financeEntryId: entry.id };
+  });
+}

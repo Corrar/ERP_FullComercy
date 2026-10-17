@@ -67,3 +67,42 @@ export async function fecharComanda(tabId: string, payments: { method: PaymentMe
   });
   return contaDaComanda(tabId);
 }
+
+export const listarComandasAbertas = () => ctx().db.foodTab.findMany({ where: { status: 'OPEN' }, include: { table: { select: { number: true } }, orders: { include: { order: { select: { total: true, status: true } } } } }, orderBy: { openedAt: 'asc' } });
+
+export async function transferirComanda(tabId: string, toTableId: string) {
+  const { db } = ctx();
+  const tab = await db.foodTab.findUnique({ where: { id: tabId } });
+  if (!tab || tab.status !== 'OPEN') throw AppError.conflict('Comanda não está aberta.');
+  const destino = await db.foodTable.findUnique({ where: { id: toTableId } });
+  if (!destino?.isActive) throw AppError.notFound('Mesa destino');
+  await db.$transaction([
+    db.foodTab.update({ where: { id: tabId }, data: { tableId: toTableId } }),
+    db.foodOrder.updateMany({ where: { tabId }, data: { tableId: toTableId } }),
+    db.foodTable.update({ where: { id: toTableId }, data: { status: 'OCCUPIED' } }),
+    ...(tab.tableId ? [db.foodTable.update({ where: { id: tab.tableId }, data: { status: 'FREE' } })] : []),
+  ]);
+  return db.foodTab.findUnique({ where: { id: tabId }, include: { table: true } });
+}
+
+/** Cancela comanda SEM consumo (todos os pedidos cancelados ou nenhum pedido). */
+export async function cancelarComanda(tabId: string, reason: string) {
+  const { db } = ctx();
+  const conta = await contaDaComanda(tabId);
+  if (conta.pedidos.length) throw AppError.conflict('Comanda tem pedidos ativos; cancele-os antes (POST /orders/:id/cancel).');
+  await db.foodTab.update({ where: { id: tabId }, data: { status: 'CANCELLED', closedAt: new Date() } });
+  if (conta.tab.tableId) await db.foodTable.update({ where: { id: conta.tab.tableId }, data: { status: 'FREE' } });
+  await db.auditLog.create({ data: { tenantId: ctx().tenantId, userId: ctx().userId, action: 'food.tab.cancel', entity: 'FoodTab', entityId: tabId, details: { reason } } });
+}
+
+export const atualizarMesa = (id: string, input: { name?: string; area?: string; seats?: number; status?: 'FREE' | 'OCCUPIED' | 'RESERVED' | 'CLOSING'; isActive?: boolean }) =>
+  ctx().db.foodTable.update({ where: { id }, data: input });
+
+/** Mapa do salão: cada mesa com a comanda aberta e o total parcial. */
+export async function mapaDoSalao() {
+  const mesas = await ctx().db.foodTable.findMany({ where: { isActive: true }, orderBy: [{ area: 'asc' }, { number: 'asc' }], include: { tabs: { where: { status: 'OPEN' }, include: { orders: { include: { order: { select: { total: true, status: true } } } } } } } });
+  return mesas.map((m) => ({
+    id: m.id, number: m.number, name: m.name, area: m.area, seats: m.seats, status: m.status,
+    comanda: m.tabs[0] ? { id: m.tabs[0].id, code: m.tabs[0].code, guests: m.tabs[0].guests, abertaEm: m.tabs[0].openedAt, parcial: m.tabs[0].orders.filter((o) => o.order.status !== 'CANCELLED').reduce((s, o) => s.plus(o.order.total), D(0)) } : null,
+  }));
+}

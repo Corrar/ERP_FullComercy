@@ -18,6 +18,7 @@ class ModuleRegistry {
   }
 
   get(key: ModuleKey) { return this.defs.get(key); }
+  allJobs() { return this.all().flatMap((m) => m.jobs ?? []); }
   all(): ModuleDefinition[] { return [...this.defs.values()]; }
 
   /** Monta `/m/<basePath>` (autenticado + módulo ativo) e `/public/<basePath>` (se houver). */

@@ -52,7 +52,24 @@ const listSchema = z.object({
   customerId: z.string().uuid().optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+  q: z.string().max(80).optional(),
 });
+
+export async function postItems(req: Request, res: Response) {
+  const b = parse(z.object({ items: z.array(itemSchema).min(1) }), req.body);
+  res.json(await orders.addItems(String(req.params.id), b.items));
+}
+export async function deleteItem(req: Request, res: Response) {
+  const b = parse(z.object({ reason: z.string().max(300).optional() }), req.body ?? {});
+  res.json(await orders.removeItem(String(req.params.id), String(req.params.itemId), b.reason));
+}
+export async function getDashboard(req: Request, res: Response) {
+  const q = parse(z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }), req.query);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  res.json(await orders.dashboard(q.from ?? hoje, q.to ?? new Date()));
+}
 export async function getOrders(req: Request, res: Response) {
   res.json(await orders.listOrders(parse(listSchema, req.query)));
 }
