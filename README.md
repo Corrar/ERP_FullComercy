@@ -64,7 +64,8 @@ Ou tudo em contêiner (API + front atrás de nginx em :8080):
 | `npm run typecheck` | `tsc --noEmit` nos dois |
 | `npm test` | testes unitários (sem banco): resolução de módulo, placa, ciclo, cardápio, catálogo de permissões |
 | `npm run smoke:boot` | monta o app sem banco e falha se houver chave de permissão órfã |
-| `npm run test:e2e` | 18 fluxos ponta a ponta contra o banco (exige `.env` migrado + seed) |
+| `npm run test:e2e` | 18 fluxos ponta a ponta da API contra o banco (exige `.env` migrado + seed) |
+| `npm run test:ui` | Playwright no navegador real: sobe API + Vite e roda login, cliente, venda no PDV e vitrine pública |
 | `npm run prisma:migrate` / `prisma:deploy` | migrations, sempre como papel de plataforma |
 | `npm run db:rls` | aplica `prisma/sql/001_rls_tenant.sql` via Prisma (sem psql) |
 | `npm run db:seed` | onboarding das empresas de demonstração |
@@ -126,6 +127,12 @@ Depois de criado: `POST /orders/:id/items` (nova rodada, peça aprovada), `POST 
 | **Serviços** `/m/servicos` | veículos por placa com histórico, OS com status de manutenção projetado no core, orçamento (itens no pedido) e aprovação com recusa parcial, técnico, checklist de entrada/saída, anexos, agenda com capacidade de boxes e chegada → OS, catálogo, relatórios (técnicos, serviços, retorno de clientes) |
 
 Lista completa, com a permissão de cada rota: **`docs/API.md`** (gerada do código).
+
+## Vitrine do cliente final
+
+`/cardapio/<empresa>/<cardápio>` é a página pública do cardápio online (sem login): carrinho, pedido
+como convidado para retirada ou entrega, pagamento na entrega ou PIX online, e acompanhamento em
+`/pedido/<empresa>/<número>`. O pedido entra na cozinha da loja pelo mesmo `POST /orders`.
 
 ## Integrações
 

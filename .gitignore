@@ -23,3 +23,7 @@ npm-debug.log*
 *.out
 *.out.txt
 *.dump
+
+# Playwright
+apps/web/test-results
+apps/web/playwright-report

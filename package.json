@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "FullComercy — ERP SaaS modular e multi-tenant (API + Web)",
-  "workspaces": ["apps/*"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "npm run dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",
@@ -16,6 +20,7 @@
     "prisma:deploy": "npm run prisma:deploy -w apps/api",
     "db:rls": "npm run db:rls -w apps/api",
     "db:seed": "npm run db:seed -w apps/api",
-    "docs:api": "npm run docs:api -w apps/api"
+    "docs:api": "npm run docs:api -w apps/api",
+    "test:ui": "npm run test:ui -w apps/web"
   }
 }

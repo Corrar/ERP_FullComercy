@@ -15,6 +15,10 @@ import { Roles } from '@/core/users/Roles';
 import { Integrations } from '@/core/integrations/Integrations';
 import { Company } from '@/core/company/Company';
 import { Account } from '@/core/auth/Account';
+import { Storefront, OrderTracking } from '@/public/Storefront';
+import { CustomerDetail } from '@/core/customers/CustomerDetail';
+import { ProductDetail } from '@/core/products/ProductDetail';
+import { PurchaseDetail } from '@/core/purchases/PurchaseDetail';
 
 function RequireAuth() {
   const { s } = useSession(); const loc = useLocation();
@@ -31,6 +35,9 @@ export const router = createBrowserRouter([
   { path: '/esqueci-senha', element: <Forgot /> },
   { path: '/redefinir-senha', element: <Reset /> },
   { path: '/definir-senha', element: <Reset invite /> },
+  // Público (cliente final): vitrine do cardápio e acompanhamento do pedido.
+  { path: '/cardapio/:tenant/:menu', element: <Storefront /> },
+  { path: '/pedido/:tenant/:numero', element: <OrderTracking /> },
   {
     element: <RequireAuth />,
     children: [{
@@ -40,9 +47,12 @@ export const router = createBrowserRouter([
         { path: '/pedidos', element: <Orders /> },
         { path: '/pedidos/:id', element: <OrderDetail /> },
         { path: '/clientes', element: <Customers /> },
+        { path: '/clientes/:id', element: <CustomerDetail /> },
         { path: '/produtos', element: <Products /> },
+        { path: '/produtos/:id', element: <ProductDetail /> },
         { path: '/estoque', element: <Stock /> },
         { path: '/compras', element: <Purchases /> },
+        { path: '/compras/:id', element: <PurchaseDetail /> },
         { path: '/financeiro', element: <Finance /> },
         { path: '/usuarios', element: <Users /> },
         { path: '/perfis', element: <Roles /> },

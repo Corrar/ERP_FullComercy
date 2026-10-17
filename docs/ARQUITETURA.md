@@ -54,6 +54,7 @@ ERP_FullComercy/
 │
 ├── apps/web/                       # ══ FRONT ══ React 18 + Vite + TS, sem framework de UI
 │   ├── index.html · vite.config.ts (proxy /api, /socket.io; alias @) · nginx.conf · Dockerfile
+│   ├── playwright.config.ts · e2e/  # navegador real: sobe API (3300) + Vite (5180); core.spec, storefront.spec
 │   └── src/
 │       ├── main.tsx · styles.css   # tokens e utilitários (trocar o visual = este arquivo)
 │       ├── app/
@@ -67,9 +68,11 @@ ERP_FullComercy/
 │       │   ├── use-api.ts          # useGet / useAction (sem react-query)
 │       │   └── format.ts           # R$, datas, rótulos de status em PT
 │       ├── components/ui.tsx       # Card, Kpi, Badge, Table, Modal, Form, Tabs, Toast
+│       ├── public/Storefront.tsx   # vitrine pública do cardápio + acompanhamento do pedido (sem login)
 │       ├── core/                   # auth (login, esqueci, redefinir, conta), dashboard, orders,
 │       │                           # customers, products, stock, purchases, finance, users, roles,
 │       │                           # integrations, company (módulos/configurações), notifications (sino)
+│       │   (detalhes: CustomerDetail, ProductDetail, PurchaseDetail com edição, variantes, mínimo, recebimento parcial, devolução)
 │       └── modules/
 │           ├── varejo/             # Pdv, Caixa, Grade, Etiquetas, Comissoes, Relatorios
 │           ├── food/               # Salao (mesas → comanda → rodada → conta), Kds, Entregas, Cardapio
