@@ -3,7 +3,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { AppError } from '../../shared/errors';
 import type { AuthRequest } from '../auth/auth.middleware';
-import { effectivePermissions } from './rbac.service';
+import { canUse, effectivePermissions } from './rbac.service';
 import { permissionExists } from './permissions';
 
 /** Chaves que ALGUMA rota realmente cobra — preenchido no boot, pelo próprio uso. */
@@ -17,7 +17,10 @@ export function requirePermission(key: string) {
     try {
       const acc = await effectivePermissions(a.tenantId, a.userId);
       if (!acc.exists) return next(new AppError('FORBIDDEN', 'Perfil não encontrado para este usuário.'));
-      if (acc.isAdmin || acc.keys.has(key)) return next();
+      if (canUse(acc, key)) return next();
+      if (acc.plan && !acc.plan.has(key)) {
+        return next(new AppError('FORBIDDEN', 'Esta função não faz parte do plano da sua empresa. Adicione-a em Assinatura.', { permission: key, reason: 'NOT_IN_PLAN' }));
+      }
       return next(new AppError('FORBIDDEN', `Sem permissão para esta operação (${key}).`));
     } catch (e) {
       next(e);

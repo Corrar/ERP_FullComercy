@@ -39,12 +39,35 @@ const schema = z.object({
   AUDIT_HTTP: z.string().default('0').transform((v) => ['1', 'true', 'on'].includes(v.toLowerCase())),
   /// Jobs em processo (cobrança recorrente, sessões de turma…). "0"/"false" desliga.
   JOBS_ENABLED: z.string().default('1').transform((v) => !['0', 'false', 'off'].includes(v.toLowerCase())),
+  // ── Loja de módulos / assinatura do SaaS ──
+  /// Vida do token da CONTA do comprador (loja, carrinho, checkout). Não abre empresa: para isso
+  /// a conta troca por uma sessão de tenant (`POST /account/companies/:id/session`).
+  ACCOUNT_TOKEN_TTL: z.string().default('12h'),
+  /// Client ID OAuth do Google (Google Identity Services). Sem ele, "Entrar com Google" fica indisponível.
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  /// "1" aceita credencial simulada do Google (`mock.<base64url json>`). Só dev/teste; recusado em produção.
+  GOOGLE_AUTH_MOCK: z.string().default('0').transform((v) => ['1', 'true', 'on'].includes(v.toLowerCase())),
+  /// Provedor de cobrança da assinatura (`core/billing/providers`). `mock` simula cartão, boleto e Pix
+  /// Automático; recusado em produção — lá entra o adaptador do gateway real.
+  BILLING_PROVIDER: z.string().default('mock'),
+  /// Token que o webhook do provedor `mock` precisa mandar em `x-billing-token`. Sem ele, o webhook mock não aceita nada.
+  BILLING_MOCK_WEBHOOK_TOKEN: z.string().min(16).optional(),
+  /// Dias de teste grátis da primeira compra.
+  BILLING_TRIAL_DAYS: z.coerce.number().int().nonnegative().default(7),
+  /// Dias de atraso tolerados antes de a cobrança suspender a empresa.
+  BILLING_GRACE_DAYS: z.coerce.number().int().nonnegative().default(10),
 });
 
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
   console.error('⛔ Ambiente inválido:', parsed.error.flatten().fieldErrors);
   process.exit(78); // EX_CONFIG
+}
+// Os dois simuladores dão acesso sem pagar ou sem Google de verdade: em produção são erro de
+// configuração, não escolha. Falha no boot (mesma régua das variáveis obrigatórias).
+if (parsed.data.NODE_ENV === 'production' && (parsed.data.GOOGLE_AUTH_MOCK || parsed.data.BILLING_PROVIDER === 'mock')) {
+  console.error('⛔ Ambiente inválido: GOOGLE_AUTH_MOCK=1 e BILLING_PROVIDER=mock são só de desenvolvimento.');
+  process.exit(78);
 }
 
 export const env = parsed.data;

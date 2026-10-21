@@ -32,6 +32,7 @@ export const CORE_PERMISSIONS: PermissionDef[] = [
   { key: 'core.suppliers:manage',   label: 'Cadastrar fornecedores',       module: null },
   { key: 'core.payments:manage',    label: 'Cobrar online (PIX/link)',     module: null },
   { key: 'core.webhooks:manage',    label: 'Integrações (webhooks)',       module: null },
+  { key: 'core.billing:manage',     label: 'Gerir assinatura e pagamento', module: null },
 ];
 
 const registry = new Map<string, PermissionDef>(CORE_PERMISSIONS.map((p) => [p.key, p]));

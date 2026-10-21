@@ -5,6 +5,7 @@ import { ModuleKey, Prisma } from '@prisma/client';
 import { prisma } from '../../infra/prisma';
 import { env } from '../../config/env';
 import { AppError } from '../../shared/errors';
+import { permissionsForFeatures } from '../billing/catalog';
 
 export interface TenantSnapshot {
   id: string;
@@ -13,6 +14,9 @@ export interface TenantSnapshot {
   status: string;
   settings: Record<string, unknown>;
   modules: Map<ModuleKey, Prisma.JsonValue>;
+  /** Chaves de permissão que o PLANO libera. `null` = empresa sem assinatura da loja (criada pela
+   *  plataforma ou pelo seed): nada é cortado, vale só o perfil. */
+  planKeys: Set<string> | null;
 }
 
 const cache = new Map<string, { at: number; snap: TenantSnapshot }>();
@@ -28,7 +32,10 @@ export async function loadTenantSnapshot(tenantId: string): Promise<TenantSnapsh
 
   const t = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    include: { modules: { where: { enabled: true }, select: { moduleKey: true, config: true } } },
+    include: {
+      modules: { where: { enabled: true }, select: { moduleKey: true, config: true } },
+      subscription: { select: { status: true, items: { select: { featureKey: true } } } },
+    },
   });
   if (!t) throw AppError.notFound('Empresa');
 
@@ -39,6 +46,7 @@ export async function loadTenantSnapshot(tenantId: string): Promise<TenantSnapsh
     status: t.status,
     settings: (t.settings ?? {}) as Record<string, unknown>,
     modules: new Map(t.modules.map((m) => [m.moduleKey, m.config])),
+    planKeys: t.subscription ? permissionsForFeatures(t.subscription.items.map((i) => i.featureKey)) : null,
   };
   cache.set(tenantId, { at: Date.now(), snap });
   return snap;

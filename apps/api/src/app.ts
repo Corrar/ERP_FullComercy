@@ -14,7 +14,7 @@ import { auditHttp } from './shared/audit-http';
 import dashboardRouter from './core/dashboard/dashboard.routes';
 import { prisma } from './infra/prisma';
 import { authenticate } from './core/auth/auth.middleware';
-import { tenantContext } from './core/tenancy/tenant.middleware';
+import { tenantContext, tenantContextAllowSuspended } from './core/tenancy/tenant.middleware';
 import { assertAllRequiredKeysAreDeclared } from './core/rbac/rbac.middleware';
 import { salesStrategies } from './core/orders/sales-strategy';
 import { coreSalesStrategy } from './core/orders/core-sales.strategy';
@@ -35,6 +35,8 @@ import webhooksRouter from './core/integration/webhooks.routes';
 import notificationsRouter from './core/notifications/notifications.routes';
 import { purchasesRouter, suppliersRouter } from './core/purchases/purchases.routes';
 import paymentsRouter, { publicRouter as paymentsPublicRouter } from './core/payments/payments.routes';
+import accountRouter from './core/account/account.routes';
+import billingRouter, { publicBillingRouter } from './core/billing/billing.routes';
 import { startOutboxPersistence } from './core/integration/outbox.service';
 import { startNotificationListeners } from './core/notifications/notifications.service';
 
@@ -88,6 +90,9 @@ export function buildApp() {
   MOUNTED_ROUTES.push({ method: 'GET', path: '/health', auth: 'public' }, { method: 'GET', path: '/health/ready', auth: 'public' });
   app.use('/auth', authRouter); collect('/auth', authRouter, 'public');
   app.use('/public/payments', paymentsPublicRouter); collect('/public/payments', paymentsPublicRouter, 'public');
+  // Loja de módulos: vitrine pública e a conta do comprador (token próprio, sem tenant).
+  app.use('/public/billing', publicBillingRouter); collect('/public/billing', publicBillingRouter, 'public');
+  app.use('/account', accountRouter); collect('/account', accountRouter, 'public');
   moduleRegistry.mountPublic(app);
   for (const m of moduleRegistry.all()) if (m.publicRouter) collect(`/public/${m.basePath}`, m.publicRouter, 'public', m.key);
   // Plataforma: só existe se houver chave configurada.
@@ -103,6 +108,8 @@ export function buildApp() {
     ['/suppliers', suppliersRouter], ['/purchases', purchasesRouter], ['/payments', paymentsRouter],
   ];
   for (const [prefix, router] of core) { app.use(prefix, ...priv, router); collect(prefix, router, 'tenant'); }
+  // Assinatura: a única superfície aberta para a empresa suspensa (é por ela que se paga e volta).
+  app.use('/billing', authenticate, tenantContextAllowSuspended, auditHttp, billingRouter); collect('/billing', billingRouter, 'tenant');
 
   // 3. Privado — módulos, em /m/<módulo>, cada um atrás do seu requireModule.
   moduleRegistry.mountAuthenticated(app, ...priv);

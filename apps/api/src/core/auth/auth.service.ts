@@ -7,7 +7,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { env } from '../../config/env';
 import { prisma } from '../../infra/prisma';
 import { AppError } from '../../shared/errors';
-import { effectivePermissions } from '../rbac/rbac.service';
+import { effectivePermissions, visiblePermissions } from '../rbac/rbac.service';
 import { loadTenantSnapshot } from '../tenancy/tenant-modules.service';
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -45,16 +45,26 @@ export async function login(input: LoginInput) {
   if (!user || !user.isActive) throw invalid();
   if (!(await bcrypt.compare(input.password, user.passwordHash))) throw invalid();
 
+  return issueTenantSession(user, tenant, input);
+}
+
+/** A sessão de UMA empresa (access + refresh + o que o front precisa para desenhar o menu).
+ *  Login por senha e "entrar com a conta do comprador" (`account.service`) terminam aqui. */
+export async function issueTenantSession(
+  user: { id: string; name: string; email: string },
+  tenant: { id: string; slug: string; name: string },
+  meta: { ip?: string; userAgent?: string },
+) {
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   const [perms, snap] = await Promise.all([effectivePermissions(tenant.id, user.id), loadTenantSnapshot(tenant.id)]);
 
   return {
     accessToken: signAccess(user.id, tenant.id),
-    refreshToken: await issueRefresh(user.id, tenant.id, input),
+    refreshToken: await issueRefresh(user.id, tenant.id, meta),
     user: { id: user.id, name: user.name, email: user.email },
     tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name },
     // O front desenha o menu com isto: permissões efetivas + módulos ligados.
-    permissions: perms.isAdmin ? ['*'] : [...perms.keys],
+    permissions: visiblePermissions(perms),
     modules: [...snap.modules.keys()],
   };
 }

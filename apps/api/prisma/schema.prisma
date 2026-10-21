@@ -140,6 +140,9 @@ model Tenant {
   stockCountItems     StockCountItem[]
   purchaseReturns     PurchaseReturn[]
   purchaseReturnItems PurchaseReturnItem[]
+  subscription        Subscription?
+  subscriptionItems   SubscriptionItem[]
+  invoices            Invoice[]
   // módulos
   retailGradeAxes        RetailGradeAxis[]
   retailGradeValues      RetailGradeValue[]
@@ -219,10 +222,14 @@ model User {
   name         String    @db.VarChar(120)
   isActive     Boolean   @default(true) @map("is_active")
   lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  /// Conta de comprador (plataforma) dona deste acesso. Preenchido só no admin que nasceu de uma
+  /// compra pela loja de módulos: é o que deixa "entrar com a conta" abrir esta empresa.
+  accountId    String?   @map("account_id") @db.Uuid
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account       Account?         @relation(fields: [accountId], references: [id], onDelete: Restrict)
   roles         UserRole[]
   permissions   UserPermission[]
   refreshTokens RefreshToken[]
@@ -244,6 +251,7 @@ model User {
 
   @@unique([tenantId, email])
   @@unique([tenantId, id])
+  @@index([accountId])
   @@map("core_users")
 }
 
@@ -2335,4 +2343,147 @@ model SvcAttachment {
   @@unique([tenantId, id])
   @@index([tenantId, serviceOrderId])
   @@map("svc_attachments")
+}
+
+// =====================================================================================
+// 6. ASSINATURA DO SAAS — loja de módulos, conta do comprador, plano e cobrança
+// =====================================================================================
+//
+// `plat_*` é a SEGUNDA família sem `tenant_id` (a primeira é `core_tenants`): a conta do
+// comprador existe ANTES de existir empresa — ela é quem monta o ERP no carrinho e paga. Só o
+// client de PLATAFORMA toca nela; o papel do tenant perde todo privilégio sobre `plat_*` no
+// `001_rls_tenant.sql` (lá não há linha de tenant para a política filtrar).
+// A assinatura em si (`core_subscriptions` e filhas) é da empresa e segue as regras de sempre.
+
+/// CONTA DO COMPRADOR. Login por e-mail+senha ou Google; dona de uma ou mais empresas.
+model Account {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(160)
+  name         String    @db.VarChar(120)
+  /// NULL = conta só-Google (nunca definiu senha).
+  passwordHash String?   @map("password_hash")
+  /// `sub` do ID token do Google. Único: uma conta Google abre uma conta daqui.
+  googleSub    String?   @unique @map("google_sub") @db.VarChar(64)
+  avatarUrl    String?   @map("avatar_url")
+  /// Quando a conta consumiu o teste grátis. O teste é da PRIMEIRA compra: preenchido, não há outro.
+  trialUsedAt  DateTime? @map("trial_used_at") @db.Timestamptz(6)
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users         User[]
+  subscriptions Subscription[]
+
+  @@map("plat_accounts")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+/// Como a mensalidade é cobrada. Cartão debita sozinho; boleto gera título a cada ciclo;
+/// PIX_AUTO é o Pix Automático (o pagador autoriza uma vez no banco e o débito recorre).
+enum BillingMethod {
+  CARD
+  BOLETO
+  PIX_AUTO
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  FAILED
+  VOID
+}
+
+/// O PLANO DA EMPRESA. Uma por tenant. `amount` é a soma dos itens, recalculada no servidor a
+/// cada mudança (o preço que o front mostra é só exibição). Os itens decidem o que a empresa
+/// PODE usar: `rbac.service` corta as permissões fora do plano.
+model Subscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  tenantId           String             @map("tenant_id") @db.Uuid
+  accountId          String             @map("account_id") @db.Uuid
+  status             SubscriptionStatus @default(TRIALING)
+  method             BillingMethod
+  amount             Decimal            @db.Decimal(14, 2)
+  trialEndsAt        DateTime?          @map("trial_ends_at") @db.Timestamptz(6)
+  currentPeriodStart DateTime           @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd   DateTime           @map("current_period_end") @db.Timestamptz(6)
+  /// Pedido de cancelamento: vale no fim do período já pago (ou do teste).
+  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
+  canceledAt         DateTime?          @map("canceled_at") @db.Timestamptz(6)
+  pastDueSince       DateTime?          @map("past_due_since") @db.Timestamptz(6)
+  /// A cobrança suspendeu a empresa (e só ela a reativa ao receber). Não mexe numa suspensão manual.
+  suspendedByBilling Boolean            @default(false) @map("suspended_by_billing")
+  provider           String             @db.VarChar(30)
+  providerCustomerId String?            @map("provider_customer_id") @db.VarChar(120)
+  /// Referência do meio de pagamento no provedor: cartão tokenizado ou autorização do Pix Automático.
+  /// O número do cartão NUNCA chega aqui (nem à API): o navegador tokeniza no provedor.
+  paymentRef         String?            @map("payment_ref") @db.VarChar(160)
+  /// Exibição: bandeira/final do cartão, estado da autorização do Pix Automático, QR de autorização.
+  paymentInfo        Json               @default("{}") @map("payment_info")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account  Account            @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  items    SubscriptionItem[]
+  invoices Invoice[]
+
+  @@unique([tenantId])
+  @@unique([tenantId, id])
+  @@index([status, currentPeriodEnd])
+  @@map("core_subscriptions")
+}
+
+/// Uma função contratada (chave do catálogo em `core/billing/catalog.ts`) e o preço do dia da contratação.
+model SubscriptionItem {
+  id             String     @id @default(uuid()) @db.Uuid
+  tenantId       String     @map("tenant_id") @db.Uuid
+  subscriptionId String     @map("subscription_id") @db.Uuid
+  featureKey     String     @map("feature_key") @db.VarChar(60)
+  moduleKey      ModuleKey? @map("module_key")
+  label          String     @db.VarChar(120)
+  price          Decimal    @db.Decimal(14, 2)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, subscriptionId, featureKey])
+  @@unique([tenantId, id])
+  @@map("core_subscription_items")
+}
+
+/// Uma mensalidade. Nasce no fim de cada período (o job `billing.cycle`) ou na compra sem teste.
+model Invoice {
+  id             String        @id @default(uuid()) @db.Uuid
+  tenantId       String        @map("tenant_id") @db.Uuid
+  subscriptionId String        @map("subscription_id") @db.Uuid
+  amount         Decimal       @db.Decimal(14, 2)
+  status         InvoiceStatus @default(OPEN)
+  method         BillingMethod
+  periodStart    DateTime      @map("period_start") @db.Timestamptz(6)
+  periodEnd      DateTime      @map("period_end") @db.Timestamptz(6)
+  dueAt          DateTime      @map("due_at") @db.Timestamptz(6)
+  paidAt         DateTime?     @map("paid_at") @db.Timestamptz(6)
+  attempts       Int           @default(0)
+  failureReason  String?       @map("failure_reason") @db.VarChar(200)
+  providerRef    String?       @map("provider_ref") @db.VarChar(120)
+  boletoUrl      String?       @map("boleto_url")
+  boletoLine     String?       @map("boleto_line") @db.VarChar(80)
+  pixCode        String?       @map("pix_code")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([status, dueAt])
+  @@index([providerRef])
+  @@map("core_invoices")
 }

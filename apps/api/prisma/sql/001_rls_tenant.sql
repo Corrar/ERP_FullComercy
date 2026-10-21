@@ -28,6 +28,12 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE O
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO :app_role;
 REVOKE ALL ON TABLE _prisma_migrations FROM :app_role;
 
+-- 1b. Tabelas de PLATAFORMA (`plat_*`, sem tenant_id: conta do comprador, hash de senha). Não há
+--     linha de tenant para a política filtrar, então o papel do tenant simplesmente não as toca.
+--     O GRANT ALL acima as incluiu; aqui o privilégio sai. Tabela `plat_*` nova entra nesta lista
+--     (statement simples, não bloco DO: o psql não expande `:app_role` dentro de $$).
+REVOKE ALL ON TABLE plat_accounts FROM :app_role;
+
 -- 2. A política, em toda tabela que tenha `tenant_id`.
 DO $$
 DECLARE
