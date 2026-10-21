@@ -124,7 +124,7 @@ export async function semearFood(e: Empresa): Promise<Food> {
     await api('POST', '/m/food/entregadores', { name: 'Renato Silva', phone: '11 97566-1209', vehicle: 'Moto', plate: 'GBR-7A31' }),
     await api('POST', '/m/food/entregadores', { name: 'Aline Souza', phone: '11 99234-8870', vehicle: 'Bike elétrica' }),
   ];
-  const clientes = [];
+  const clientes: any[] = [];
   for (const c of CLIENTES) clientes.push(await api('POST', '/customers', c));
 
   const linhas = (ls: Linha[]) => ls.map(([sku, quantity, modifiers, obs]) => ({ variantId: itens[sku].variantId, quantity, metadata: { ...(modifiers ? { modifiers } : {}), ...(obs ? { obs } : {}) } }));

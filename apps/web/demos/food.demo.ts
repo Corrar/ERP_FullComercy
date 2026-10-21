@@ -20,7 +20,8 @@ test('food.salao', async ({ request, gravar }) => {
   await g.clicar(mesa4);
   const modal = p.getByRole('dialog', { name: 'Mesa 4' });
   await expect(modal.getByRole('button', { name: /Brownie com Sorvete/ })).toBeVisible();
-  await expect(modal.locator('.card:has-text("Conta")')).toContainText('170,30');
+  const conta = modal.locator('section.card').filter({ has: p.getByRole('heading', { name: 'Conta', exact: true }) });
+  await expect(conta).toContainText('170,30');
   await g.pausa(500);
   const brownie = modal.getByRole('button', { name: /Brownie com Sorvete/ });
   await g.clicar(brownie);
@@ -29,7 +30,6 @@ test('food.salao', async ({ request, gravar }) => {
   await expect(modal.getByText('2× Brownie com Sorvete')).toBeVisible();
   await g.pausa(400);
   await g.clicar(modal.getByRole('button', { name: 'Enviar para a cozinha' }));
-  const conta = modal.locator('.card:has-text("Conta")');
   await expect(conta).toContainText('223,00'); // 170,30 + 2 × 19,90 + 12,90
   await g.pausa(500);
   g.capa();
@@ -81,7 +81,7 @@ test('food.delivery', async ({ request, gravar }) => {
   // Despacho: o pedido pronto que esperava ganha entregador.
   const pendente = linhas.filter({ has: p.locator('select') }).first();
   const select = pendente.locator('select');
-  await g.clicar(select);
+  await g.passar(select);
   await select.selectOption({ label: 'Diego Martins' });
   await expect(linhas.filter({ hasText: 'Diego Martins' })).toHaveCount(1);
   await g.pausa(600);
