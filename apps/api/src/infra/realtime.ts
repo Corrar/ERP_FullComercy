@@ -9,8 +9,9 @@ import { events } from '../shared/events';
 
 let io: Server | null = null;
 
-export function initRealtime(http: HttpServer, corsOrigins: string[]) {
-  io = new Server(http, { cors: { origin: corsOrigins.length ? corsOrigins : true, credentials: true } });
+export function initRealtime(http: HttpServer, allowed: (origin: string) => boolean) {
+  // Mesma regra do CORS HTTP (app.ts → originAllowed), curingas de preview inclusos.
+  io = new Server(http, { cors: { origin: (o, cb) => cb(null, !o || allowed(o)), credentials: true } });
 
   io.use((socket, next) => {
     const token = (socket.handshake.auth?.token as string | undefined) ?? socket.handshake.headers.authorization?.replace(/^Bearer /, '');

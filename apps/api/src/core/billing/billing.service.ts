@@ -54,6 +54,8 @@ export function publicCatalog() {
     trialDays: env.BILLING_TRIAL_DAYS,
     methods: ['CARD', 'BOLETO', 'PIX_AUTO'] as BillingMethod[],
     provider: env.BILLING_PROVIDER,
+    /// A loja mostra "ambiente de demonstração: pagamento simulado" fora de produção.
+    stage: env.APP_STAGE,
     google: { mode: googleMode(), clientId: env.GOOGLE_CLIENT_ID ?? null },
   };
 }

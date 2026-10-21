@@ -20,6 +20,11 @@ const path = require('node:path');
     if ((line.match(/\$\$/g) || []).length % 2 === 1) inDollar = !inDollar;
     if (!inDollar && /;\s*$/.test(line)) { stmts.push(buf.trim()); buf = ''; }
   }
+  // Banco gerenciado (Railway/Neon) nasce com UM papel. Sem o do tenant, os GRANTs falhariam e o
+  // RLS não seria aplicado. Criamos o papel SEM LOGIN e SEM senha: políticas e privilégios ficam
+  // prontos, e ligar o login (com senha, à mão, fora do código) é o passo de produção em TASKS.md.
+  const [{ exists }] = await prisma.$queryRawUnsafe(`SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') AS exists`);
+  if (!exists) { await prisma.$executeRawUnsafe(`CREATE ROLE ${role} NOLOGIN`); console.log(`Papel ${role} criado sem login (defina a senha à mão para separar os papéis).`); }
   let n = 0;
   for (const s of stmts) { if (s) { await prisma.$executeRawUnsafe(s); n++; } }
   const [{ count }] = await prisma.$queryRawUnsafe("SELECT count(*)::int AS count FROM pg_policies WHERE policyname = 'tenant_isolation'");

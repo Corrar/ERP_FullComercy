@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "description": "FullComercy — ERP SaaS modular e multi-tenant (Node.js + TypeScript + Express 5 + Prisma)",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "scripts": {
     "dev": "ts-node src/server.ts",
     "build": "prisma generate && tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",

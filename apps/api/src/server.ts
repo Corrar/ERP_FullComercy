@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { env } from './config/env';
-import { buildApp, corsOrigins } from './app';
+import { buildApp, originAllowed } from './app';
 import { prisma } from './infra/prisma';
 import { initRealtime } from './infra/realtime';
 import { startJobs, stopJobs } from './jobs/scheduler';
@@ -9,7 +9,7 @@ import { coreJobs } from './jobs/core.jobs';
 
 const app = buildApp();
 const server = createServer(app);
-initRealtime(server, corsOrigins());
+initRealtime(server, originAllowed);
 startJobs([...coreJobs, ...moduleRegistry.allJobs()]);
 
 server.listen(env.PORT, () => {

@@ -53,6 +53,17 @@ function collect(prefix: string, router: import('express').Router, auth: Mounted
 
 export const corsOrigins = () => env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
 
+/** Origem permitida? Entrada com `*` casa um rótulo de host (ex.: `https://erp-*-corrars-projects.vercel.app`
+ *  para os previews da Vercel); o resto é igualdade exata. localhost sempre passa (dev). */
+export function originAllowed(origin: string): boolean {
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+  return corsOrigins().some((o) => {
+    if (!o.includes('*')) return o === origin;
+    const re = new RegExp('^' + o.split('*').map((p) => p.replace(/[.+?^${}()|[\]\\/]/g, '\\$&')).join('[a-z0-9-]+') + '$');
+    return re.test(origin);
+  });
+}
+
 export function buildApp() {
   // 0. Registro: estratégia do core primeiro, depois cada módulo se apresenta.
   salesStrategies.registerCore(coreSalesStrategy);
@@ -69,10 +80,9 @@ export function buildApp() {
   app.use(csvMiddleware);
   app.use(rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: true, legacyHeaders: false }));
 
-  const origins = corsOrigins();
   app.use(cors({
     origin: (origin, cb) => {
-      if (!origin || origins.includes(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+      if (!origin || originAllowed(origin)) return cb(null, true);
       cb(new Error('Bloqueio CORS: origem não permitida'), false);
     },
     credentials: true,

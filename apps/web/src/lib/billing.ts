@@ -13,7 +13,7 @@ import type { Cart } from './cart';
 export type BillingMethod = 'CARD' | 'BOLETO' | 'PIX_AUTO';
 export interface Feature { key: string; module: ModuleKey | null; label: string; description: string; price: string; required?: boolean; requires?: string[]; permissions: string[] }
 export interface ModuleOffer { key: ModuleKey; name: string; tagline: string; forWho: string }
-export interface Catalog { modules: ModuleOffer[]; features: Feature[]; trialDays: number; methods: BillingMethod[]; provider: string; google: { mode: 'real' | 'mock' | 'off'; clientId: string | null } }
+export interface Catalog { modules: ModuleOffer[]; features: Feature[]; trialDays: number; methods: BillingMethod[]; provider: string; stage: 'local' | 'staging' | 'production'; google: { mode: 'real' | 'mock' | 'off'; clientId: string | null } }
 export interface QuoteItem { key: string; module: ModuleKey | null; label: string; price: string; reason: 'selected' | 'required' | 'dependency'; requiredBy?: string }
 export interface Quote { modules: ModuleKey[]; items: QuoteItem[]; total: string }
 

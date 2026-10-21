@@ -6,6 +6,11 @@ import { z } from 'zod';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  /// ONDE este deploy roda, separado do NODE_ENV (que é modo de execução do Node/Express):
+  /// `production` = clientes reais pagando; `staging` = homologação/demonstração pública com
+  /// cobrança e Google SIMULADOS; `local` = máquina do dev. Ausente: `production` se NODE_ENV for
+  /// production, senão `local` — esquecer a variável nunca libera simulador num deploy.
+  APP_STAGE: z.enum(['local', 'staging', 'production']).optional(),
   PORT: z.coerce.number().int().positive().default(3000),
   /// Conexão do TENANT: papel comum, sujeito ao RLS. É a que o código de negócio usa.
   DATABASE_URL: z.string().min(1, 'DATABASE_URL ausente'),
@@ -63,12 +68,14 @@ if (!parsed.success) {
   console.error('⛔ Ambiente inválido:', parsed.error.flatten().fieldErrors);
   process.exit(78); // EX_CONFIG
 }
-// Os dois simuladores dão acesso sem pagar ou sem Google de verdade: em produção são erro de
-// configuração, não escolha. Falha no boot (mesma régua das variáveis obrigatórias).
-if (parsed.data.NODE_ENV === 'production' && (parsed.data.GOOGLE_AUTH_MOCK || parsed.data.BILLING_PROVIDER === 'mock')) {
-  console.error('⛔ Ambiente inválido: GOOGLE_AUTH_MOCK=1 e BILLING_PROVIDER=mock são só de desenvolvimento.');
+const stage = parsed.data.APP_STAGE ?? (parsed.data.NODE_ENV === 'production' ? 'production' : 'local');
+// Os dois simuladores dão acesso sem pagar ou sem Google de verdade: em PRODUÇÃO são erro de
+// configuração, não escolha. Falha no boot (mesma régua das variáveis obrigatórias). Homologação
+// (`APP_STAGE=staging`) é opt-in explícito e a loja avisa na tela que o pagamento é simulado.
+if (stage === 'production' && (parsed.data.GOOGLE_AUTH_MOCK || parsed.data.BILLING_PROVIDER === 'mock')) {
+  console.error('⛔ Ambiente inválido: GOOGLE_AUTH_MOCK=1 e BILLING_PROVIDER=mock só valem fora de produção (APP_STAGE=staging|local).');
   process.exit(78);
 }
 
-export const env = parsed.data;
+export const env = { ...parsed.data, APP_STAGE: stage };
 export const isProd = env.NODE_ENV === 'production';

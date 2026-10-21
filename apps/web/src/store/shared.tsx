@@ -11,7 +11,7 @@ import { useTheme } from '@/app/theme';
 import { useAccount } from '@/lib/account';
 import { useCart } from '@/lib/cart';
 import { brl } from '@/lib/format';
-import { BRAND_LABEL, cardBrand, maskCard, maskExp, METHOD_LABEL, onlyDigits, type BillingMethod, type CardInput, type Catalog, type Feature, type Quote } from '@/lib/billing';
+import { useCatalog, BRAND_LABEL, cardBrand, maskCard, maskExp, METHOD_LABEL, onlyDigits, type BillingMethod, type CardInput, type Catalog, type Feature, type Quote } from '@/lib/billing';
 import type { ModuleKey } from '@/lib/session';
 
 export const MODULE_SLUG: Record<ModuleKey, string> = { VAREJO: 'varejo', FOOD: 'food', ACADEMIA: 'academia', SERVICOS: 'servicos' };
@@ -31,8 +31,13 @@ export function StoreLayout({ module, children, step }: { module?: ModuleKey | n
   const c = useCart();
   const { theme, setTheme } = useTheme();
   const nav = useNavigate();
+  const { data: catalog } = useCatalog();
+  // Fora de produção a cobrança é simulada: a loja diz isso em toda tela (ninguém digita cartão
+  // achando que vai ser cobrado de verdade, nem acredita que pagou).
+  const demo = catalog && catalog.stage !== 'production' && catalog.provider === 'mock';
   return (
     <div className="store" style={accentStyle(module)}>
+      {demo && <div className="demo-strip" role="note"><Icon name="info" size={15} /> Ambiente de demonstração: pagamentos simulados, nada é cobrado. Cartão de teste 4242 4242 4242 4242.</div>}
       <header className="store-top">
         <Link to="/comecar" className="brand" aria-label={`${BRAND.name} — início`}><span className="brand-mark"><Icon name="grid" size={18} stroke={2.2} /></span><span className="hide-sm">{BRAND.name}</span></Link>
         <div className="row" style={{ flexWrap: 'nowrap' }}>
