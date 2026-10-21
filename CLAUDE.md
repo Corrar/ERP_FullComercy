@@ -86,3 +86,6 @@ Detalhe e justificativa em `docs/ARQUITETURA.md`. O resumo que não pode ser esq
     da equipe, esqueci a senha e checkout. Falha FECHADA; obrigatório em produção.
 18. **CSP e cabeçalhos de segurança** em `apps/web/vercel.json`. Domínio novo no front (script, iframe,
     API) entra na CSP — e a jornada é conferida sob a CSP antes de publicar (MEMORY §4.1).
+19. **Toda função vendável tem vídeo de demonstração** gravado da tela REAL (`apps/web/demos`,
+    `npm run demos`). Função nova no catálogo = roteiro novo; tela de função mudou = regravar. Script
+    de terceiro (Stripe, Turnstile, Google) monta em elemento SEM filhos React (MEMORY §3).

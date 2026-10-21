@@ -25,6 +25,20 @@ mensal começa depois. Dentro do ERP, o menu **Assinatura** troca funções, for
 mostra faturas e cancela. Detalhes em `ARCHITECTURE.md` §3.2; preços em
 `apps/api/src/core/billing/catalog.ts`.
 
+Cada função da loja tem um **vídeo de demonstração** gravado da tela real do ERP: no computador o
+vídeo toca ao passar o mouse sobre o card; clicar (ou tocar, no celular) abre o player grande, de onde
+dá para adicionar a função. Os vídeos são gerados, não editados à mão:
+
+```bash
+cd apps/web
+npm run demos                       # grava demos/*.demo.ts e gera public/demos/<função>.{mp4,webm,jpg}
+node demos/finalizar.mjs food.salao  # refaz só os arquivos de uma função a partir da última gravação
+```
+
+O gravador cria uma empresa nova por comércio no banco **local** (API de plataforma), semeia dados
+de exemplo pela API (`demos/seeds*.ts`), abre a tela já logado e grava pelo screencast do Chromium.
+Mudou uma tela? Regrave o roteiro dela. Função nova vendável = roteiro novo em `demos/`.
+
 Em desenvolvimento: `GOOGLE_AUTH_MOCK=1` (Google simulado) e `BILLING_PROVIDER=mock` (cartão
 `4242 4242 4242 4242` aprova; final `0002` recusa). Os dois são recusados em produção.
 

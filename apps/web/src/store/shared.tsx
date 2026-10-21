@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon } from '@/components/icons';
-import { Avatar, Switch } from '@/components/ui';
+import { Avatar, Modal, Switch } from '@/components/ui';
 import { BRAND } from '@/app/brand';
 import { accentStyle, MODULE_LOOK } from '@/app/module-look';
 import { useTheme } from '@/app/theme';
@@ -14,6 +14,7 @@ import { brl } from '@/lib/format';
 import { useCatalog, BRAND_LABEL, cardBrand, maskCard, maskExp, METHOD_LABEL, onlyDigits, type BillingMethod, type CardInput, type Catalog, type Feature, type Quote } from '@/lib/billing';
 import type { ModuleKey } from '@/lib/session';
 import { cardStyle, getStripe, stripeErrorMessage } from '@/lib/stripe';
+import DEMOS_JSON from './demos.json';
 
 export const MODULE_SLUG: Record<ModuleKey, string> = { VAREJO: 'varejo', FOOD: 'food', ACADEMIA: 'academia', SERVICOS: 'servicos' };
 export const slugToModule = (s?: string): ModuleKey | null => (Object.entries(MODULE_SLUG).find(([, v]) => v === s)?.[0] as ModuleKey) ?? null;
@@ -76,41 +77,109 @@ export function ModuleBadge({ m, catalog }: { m: ModuleKey; catalog: Catalog }) 
  * As funções de um módulo + as do núcleo, com interruptor. Ligado/travado vem do ORÇAMENTO do
  * servidor (motivo `required`/`dependency`), não de regra repetida aqui.
  */
+/** Funções com vídeo de demonstração (gerado por `npm run demos`; `v` muda a cada regravação). */
+const DEMOS = DEMOS_JSON as Record<string, { duracao: number; v?: string }>;
+const demoSrc = (key: string, ext: 'mp4' | 'webm' | 'jpg') => `/demos/${key}.${ext}${DEMOS[key]?.v ? `?v=${DEMOS[key].v}` : ''}`;
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+/** H.264 primeiro (Safari/iPhone); VP9 para navegador sem H.264. O <video> pega o primeiro que conhece. */
+const DemoSources = ({ k }: { k: string }) => <><source src={demoSrc(k, 'mp4')} type="video/mp4" /><source src={demoSrc(k, 'webm')} type="video/webm" /></>;
+/** Prévia no hover só com mouse de verdade e sem pedido de menos movimento. */
+const previewOnHover = () => typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)').matches;
+
+interface FeatState { on: boolean; locked: boolean; why: string | null }
+
+/** A "tela" da função no card: capa; no hover toca o vídeo (só baixa aí); clique abre o player. */
+function FeatureMedia({ f, onOpen }: { f: Feature; onOpen: () => void }) {
+  const demo = DEMOS[f.key];
+  const vid = useRef<HTMLVideoElement>(null);
+  const [hover, setHover] = useState(false);
+  const [armed, setArmed] = useState(false); // o <video> (e o download) só nasce no primeiro hover
+  // Toca/para DEPOIS do render: no próprio mouseenter o <video> ainda não existe.
+  useEffect(() => {
+    const v = vid.current; if (!v) return;
+    if (hover) void v.play().catch(() => {}); else { v.pause(); v.currentTime = 0; }
+  }, [hover, armed]);
+  if (!demo) {
+    return <div className="feat-media empty" aria-hidden><Icon name={FEATURE_ICON[f.key] ?? 'dot'} size={34} stroke={1.6} /></div>;
+  }
+  const enter = () => { if (!previewOnHover()) return; setArmed(true); setHover(true); };
+  const leave = () => setHover(false);
+  return (
+    <button type="button" className={`feat-media ${hover ? 'playing' : ''}`} onClick={(e) => { e.stopPropagation(); onOpen(); }} onMouseEnter={enter} onMouseLeave={leave} aria-label={`Ver demonstração: ${f.label}`}>
+      <img src={demoSrc(f.key, 'jpg')} alt="" loading="lazy" decoding="async" />
+      {armed && <video ref={vid} muted loop playsInline preload="auto" aria-hidden><DemoSources k={f.key} /></video>}
+      <span className="feat-play"><Icon name="play" size={13} className="fill" /> Ver demonstração · {mmss(demo.duracao)}</span>
+    </button>
+  );
+}
+
+/** Player grande: o vídeo da função + o que ela faz + adicionar/remover dali mesmo. */
+function DemoModal({ f, st, onClose, onToggle }: { f: Feature; st: FeatState; onClose: () => void; onToggle: () => void }) {
+  return (
+    <Modal title={f.label} open onClose={onClose} wide>
+      {/* O modal vai para o <body> (portal) e perde a cor do módulo: reaplica aqui. */}
+      <div style={f.module ? accentStyle(f.module as ModuleKey) : undefined}>
+      <div className="demo-player">
+        <video poster={demoSrc(f.key, 'jpg')} autoPlay muted loop playsInline controls><DemoSources k={f.key} /></video>
+      </div>
+      <p className="muted" style={{ margin: '14px 0 16px' }}>{f.description}</p>
+      <div className="row between" style={{ gap: 12, flexWrap: 'wrap' }}>
+        <div className="feat-price">{brl(f.price)}<small>/mês</small></div>
+        {st.locked
+          ? <span className="badge"><Icon name="lock" size={12} /> {st.why}</span>
+          : <button className={`btn ${st.on ? '' : 'primary'}`} onClick={() => { onToggle(); onClose(); }}><Icon name={st.on ? 'minus' : 'plus'} /> {st.on ? 'Remover do meu ERP' : 'Adicionar ao meu ERP'}</button>}
+      </div>
+      </div>
+    </Modal>
+  );
+}
+
+function FeatureCard({ f, st, onToggle, onOpen }: { f: Feature; st: FeatState; onToggle: () => void; onOpen: () => void }) {
+  return (
+    <div className={`feat ${st.on ? 'on' : ''} ${st.locked ? 'locked' : ''}`} onClick={() => !st.locked && onToggle()} data-feature={f.key}>
+      <FeatureMedia f={f} onOpen={onOpen} />
+      {st.on && <span className="feat-check" aria-hidden><Icon name="check" size={14} stroke={2.6} /></span>}
+      <div className="feat-body">
+        <div className="name"><span className="ico"><Icon name={FEATURE_ICON[f.key] ?? 'dot'} size={15} /></span>{f.label}</div>
+        {st.why && <span className="badge feat-why"><Icon name="lock" size={11} /> {st.why}</span>}
+        <div className="desc">{f.description}</div>
+        <div className="feat-foot">
+          <div className="feat-price">{brl(f.price)}<small>/mês</small></div>
+          <Switch on={st.on} disabled={st.locked} onChange={() => onToggle()} label={`${st.on ? 'Remover' : 'Adicionar'} ${f.label}`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function FeatureList({ catalog, modules, quote, selected, onToggle }: { catalog: Catalog; modules: ModuleKey[]; quote: Quote | null; selected: string[]; onToggle: (key: string) => void }) {
   const byKey = new Map(catalog.features.map((f) => [f.key, f]));
   const items = new Map((quote?.items ?? []).map((i) => [i.key, i]));
-  const row = (f: Feature) => {
+  const [open, setOpen] = useState<string | null>(null);
+  const state = (f: Feature): FeatState => {
     const it = items.get(f.key);
-    const on = !!it || selected.includes(f.key);
     const locked = !!it && it.reason !== 'selected';
     const why = it?.reason === 'required' ? (f.module ? 'Essencial do módulo' : 'Incluído em todo ERP') : it?.reason === 'dependency' ? `Exigido por ${byKey.get(it.requiredBy ?? '')?.label ?? 'outra função'}` : null;
-    return (
-      <div key={f.key} className={`feat ${on ? 'on' : ''} ${locked ? 'locked' : ''}`} onClick={() => !locked && onToggle(f.key)} data-feature={f.key}>
-        <span className="ico"><Icon name={FEATURE_ICON[f.key] ?? 'dot'} size={19} /></span>
-        <div className="body">
-          <div className="name">{f.label}{why && <span className="badge"><Icon name="lock" size={11} /> {why}</span>}</div>
-          <div className="desc">{f.description}</div>
-        </div>
-        <div className="price">{brl(f.price)}<small>/mês</small></div>
-        <Switch on={on} disabled={locked} onChange={() => onToggle(f.key)} label={`${on ? 'Remover' : 'Adicionar'} ${f.label}`} />
-      </div>
-    );
+    return { on: !!it || selected.includes(f.key), locked, why };
   };
+  const card = (f: Feature) => <FeatureCard key={f.key} f={f} st={state(f)} onToggle={() => onToggle(f.key)} onOpen={() => setOpen(f.key)} />;
+  const aberto = open ? byKey.get(open) : undefined;
   return (
-    <div className="stack" style={{ gap: 22 }}>
+    <div className="stack" style={{ gap: 28 }}>
       {modules.map((m) => {
         const off = catalog.modules.find((x) => x.key === m)!;
         return (
-          <section key={m} className="stack" style={accentStyle(m)}>
-            <div><h2 style={{ margin: 0 }}>Funções de {off.name}</h2><div className="muted small">O que é exclusivo do seu tipo de comércio.</div></div>
-            {catalog.features.filter((f) => f.module === m).map(row)}
+          <section key={m} className="stack" style={{ ...accentStyle(m), gap: 14 }}>
+            <div><h2 style={{ margin: 0 }}>Funções de {off.name}</h2><div className="muted small">O que é exclusivo do seu tipo de comércio. Passe o mouse ou toque na tela para ver funcionando.</div></div>
+            <div className="feat-grid">{catalog.features.filter((f) => f.module === m).map(card)}</div>
           </section>
         );
       })}
-      <section className="stack">
+      <section className="stack" style={{ gap: 14 }}>
         <div><h2 style={{ margin: 0 }}>Núcleo do sistema</h2><div className="muted small">Serve a qualquer comércio. Ligue só o que vai usar.</div></div>
-        {catalog.features.filter((f) => !f.module).map(row)}
+        <div className="feat-grid">{catalog.features.filter((f) => !f.module).map(card)}</div>
       </section>
+      {aberto && <DemoModal f={aberto} st={state(aberto)} onClose={() => setOpen(null)} onToggle={() => onToggle(aberto.key)} />}
     </div>
   );
 }

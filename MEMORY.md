@@ -100,6 +100,19 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 - O proxy deste container recusa api.stripe.com, js.stripe.com e challenges.cloudflare.com: teste de
   Stripe/Turnstile é com dublê (unit) e a prova real é no ambiente publicado.
 
+## 4.2 Vídeos de demonstração da loja (21/10/2026)
+
+- Câmera = screencast do Chromium (CDP `Page.startScreencast`): quadros JPEG com a hora em que foram
+  pintados, montados pelo demuxer concat do ffmpeg do sistema. O vídeo do Playwright pede
+  `/opt/pw-browsers/ffmpeg-1013` e a máquina tem só o 1011 (e não se roda `playwright install`).
+- O Chromium do Playwright é de código aberto: NÃO decodifica H.264. Por isso cada demo sai também em
+  WebM/VP9 (`<source>` mp4 primeiro, para o Safari/iPhone). Teste de "o vídeo toca" aqui só vale com
+  o webm presente.
+- Janela 1024×640 + menu recolhido (`fc.sidebar=c`): em 1200 px com menu, a tela fica ilegível no card.
+- `?v=<impressão>` na URL (src/store/demos.json) + cache imutável de 1 ano em `/demos/*` na Vercel.
+- PDV lê o terminal de `fc.terminal` (padrão `CAIXA-1`): caixa aberto pela API em outro nome = "Sem
+  caixa aberto neste terminal".
+
 ## 5. Como rodar e verificar (atalho)
 
 ```bash
