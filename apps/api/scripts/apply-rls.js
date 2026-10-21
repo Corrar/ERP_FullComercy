@@ -6,7 +6,9 @@ const { PrismaClient } = require('@prisma/client');
 const fs = require('node:fs');
 const path = require('node:path');
 (async () => {
-  const url = process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL;
+  // connect_timeout: mesma regra de src/infra/db-url.ts (Neon acorda devagar; o padrão de 5 s cai).
+  const raw = process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL;
+  const url = !raw || /[?&]connect_timeout=/.test(raw) ? raw : raw + (raw.includes('?') ? '&' : '?') + 'connect_timeout=20';
   const prisma = new PrismaClient({ datasourceUrl: url });
   let sql = fs.readFileSync(path.join(__dirname, '..', 'prisma', 'sql', '001_rls_tenant.sql'), 'utf8');
   // O arquivo é escrito para psql: resolve o `\set app_role` e remove a linha.

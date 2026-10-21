@@ -7,6 +7,9 @@
 //   node scripts/prisma-admin.js migrate deploy
 require('dotenv/config');
 const { spawnSync } = require('node:child_process');
-const env = { ...process.env, DATABASE_URL: process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL };
+// connect_timeout: mesma regra de src/infra/db-url.ts (Neon acorda devagar; o padrão de 5 s cai).
+const withTimeout = (u) => (!u || /[?&]connect_timeout=/.test(u) ? u : u + (u.includes('?') ? '&' : '?') + 'connect_timeout=20');
+const url = withTimeout(process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL);
+const env = { ...process.env, DATABASE_URL: url, ...(process.env.DATABASE_ADMIN_URL ? { DATABASE_ADMIN_URL: url } : {}) };
 const r = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['prisma', ...process.argv.slice(2)], { stdio: 'inherit', env });
 process.exit(r.status ?? 1);

@@ -17,3 +17,12 @@ test('origem exata, curinga de preview e localhost passam; o resto não', async 
   assert.equal(originAllowed('https://outro.example.com'), false);
   assert.equal(originAllowed('http://erp.example.com'), false);
 });
+
+test('URL do banco ganha connect_timeout de 20 s só quando não traz um', async () => {
+  const { withConnectTimeout } = await import('../src/infra/db-url');
+  assert.equal(withConnectTimeout('postgresql://u@h/db?sslmode=require'), 'postgresql://u@h/db?sslmode=require&connect_timeout=20');
+  assert.equal(withConnectTimeout('postgresql://u@h/db'), 'postgresql://u@h/db?connect_timeout=20');
+  // Contra-prova: valor já escolhido por quem configurou não é trocado.
+  assert.equal(withConnectTimeout('postgresql://u@h/db?connect_timeout=5'), 'postgresql://u@h/db?connect_timeout=5');
+  assert.equal(withConnectTimeout(undefined), undefined);
+});

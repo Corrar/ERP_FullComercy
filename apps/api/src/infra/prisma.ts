@@ -21,14 +21,15 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { env } from '../config/env';
+import { withConnectTimeout } from './db-url';
 
 const log: Prisma.LogLevel[] = env.NODE_ENV === 'production' ? ['error'] : ['warn', 'error'];
 
 /** PLATAFORMA — papel com BYPASSRLS. */
-export const prisma = new PrismaClient({ datasourceUrl: env.DATABASE_ADMIN_URL ?? env.DATABASE_URL, log });
+export const prisma = new PrismaClient({ datasourceUrl: withConnectTimeout(env.DATABASE_ADMIN_URL ?? env.DATABASE_URL), log });
 
 /** TENANT — papel comum, sujeito ao RLS. Mesmo client quando não há separação. */
-const rlsBase: PrismaClient = env.DATABASE_ADMIN_URL ? new PrismaClient({ datasourceUrl: env.DATABASE_URL, log }) : prisma;
+const rlsBase: PrismaClient = env.DATABASE_ADMIN_URL ? new PrismaClient({ datasourceUrl: withConnectTimeout(env.DATABASE_URL), log }) : prisma;
 
 /** Modelos SEM tenant_id: só o próprio Tenant. Qualquer modelo novo nasce escopado. */
 const GLOBAL_MODELS = new Set<string>(['Tenant']);

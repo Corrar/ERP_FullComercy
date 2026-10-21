@@ -34,12 +34,13 @@ Em desenvolvimento: `GOOGLE_AUTH_MOCK=1` (Google simulado) e `BILLING_PROVIDER=m
 |---|---|---|
 | Front (loja + ERP) | Vercel, projeto `erp-modular` | https://erp-modular-eta.vercel.app (exige login na Vercel: proteção padrão do time) |
 | API | Render, serviço `erp-modular-api` (free) | https://erp-modular-api.onrender.com |
-| Banco | Render Postgres `erp-modular-db` (free, **expira em 20/11/2026**) | só rede interna do Render |
+| Banco | **Neon**, projeto `ERP-Modular` (`empty-haze-70902164`), branch `homologacao`, banco `erp_modular`, Ohio | conexão **direta** (sem `-pooler`) |
 
 `APP_STAGE=staging`: cobrança e Google **simulados**, faixa de aviso na loja. Migrations e RLS
 rodam no start (`prisma:deploy && db:rls && start`; o plano free do Render não tem pre-deploy).
-O `DATABASE_URL` da API é colado pelo responsável no painel do Render (Internal Database URL do
-`erp-modular-db`) — o executor não lê connection string (regra permanente). `apps/api/railway.json`
+O `DATABASE_URL` da API é colado pelo responsável no painel do Render: a connection string do
+Neon (console → projeto ERP-Modular → Connect, **pooling desligado**) — o executor não lê
+connection string (regra permanente). A API completa sozinha `connect_timeout=20` (cold start do Neon). `apps/api/railway.json`
 fica pronto para o dia em que o Railway liberar deploys nesta conta.
 
 ## Rodar tudo
