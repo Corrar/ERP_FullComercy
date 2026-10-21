@@ -237,6 +237,10 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; backgro
 .btn-pill.google { background: var(--surface); color: var(--text); border: 1px solid var(--line-strong); font-weight: 700; }
 .btn-pill.google:hover { background: var(--hover); }
 .btn-pill:disabled, .btn-pill[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.google-real { position: relative; border-radius: 999px; }
+.google-real-layer { position: absolute; inset: 0; overflow: hidden; border-radius: 999px; opacity: .001; }
+.google-real:hover .btn-pill.google { background: var(--hover); }
+.google-real:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
 .or { display: flex; align-items: center; gap: 12px; color: var(--faint); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
 .or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .linkish { all: unset; cursor: pointer; color: var(--brand); font-weight: 700; font-size: 13.5px; }

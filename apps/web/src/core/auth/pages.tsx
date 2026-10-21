@@ -76,7 +76,16 @@ function GoogleButton({ onCredential, busy }: { onCredential: (c: string) => voi
     if (mode === 'real' && ref.current && catalog?.google.clientId) renderGoogleButton(ref.current, catalog.google.clientId, onCredential).catch((e) => setErr(e.message));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
-  if (mode === 'real') return <><div ref={ref} style={{ display: 'flex', justifyContent: 'center', minHeight: 44 }} />{err && <ErrorBox error={err} />}</>;
+  if (mode === 'real') return (
+    <>
+      {/* A pílula é só o desenho; o clique cai no botão do Google por cima (transparente). */}
+      <div className="google-real">
+        <div className="btn-pill google" aria-hidden><GoogleG size={20} /> Continuar com o Google</div>
+        <div ref={ref} className="google-real-layer" />
+      </div>
+      {err && <ErrorBox error={err} />}
+    </>
+  );
   return (
     <>
       <button type="button" className="btn-pill google" disabled={busy || mode === 'off'} onClick={() => setMock(true)} title={mode === 'off' ? 'Login com Google não configurado neste ambiente (GOOGLE_CLIENT_ID)' : undefined}>
