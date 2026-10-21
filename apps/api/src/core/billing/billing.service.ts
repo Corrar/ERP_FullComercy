@@ -48,8 +48,9 @@ const serializeResolved = (r: Resolved) => ({
 export function publicCatalog() {
   return {
     modules: MODULE_OFFERS,
-    // `permissions` é detalhe interno: a vitrine fala de função, não de chave.
-    features: FEATURES.map(({ permissions: _p, ...f }) => f),
+    // `permissions` vai junto de propósito: a PRÉVIA do ERP filtra o menu com as mesmas chaves que
+    // o menu real usa (`can(perm)`) — um segundo mapeamento "função → tela" no front divergiria.
+    features: FEATURES,
     trialDays: env.BILLING_TRIAL_DAYS,
     methods: ['CARD', 'BOLETO', 'PIX_AUTO'] as BillingMethod[],
     provider: env.BILLING_PROVIDER,

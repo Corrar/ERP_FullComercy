@@ -17,17 +17,29 @@ import { Company } from '@/core/company/Company';
 import { Account } from '@/core/auth/Account';
 import { Storefront, OrderTracking } from '@/public/Storefront';
 import { CustomerDetail } from '@/core/customers/CustomerDetail';
+import { Subscription } from '@/core/billing/Subscription';
+import { Landing } from '@/store/Landing';
+import { Configurator } from '@/store/Configurator';
+import { Preview } from '@/store/Preview';
+import { Cart } from '@/store/Cart';
+import { Checkout } from '@/store/Checkout';
+import { MyAccount } from '@/store/MyAccount';
+import { accountSession } from '@/lib/account';
 import { ProductDetail } from '@/core/products/ProductDetail';
 import { PurchaseDetail } from '@/core/purchases/PurchaseDetail';
 
+/** Sem sessão de empresa: quem tem conta vai para "minhas empresas"; quem não tem cai na LOJA
+ *  (o app abre na escolha do comércio, como pedido). Deep link para uma tela do ERP → login. */
 function RequireAuth() {
   const { s } = useSession(); const loc = useLocation();
-  return s ? <Outlet /> : <Navigate to="/login" state={{ from: loc.pathname }} replace />;
+  if (s) return <Outlet />;
+  if (loc.pathname === '/') return <Navigate to={accountSession.get() ? '/minha-conta' : '/comecar'} replace />;
+  return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
 }
 /** Rota de módulo: 404 amigável se a empresa não tem o módulo (o back já devolveria 403). */
 function RequireModule({ k }: { k: 'VAREJO' | 'FOOD' | 'ACADEMIA' | 'SERVICOS' }) {
   const { hasModule } = useSession();
-  return hasModule(k) ? <Outlet /> : <div className="card">Este módulo não está ativo para a sua empresa. Ative em <a href="/empresa">Empresa e módulos</a>.</div>;
+  return hasModule(k) ? <Outlet /> : <div className="card">Este módulo não está ativo para a sua empresa. Adicione em <a href="/assinatura">Assinatura</a> ou ative em <a href="/empresa">Empresa e módulos</a>.</div>;
 }
 
 export const router = createBrowserRouter([
@@ -35,6 +47,13 @@ export const router = createBrowserRouter([
   { path: '/esqueci-senha', element: <Forgot /> },
   { path: '/redefinir-senha', element: <Reset /> },
   { path: '/definir-senha', element: <Reset invite /> },
+  // Loja de módulos (pública até o pagamento; checkout e minhas empresas pedem a conta).
+  { path: '/comecar', element: <Landing /> },
+  { path: '/comecar/:modulo', element: <Configurator /> },
+  { path: '/previa', element: <Preview /> },
+  { path: '/carrinho', element: <Cart /> },
+  { path: '/checkout', element: <Checkout /> },
+  { path: '/minha-conta', element: <MyAccount /> },
   // Público (cliente final): vitrine do cardápio e acompanhamento do pedido.
   { path: '/cardapio/:tenant/:menu', element: <Storefront /> },
   { path: '/pedido/:tenant/:numero', element: <OrderTracking /> },
@@ -59,6 +78,7 @@ export const router = createBrowserRouter([
         { path: '/integracoes', element: <Integrations /> },
         { path: '/empresa', element: <Company /> },
         { path: '/conta', element: <Account /> },
+        { path: '/assinatura', element: <Subscription /> },
         ...MODULES.map((m) => ({ element: <RequireModule k={m.key} />, children: m.routes })),
         { path: '*', element: <div className="card">Página não encontrada.</div> },
       ],

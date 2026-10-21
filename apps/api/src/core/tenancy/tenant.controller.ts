@@ -5,6 +5,7 @@ import { parse } from '../../shared/http';
 import { ctx } from './tenant-context';
 import * as svc from './tenant-modules.service';
 import { moduleRegistry } from '../../modules/module.registry';
+import { AppError } from '../../shared/errors';
 
 export async function getModules(_req: Request, res: Response) {
   const rows = await svc.listModules(ctx().tenantId);
@@ -27,6 +28,13 @@ const putSchema = z.object({
 export async function putModule(req: Request, res: Response) {
   const key = parse(z.nativeEnum(ModuleKey), req.params.key);
   const body = parse(putSchema, req.body);
+  // Empresa contratada pela loja: módulo é item do PLANO (tem preço). Ligar aqui daria o módulo
+  // sem cobrar (e desligar, cobrar sem dar). O caminho é `PUT /billing/subscription/features`.
+  // Só `config` de módulo já ligado segue livre por esta rota.
+  const snap = await svc.loadTenantSnapshot(ctx().tenantId);
+  if (snap.planKeys && body.enabled !== snap.modules.has(key)) {
+    throw AppError.conflict('Os módulos desta empresa fazem parte da assinatura. Adicione ou remova pelo menu Assinatura.');
+  }
   const row = body.enabled
     ? await svc.enableModule(ctx().tenantId, key, body.config as never)
     : await svc.disableModule(ctx().tenantId, key);

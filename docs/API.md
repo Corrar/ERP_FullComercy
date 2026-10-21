@@ -1,8 +1,10 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-17. 250 rotas.
+> Gerado por `npm run docs:api` em 2026-10-21. 265 rotas.
 
-Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado.
+Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
+
+Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/companies/:id/session` e `/account/checkout` exigem o token da CONTA do comprador (o de `/account/login|register|google`), que não abre rota de empresa — e vice-versa. `/billing/*` segue aberto para empresa suspensa.
 
 ## Público
 
@@ -17,6 +19,15 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `POST` | `/auth/reset` |  |
 | `GET` | `/auth/me` |  |
 | `POST` | `/public/payments/:provider/webhook` |  |
+| `GET` | `/public/billing/catalog` |  |
+| `POST` | `/public/billing/quote` |  |
+| `POST` | `/public/billing/webhooks/:provider` |  |
+| `POST` | `/account/register` |  |
+| `POST` | `/account/login` |  |
+| `POST` | `/account/google` |  |
+| `GET` | `/account/me` |  |
+| `POST` | `/account/companies/:tenantId/session` |  |
+| `POST` | `/account/checkout` |  |
 | `GET` | `/public/food/cardapio/:tenant/:menu` |  |
 | `POST` | `/public/food/pedidos/:tenant` |  |
 | `GET` | `/public/food/pedidos/:tenant/:numero` |  |
@@ -37,6 +48,17 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | Método | Rota | Permissão |
 |---|---|---|
 | `GET` | `/audit/` | `core.tenant:manage` |
+
+## Core · billing
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/billing/subscription` | `core.billing:manage` |
+| `PUT` | `/billing/subscription/features` | `core.billing:manage` |
+| `PUT` | `/billing/payment-method` | `core.billing:manage` |
+| `POST` | `/billing/invoices/:id/pay` | `core.billing:manage` |
+| `POST` | `/billing/subscription/cancel` | `core.billing:manage` |
+| `POST` | `/billing/subscription/reactivate` | `core.billing:manage` |
 
 ## Core · customers
 
@@ -359,7 +381,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `GET` | `/m/varejo/relatorios/abc` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/sem-giro` | `varejo.relatorios:view` |
 
-## Catálogo de permissões (51)
+## Catálogo de permissões (52)
 
 | Chave | Descrição | Módulo |
 |---|---|---|
@@ -383,6 +405,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `core.suppliers:manage` | Cadastrar fornecedores | core |
 | `core.payments:manage` | Cobrar online (PIX/link) | core |
 | `core.webhooks:manage` | Integrações (webhooks) | core |
+| `core.billing:manage` | Gerir assinatura e pagamento | core |
 | `varejo.pdv:operate` | Operar PDV (abrir caixa, vender) | VAREJO |
 | `varejo.pdv:close` | Fechar caixa | VAREJO |
 | `varejo.grade:manage` | Gerir grades (tamanho/cor) | VAREJO |
@@ -421,6 +444,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 |---|---|
 | core.outbox-dispatch | 1 min |
 | core.payments-expire | 5 min |
+| core.billing-cycle | 15 min |
 | gym.cobranca-recorrente | 360 min |
 | gym.gerar-sessoes | 720 min |
 

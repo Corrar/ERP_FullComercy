@@ -12,8 +12,9 @@ export async function apiLogin(request: APIRequestContext, tenant: string) {
 }
 
 export async function uiLogin(page: Page, tenant: string) {
-  await page.goto('/login');
-  await page.getByPlaceholder('minha-loja').fill(tenant);
+  // Funcionário/empresa do seed: a porta é "Acesso da equipe" (empresa + e-mail + senha).
+  await page.goto('/login?modo=funcionario');
+  await page.getByPlaceholder('Identificador da empresa (ex.: minha-loja)').fill(tenant);
   await page.locator('input[name=email]').fill(`admin@${tenant}.local`);
   await page.locator('input[name=password]').fill(SENHA);
   await page.getByRole('button', { name: 'Entrar' }).click();

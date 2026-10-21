@@ -31,7 +31,7 @@ if (!E2E) {
     assert.equal(cat.trialDays, 7);
     assert.deepEqual(cat.methods, ['CARD', 'BOLETO', 'PIX_AUTO']);
     assert.equal(cat.modules.length, 4);
-    assert.ok(cat.features.every((f: any) => f.permissions === undefined), 'chave interna não vaza');
+    assert.ok(cat.features.every((f: any) => Array.isArray(f.permissions) && f.permissions.length), 'a prévia precisa das chaves de cada função');
     const q = await api().post('/public/billing/quote', { modules: ['VAREJO'], features: ['varejo.etiquetas'] });
     // mínimo do Varejo 114,50 + Etiquetas 9,90
     assert.equal(q.total, '124.40');
@@ -99,6 +99,14 @@ if (!E2E) {
     assert.equal((await A.raw('GET', '/m/varejo/etiquetas/modelos')).status, 403);
     const me = await A.get('/auth/me');
     assert.ok(me.permissions.includes('varejo.grade:manage') && !me.permissions.includes('varejo.etiquetas:print'));
+    // Ligar módulo pela tela antiga daria o módulo sem cobrar: recusado (o caminho é a assinatura).
+    assert.equal((await A.raw('PUT', '/tenant/modules/FOOD', { enabled: true })).status, 409);
+    const add = await A.put('/billing/subscription/features', { modules: ['VAREJO', 'FOOD'], features: ['varejo.grade'] });
+    assert.deepEqual(add.modules.sort(), ['FOOD', 'VAREJO']);
+    assert.ok((await A.get('/auth/me')).modules.includes('FOOD'));
+    const volta = await A.put('/billing/subscription/features', { modules: ['VAREJO'], features: ['varejo.grade'] });
+    assert.equal(volta.amount, '129.40');
+    assert.deepEqual((await A.get('/auth/me')).modules, ['VAREJO']);
   });
 
   test('segunda compra da mesma conta: sem teste, boleto emitido e baixado pelo webhook', async () => {

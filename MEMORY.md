@@ -35,6 +35,11 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Teste de CSV falhava com BOM | `fetch().text()` remove o BOM | asserção pelo conteúdo, não pelo BOM |
 | Teste de webhook falhava em rodadas seguintes | webhooks antigos apontando para porta morta no mesmo tenant | tenant novo por rodada |
 | `unit_cost` vinha `'60.0000'` | `Decimal(14,4)::text` | comparar `Number()` |
+| `items: { create: [{ tenantId, … }] }` dava "Unknown argument tenantId" | create aninhado sob FK composta herda o tenant do pai | não passar `tenantId` no aninhado (`billing.service.ts`) |
+| Teste de suspensão passava sozinho e falhava na suíte | o ciclo de cobrança varre TODAS as empresas; outro teste já tinha renovado esta | viajar a partir do `currentPeriodEnd` real, não de data fixa |
+| PDV dava 403 em `/m/varejo/vendedores` numa empresa sem "Comissões" | o PDV buscava vendedores sempre | busca e campo só com `can('varejo.comissoes:view')` |
+| Google simulado no login mandava GET com e-mail na URL | Modal renderizado DENTRO do `<form>` do login (form dentro de form) | `Modal` por portal no `<body>` + `stopPropagation` no submit |
+| `npm run docs:api` falhava com ENOENT | caminho relativo ao cwd do workspace (`apps/api`) | caminho a partir de `__dirname` |
 | Postgres local caía "sozinho" | `pkill -f` com padrão que casava o próprio shell (exit 144) matou a sessão que iniciou o banco | iniciar com `setsid`; matar por `pgrep -f "[p]adrao"` |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
@@ -46,7 +51,12 @@ estratégia; outbox em tabela; front sem framework; monorepo.
   para `postgres`. `JOBS_ENABLED=0` em teste.
 - Seed cria `loja-demo` (VAREJO), `burger-demo` (FOOD), `fit-demo` (ACADEMIA), `oficina-demo`
   (SERVICOS), `posto-demo` (VAREJO+FOOD, padrão VAREJO); admin `admin@<slug>.local`, senha
-  `SEED_ADMIN_PASSWORD` (`Demo-12345678` no dev).
+  `SEED_ADMIN_PASSWORD` (`Demo-12345678` no dev). Seed não tem assinatura: plano não corta nada.
+- Loja em dev: `.env` com `GOOGLE_AUTH_MOCK=1` (Google simulado) e `BILLING_MOCK_WEBHOOK_TOKEN`.
+  Cartões de teste do mock: final `0002` recusa ao cadastrar, `0341` cadastra e recusa a cobrança,
+  `4242 4242 4242 4242` aprova. Webhook mock: `POST /public/billing/webhooks/mock` com
+  `x-billing-token` e `{ kind: 'invoice', providerRef, status: 'PAID' }` ou
+  `{ kind: 'pix_authorization', authorizationId, status: 'AUTHORIZED' }`.
 - Chromium do Playwright em `/opt/pw-browsers/chromium-*/chrome-linux/chrome` (passar
   `CHROMIUM_PATH` se a versão do runner divergir). Playwright sobe API em 3300 e Vite em 5180.
 - Prisma 6.19; `prisma.config.ts` com `datasource.url` não bastou para o CLI — o wrapper resolve.
@@ -56,10 +66,10 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 ```bash
 npm install
 npm run prisma:deploy && npm run db:rls && npm run db:seed
-npm run typecheck && npm test                    # sem banco: 17 unit
-npm run test:e2e                                 # com banco: 18 e2e API
-CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:ui   # 4 navegador
-npm run docs:api                                 # regenera docs/API.md (250 rotas)
+npm run typecheck && npm test                    # sem banco: 26 unit
+npm run test:e2e                                 # com banco: 26 e2e API
+CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:ui   # 5 navegador
+npm run docs:api                                 # regenera docs/API.md (265 rotas)
 ```
 
 ## 6. Glossário
@@ -72,6 +82,9 @@ npm run docs:api                                 # regenera docs/API.md (250 rot
 - **Outbox**: tabela de eventos duráveis a entregar.
 - **Comanda**: agrupa pedidos (rodadas) de uma mesa até fechar a conta.
 - **OS**: ordem de serviço; é um pedido com extensão `svc_service_orders`.
+- **Conta (do comprador)**: quem compra na loja; vive na plataforma e abre uma ou mais empresas.
+- **Função**: item vendável do catálogo da loja (preço + chaves de permissão).
+- **Plano**: as funções contratadas por uma empresa (`core_subscription_items`).
 - **Vale**: título a pagar de origem `RETURN` em aberto, abatido numa troca.
 
 ## 7. Onde está cada coisa
@@ -83,4 +96,9 @@ npm run docs:api                                 # regenera docs/API.md (250 rot
 | catálogo de permissões | `apps/api/src/core/rbac/permissions.ts` + `permissions` em cada `modules/*/index.ts` |
 | rotas e permissão por rota | `docs/API.md` |
 | menu do front | `apps/web/src/app/modules.ts` |
+| preço, funções e o que cada uma libera | `apps/api/src/core/billing/catalog.ts` |
+| checkout, ciclo de cobrança, webhook | `apps/api/src/core/billing/billing.service.ts` |
+| conta do comprador e Google | `apps/api/src/core/account/` |
+| loja (telas) | `apps/web/src/store/` |
+| identidade (nome/marca) | `apps/web/src/app/brand.ts` + `--brand` em `styles.css` |
 | o que falta | `TASKS.md` |

@@ -16,26 +16,38 @@
 
 ## 2. Sistema visual (apps/web/src/styles.css)
 
-Tokens em `:root`, um arquivo, sem framework:
+Referência: o design do **Fluxo Royale 5.0** (front) — Plus Jakarta Sans, painéis brancos de borda
+fina, cartões de raio 16, sidebar clara com item ativo preenchido pela cor do módulo, alternância
+claro/escuro, login em painel de marca + formulário em pílula com costura curva. Sem identidade de
+marca por enquanto: nome e marca em `app/brand.ts`, cor-base `--brand` (índigo neutro).
 
-| Token | Valor | Uso |
+| Token | Claro / Escuro | Uso |
 |---|---|---|
-| `--bg` / `--surface` | `#f6f7fb` / `#fff` | fundo da página / cartões |
-| `--text` / `--muted` | `#0f172a` / `#64748b` | texto / secundário |
-| `--primary` | `#2563eb` | ação principal, links, mesa reservada |
-| `--ok` / `--warn` / `--danger` | `#16a34a` / `#d97706` / `#dc2626` | status |
-| `--sidebar` | `#0f172a` | barra lateral escura |
-| `--radius` / `--shadow` | `10px` / suave | cartões, modais |
+| `--bg` / `--surface` | `#f4f4f3` / `#fff` · `#08090b` / `#0e0f12` | fundo / cartões e sidebar |
+| `--text` / `--muted` / `--faint` | `#1a1b1d` / `#6b6f76` / `#9a9da3` | texto / secundário / rótulos |
+| `--line` / `--line-strong` | `#ededeb` / `#e2e2df` | bordas |
+| `--accent` | cor do MÓDULO (Varejo `#2563eb`, Food `#ea580c`, Academia `#7c3aed`, Serviços `#0d9488`) | ação principal, item ativo, interruptores |
+| `--brand` | `#4348c4` | loja e login (sem módulo) |
+| `--ok` / `--warn` / `--danger` / `--info` | verde / âmbar / vermelho / azul (+ `-soft`) | status, faixas |
+| `--radius` / `--shadow` | `16px` / suave | cartões, modais |
 
-Tipografia: `system-ui`, 14px base, títulos 20/16. Grid de KPIs `auto-fill minmax(200px)`.
-Responsivo: abaixo de 900px a sidebar vira topo e o PDV empilha. Trocar o visual é trocar
-este arquivo e `components/ui.tsx`.
+Tema: `html[data-theme]` (`app/theme.ts`, por aparelho). Cor do módulo: `accentStyle(m)`
+(`app/module-look.ts`) no contêiner. Responsivo: <1024px a loja troca o resumo lateral por barra
+fixa embaixo e o login esconde o painel de marca; <900px a sidebar vira gaveta (hambúrguer).
+
+## 2.1 Loja de módulos
+
+Etapas fixas no topo (Comércio → Funções → Carrinho → Pagamento). Escolha do comércio em cartões
+com ícone em gradiente (como o seletor de módulos do Fluxo). Configurador: cada função é uma linha
+com ícone, descrição, preço e interruptor; obrigatória/dependência travada com o motivo ("Exigido
+por PDV e caixa"). Total sempre do servidor. Prévia: o MESMO `buildNav` do Shell com as chaves do
+carrinho, telas em esqueleto com a faixa "Prévia" (régua do Fluxo: prévia não inventa número).
 
 ## 3. Primitivas (components/ui.tsx)
 
 `Card` (título + ações), `Kpi` (rótulo + valor, opcionalmente em R$), `Badge` (status com cor
 por semântica), `Money`, `Table` (colunas declarativas, clique na linha, vazio amigável),
-`Modal` (Esc fecha), `Form` (coleta campos nomeados; `number` vira número; `checkbox` vira
+`Modal` (Esc fecha, portal no `<body>`), `Switch`, `Steps`, `Avatar`, `Spinner`, `Sidebar`, `Form` (coleta campos nomeados; `number` vira número; `checkbox` vira
 booleano), `Field`, `Tabs`, `Toast`, `ErrorBox`, `Empty`.
 
 Padrão de tela de cadastro: título + busca + botão primário à direita; tabela; modal de criação;

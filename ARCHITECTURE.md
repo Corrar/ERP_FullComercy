@@ -61,6 +61,26 @@ empresa logada: explícito (403 se inativo) → único ativo → canal → módu
 Estoque (`inventory/stock.service.ts`) e dinheiro (`finance/finance.service.ts`) são do núcleo;
 módulo chama, nunca reimplementa.
 
+## 3.2 Loja de módulos e assinatura do SaaS
+
+O app abre na **loja** (`/comecar`): a pessoa escolhe o comércio (módulo), liga as funções que quer
+(cada uma com preço mensal), vê a **prévia** do menu, vai ao carrinho e, logada, paga.
+
+- **Catálogo** (`core/billing/catalog.ts`): função = preço + chaves de permissão que libera;
+  obrigatória por módulo e `requires` resolvidos por `resolveSelection` (fonte única do total).
+- **Conta do comprador** (`plat_accounts`, sem tenant): senha ou Google (ID token conferido no JWKS
+  do Google). Token próprio (`typ: 'acct'`) que não abre rota de empresa; `POST
+  /account/companies/:id/session` troca por sessão da empresa.
+- **Checkout** (`POST /account/checkout`): provedor primeiro (cartão recusado não cria nada), depois
+  `onboardTenant`, assinatura (`core_subscriptions` + itens) e, sem teste, a 1ª fatura. **7 dias
+  grátis** só na 1ª compra da conta e do CPF/CNPJ.
+- **Plano → acesso**: o snapshot do tenant carrega `planKeys`; `canUse` corta antes do perfil
+  (403 `NOT_IN_PLAN`). Mudar funções vale na hora; o valor, na próxima fatura.
+- **Cobrança** (`core/billing/providers`): cartão tokenizado no navegador, boleto e Pix Automático;
+  `mock` na caixa (recusado em produção). Job `core.billing-cycle`: fim do teste, renovação,
+  retentativa de cartão (24 h, até 4), atraso → `PAST_DUE`, carência (`BILLING_GRACE_DAYS`) →
+  empresa `SUSPENDED`; pagar reabre. `/billing/*` fica aberto para a empresa suspensa.
+
 ## 4. Eventos e integrações
 
 Barramento tipado em memória (`shared/events.ts`) → três consumidores: Socket.IO (sala por
@@ -99,3 +119,6 @@ por `scripts/apply-rls.js` (idempotente, após cada migration).
 | 8 | Outbox + barramento em memória | durabilidade sem fila externa; webhooks saem de qualquer instância | fila externa desde o dia 1 |
 | 9 | Front sem framework de UI | zero dependência pesada; tokens em um CSS | biblioteca de componentes |
 | 10 | Monorepo com workspaces | um `npm install`, CI único, contratos próximos | dois repositórios |
+| 11 | Plano corta permissão no `rbac.service` | uma regra de acesso só (rota, menu e `/auth/me` concordam) | gate separado por rota ou por módulo |
+| 12 | Conta do comprador fora do tenant (`plat_accounts`) com token próprio | a compra acontece antes de existir empresa; uma conta abre várias | criar tenant vazio no cadastro |
+| 13 | Cartão tokenizado no navegador | número do cartão nunca toca a API (escopo PCI mínimo) | receber o número e repassar ao gateway |

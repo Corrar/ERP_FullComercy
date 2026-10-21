@@ -43,8 +43,9 @@ Documentos de governança na raiz: `PRD.md`, `ARCHITECTURE.md`, `RULES.md` (vers
 destas regras), `DESIGN.md`, `TASKS.md`, `MEMORY.md` (leia as lições antes de mexer).
 Detalhe e justificativa em `docs/ARQUITETURA.md`. O resumo que não pode ser esquecido:
 
-1. **Tudo é por tenant.** Toda tabela (menos `core_tenants`) tem `tenant_id`; toda FK de negócio é
-   composta `(tenant_id, id)`; toda unicidade é `@@unique([tenantId, …])`.
+1. **Tudo é por tenant.** Toda tabela (menos `core_tenants` e as de plataforma `plat_*`, que existem
+   antes da empresa) tem `tenant_id`; toda FK de negócio é composta `(tenant_id, id)`; toda unicidade
+   é `@@unique([tenantId, …])`. `plat_*` só pelo client de plataforma e sem GRANT para o papel do tenant.
 2. **Código de negócio usa `ctx().db`, nunca `prisma` direto.** O client base só serve a login,
    jobs de plataforma e seed. Passe `tenantId` explicitamente no `create` de topo (o tipo exige);
    a extensão é rede de segurança, não o caminho.
@@ -67,3 +68,15 @@ Detalhe e justificativa em `docs/ARQUITETURA.md`. O resumo que não pode ser esq
 11. **Módulo novo no front = pasta em `src/modules/<módulo>` + uma linha em `app/modules.ts`.** Suas
     telas de venda usam `POST /orders` com `moduleData`, como no back.
 12. **Tempo real por `useSocketEvent`**, nunca `setInterval` para "atualizar a tela".
+
+### Loja de módulos e assinatura
+
+13. **Preço e plano só no servidor** (`core/billing/catalog.ts`). O front mostra o `quote`; o checkout
+    recalcula. Função nova vendável = entrada no catálogo com as chaves que libera (o teste de
+    cobertura derruba chave sem função).
+14. **O plano corta permissão** em `rbac.service` (`canUse`): nem o admin usa o que não contratou.
+    Empresa sem assinatura (seed/plataforma) não tem corte.
+15. **Cartão nunca passa pela API**: o navegador tokeniza (`lib/billing.ts`); a API guarda token,
+    bandeira e final. Simuladores (`BILLING_PROVIDER=mock`, `GOOGLE_AUTH_MOCK=1`) são recusados em produção.
+16. **Visual**: tokens do `styles.css` (referência: design do Fluxo 5.0), cor do módulo por `--accent`,
+    marca neutra em `app/brand.ts` até a identidade nascer.

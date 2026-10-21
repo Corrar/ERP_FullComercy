@@ -4,13 +4,18 @@ import { get, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
 import { Card, ErrorBox, Money, Toast } from '@/components/ui';
 import { brl } from '@/lib/format';
+import { useSession } from '@/lib/session';
 
 interface Linha { variantId: string; sku: string; nome: string; preco: number; qtd: number }
 const MEIOS = ['PIX', 'CASH', 'DEBIT', 'CREDIT', 'VOUCHER', 'STORE_CREDIT'];
 
 export function Pdv() {
   const caixa = useGet<any>('/m/varejo/caixa/atual', { terminal: localStorage.getItem('fc.terminal') ?? 'CAIXA-1' });
-  const vendedores = useGet<any[]>('/m/varejo/vendedores');
+  // Vendedor só existe com a função "Comissões" no plano/perfil: sem ela, o campo some (a API
+  // responderia 403 e o PDV mostraria um seletor vazio). Achado na navegação da prévia comprada.
+  const { can } = useSession();
+  const comVendedor = can('varejo.comissoes:view');
+  const vendedores = useGet<any[]>(comVendedor ? '/m/varejo/vendedores' : null);
   const [linhas, setLinhas] = useState<Linha[]>([]); const [codigo, setCodigo] = useState(''); const [desconto, setDesconto] = useState(0);
   const [pag, setPag] = useState<{ method: string; amount: number }[]>([]); const [meio, setMeio] = useState('PIX'); const [valor, setValor] = useState('');
   const [vendedor, setVendedor] = useState(''); const [cliente, setCliente] = useState(''); const [msg, setMsg] = useState<string | null>(null);
@@ -45,7 +50,7 @@ export function Pdv() {
     </div>
     <div className="grid">
       <Card title="Total"><div className="total mono">{brl(total)}</div><div className="row"><label className="field">Desconto<input className="input" type="number" step="0.01" value={desconto} onChange={(e) => setDesconto(Number(e.target.value))} /></label>
-        <label className="field">Vendedor<select className="input" value={vendedor} onChange={(e) => setVendedor(e.target.value)}><option value="">—</option>{vendedores.data?.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label></div>
+        {comVendedor && <label className="field">Vendedor<select className="input" value={vendedor} onChange={(e) => setVendedor(e.target.value)}><option value="">—</option>{vendedores.data?.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}</div>
         <label className="field">Cliente (id, opcional)<input className="input" value={cliente} onChange={(e) => setCliente(e.target.value)} /></label></Card>
       <Card title="Pagamento"><div className="row"><select className="input" value={meio} onChange={(e) => setMeio(e.target.value)} style={{ width: 130 }}>{MEIOS.map((m) => <option key={m}>{m}</option>)}</select>
         <input className="input" type="number" step="0.01" placeholder={falta.toFixed(2)} value={valor} onChange={(e) => setValor(e.target.value)} />

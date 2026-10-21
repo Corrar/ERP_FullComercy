@@ -28,4 +28,20 @@ export const ADMIN_NAV: NavItem[] = [
   { to: '/perfis', label: 'Perfis e permissões', perm: 'core.roles:manage' },
   { to: '/integracoes', label: 'Integrações', perm: 'core.webhooks:manage' },
   { to: '/empresa', label: 'Empresa e módulos', perm: 'core.tenant:manage' },
+  { to: '/assinatura', label: 'Assinatura', perm: 'core.billing:manage' },
 ];
+
+export interface NavGroup { key: string; label: string; module?: ModuleKey; items: NavItem[] }
+
+/** O MENU, montado num lugar só: o Shell (com a sessão real) e a PRÉVIA da loja (com as chaves
+ *  do carrinho) chamam esta função — por isso a prévia mostra exatamente o menu que a empresa
+ *  vai ter. Grupo sem item visível some (nada de título órfão). */
+export function buildNav(can: (perm: string) => boolean, hasModule: (m: ModuleKey) => boolean): NavGroup[] {
+  const keep = (items: NavItem[]) => items.filter((n) => !n.perm || can(n.perm));
+  const groups: NavGroup[] = [
+    { key: 'core', label: 'Núcleo', items: keep(CORE_NAV) },
+    ...MODULES.filter((m) => hasModule(m.key)).map((m) => ({ key: m.key, label: m.label, module: m.key, items: keep(m.nav) })),
+    { key: 'admin', label: 'Administração', items: keep(ADMIN_NAV) },
+  ];
+  return groups.filter((g) => g.items.length);
+}

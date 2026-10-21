@@ -15,7 +15,8 @@
 
 ## 1. Dados e tenant
 
-6. Toda tabela nova (menos `core_tenants`) tem `tenant_id`, `@@unique([tenantId, id])`, FK composta
+6. Toda tabela nova (menos `core_tenants` e as de plataforma `plat_*` — conta do comprador, que
+   existe antes da empresa; sem GRANT para o papel do tenant em `001_rls_tenant.sql`) tem `tenant_id`, `@@unique([tenantId, id])`, FK composta
    e unicidade por tenant. Prefixo de tabela diz o dono (`core_`, `ret_`, `food_`, `gym_`, `svc_`).
 7. Nada de `onDelete: SetNull`. Cadastro desativa (`isActive=false`); filho morre com o pai (`Cascade`).
 8. Dinheiro é `Decimal(14,2)`, quantidade `Decimal(14,3)`. Nunca `Float`. Aritmética em `shared/money.ts`.

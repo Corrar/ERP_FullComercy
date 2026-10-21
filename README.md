@@ -15,6 +15,19 @@ O front espelha a modularidade da API: um registro de módulos (`apps/web/src/ap
 monta o menu e as rotas só do que a empresa tem **ativo** e o usuário **pode**. Cada módulo é
 uma pasta em `apps/web/src/modules/<módulo>` com suas telas; o núcleo fica em `apps/web/src/core`.
 
+## Loja de módulos (como o cliente compra)
+
+O app abre em `/comecar`: a pessoa escolhe o tipo de comércio (Varejo, Food & Delivery, Academia,
+Serviços), liga só as funções que quer — cada uma com preço mensal, total calculado pela API —,
+vê a **prévia** do menu do ERP, vai ao carrinho e, **logada** (e-mail/senha ou Google), finaliza com
+**cartão**, **boleto** ou **Pix Automático**. A primeira compra ganha **7 dias grátis**; a cobrança
+mensal começa depois. Dentro do ERP, o menu **Assinatura** troca funções, forma de pagamento,
+mostra faturas e cancela. Detalhes em `ARCHITECTURE.md` §3.2; preços em
+`apps/api/src/core/billing/catalog.ts`.
+
+Em desenvolvimento: `GOOGLE_AUTH_MOCK=1` (Google simulado) e `BILLING_PROVIDER=mock` (cartão
+`4242 4242 4242 4242` aprova; final `0002` recusa). Os dois são recusados em produção.
+
 ## Rodar tudo
 
 ```bash
