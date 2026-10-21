@@ -48,7 +48,8 @@ fica pronto para o dia em que o Railway liberar deploys nesta conta.
 
 O navegador **não fala com o Render**: `apps/web/vercel.json` reescreve `/api/*` e `/socket.io/*` para
 a API (`VITE_API_URL=/api`, `VITE_SOCKET_POLLING=1`; a Vercel não repassa WebSocket). Com esse salto
-a mais, a API roda com `TRUST_PROXY_HOPS=2` para o rate limit e o Turnstile verem o IP do cliente.
+a mais, a API roda com `TRUST_PROXY_HOPS=4` (Vercel → Cloudflare do Render → proxy interno) para o rate
+limit e o Turnstile verem o IP do cliente.
 
 ## Rodar tudo
 

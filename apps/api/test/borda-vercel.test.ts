@@ -49,10 +49,13 @@ async function ipSeen(hops: number, xff: string): Promise<string> {
   }
 }
 
-test('TRUST_PROXY_HOPS=2 (Vercel → Render) devolve o IP do cliente; 1 devolveria o da Vercel', async () => {
-  // O balanceador do Render (o socket) acrescenta quem conectou nele — a Vercel. A Vercel mandou o cliente.
-  const xff = '203.0.113.7, 76.76.21.21';
-  assert.equal(await ipSeen(2, xff), '203.0.113.7');
-  // Contra-prova: com 1 salto, todo cliente vira o IP da Vercel e divide a cota do rate limit.
-  assert.equal(await ipSeen(1, xff), '76.76.21.21');
+test('TRUST_PROXY_HOPS=4 (Vercel → Cloudflare → proxy do Render) devolve o IP do cliente', async () => {
+  // X-Forwarded-For como chega no Express: a Vercel manda o cliente; a Cloudflare do Render acrescenta
+  // a Vercel; o proxy interno acrescenta a Cloudflare e o socket é o próprio proxy interno.
+  const xff = '203.0.113.7, 76.76.21.21, 162.159.114.57, 10.26.240.130';
+  assert.equal(await ipSeen(4, xff), '203.0.113.7');
+  // Contra-prova: cada salto a menos devolve um proxy — e todos os clientes dividem a cota do rate limit.
+  assert.equal(await ipSeen(3, xff), '76.76.21.21');
+  assert.equal(await ipSeen(2, xff), '162.159.114.57');
+  assert.equal(await ipSeen(1, xff), '10.26.240.130');
 });

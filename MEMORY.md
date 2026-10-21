@@ -84,7 +84,9 @@ estratégia; outbox em tabela; front sem framework; monorepo.
   API saudável (log do Render: `[db] ok`, catálogo 200 no mesmo minuto). Rede/DNS do cliente até o
   Render não é coisa que o código conserte: o front passou a chamar só a própria origem (`/api`) e a
   Vercel repassa. Efeitos: sem CORS no caminho normal; a CSP perdeu o domínio do Render; Socket.IO só
-  por polling; `TRUST_PROXY_HOPS=2` no Render (senão todo mundo vira o IP da Vercel no rate limit).
+  por polling; `TRUST_PROXY_HOPS=4` no Render. ⚠ O 2 que eu deduzi estava errado: o log mostrou IPs
+  da Cloudflare com 2 e `10.26.240.130` para todo mundo com 1 (já antes da Vercel). O Render tem
+  Cloudflare + proxy interno na frente; número de saltos se MEDE no log (`ip` do request), não se deduz.
   ⚠ Quem bater DIRETO no Render pode forjar o primeiro `X-Forwarded-For` (o rate limit por IP perde
   força para esse atalho; o Turnstile continua barrando robô nas rotas de credencial).
 - CORS: `CORS_ORIGINS` aceita curinga de um rótulo (`https://erp-modular-*-corrars-projects.vercel.app`).

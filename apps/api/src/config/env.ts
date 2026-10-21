@@ -13,9 +13,10 @@ export const envSchema = z.object({
   APP_STAGE: z.enum(['local', 'staging', 'production']).optional(),
   PORT: z.coerce.number().int().positive().default(3000),
   /// Quantos proxies confiáveis ficam na frente do Express (`trust proxy`). Decide o `req.ip` que o
-  /// rate limit e o Turnstile usam. 1 = só o balanceador do host (Render). 2 = navegador → Vercel
-  /// (rewrite `/api`) → Render: com 1, todo cliente apareceria com o IP da Vercel e dividiria a mesma
-  /// cota do rate limit.
+  /// rate limit e o Turnstile usam. Conta cada salto que ACRESCENTA ao X-Forwarded-For depois do
+  /// cliente. Homologação (medido no log em 21/10/2026): navegador → Vercel (rewrite `/api`) →
+  /// Cloudflare do Render → proxy interno do Render (10.x) → Express = 4. Com 1 o log mostrava
+  /// 10.26.240.130 para todo mundo; com 2, IPs da Cloudflare — e todos dividiam a cota do rate limit.
   TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(1),
   /// Conexão do TENANT: papel comum, sujeito ao RLS. É a que o código de negócio usa.
   DATABASE_URL: z.string().min(1, 'DATABASE_URL ausente'),
