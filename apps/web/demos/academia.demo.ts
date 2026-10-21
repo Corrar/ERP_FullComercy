@@ -54,7 +54,7 @@ test('gym.recepcao', async ({ request, gravar }) => {
   const diego = p.getByRole('row', { name: /Diego Ramos/ });
   await expect(diego).toBeVisible();
   await g.clicar(diego.getByRole('button', { name: 'Check-in' }));
-  await expect(p.getByRole('alert')).toContainText('INADIMPLENTE');
+  await expect(p.getByRole('alert')).toHaveText('Diego Ramos: acesso negado — mensalidade em atraso');
   await g.pausa(1800);
 });
 
@@ -62,6 +62,7 @@ test('gym.catraca', async ({ request, gravar }) => {
   const e = await academia(request);
   const g = await gravar('gym.catraca', e, '/academia/acesso');
   const p = g.page;
+  await p.waitForTimeout(2500); await p.screenshot({ path: '/tmp/claude-0/-home-user/7d666d08-dab4-550a-b994-0bae765ca737/scratchpad/dbg-catraca.png', fullPage: true });
   await expect(p.getByRole('cell', { name: 'Leitor biométrico' }).first()).toBeVisible();
   await expect(p.getByText('CREDENCIAL_DESCONHECIDA')).toBeVisible();
   await g.inicio();
@@ -85,6 +86,7 @@ test('gym.turmas', async ({ request, gravar }) => {
   const e = await academia(request);
   const g = await gravar('gym.turmas', e, '/academia/turmas');
   const p = g.page;
+  await p.waitForTimeout(2500); await p.screenshot({ path: '/tmp/claude-0/-home-user/7d666d08-dab4-550a-b994-0bae765ca737/scratchpad/dbg-turmas.png', fullPage: true });
   await expect(p.getByRole('cell', { name: 'Spinning' }).first()).toBeVisible();
   await g.inicio();
   await g.pausa(900);

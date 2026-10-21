@@ -137,7 +137,7 @@ export async function semearFood(e: Empresa): Promise<Food> {
       for (const to of passos.slice(passos.indexOf(t.status) + 1, passos.indexOf(ate) + 1)) await api('POST', `/m/food/cozinha/tickets/${t.id}/mover`, { to });
     }
   };
-  const comanda = async (n: number, guests: number) => api('POST', '/m/food/comandas', { code: `M${String(n).padStart(2, '0')}-${guests}${n}`, tableId: mesa(n).id, guests });
+  const comanda = async (n: number, guests: number) => api('POST', '/m/food/comandas', { code: String(100 + n), tableId: mesa(n).id, guests });
   const rodada = (tab: any, n: number, ls: Linha[]) => api('POST', '/orders', { channel: 'TABLE', items: linhas(ls), moduleData: { tabId: tab.id, tableId: mesa(n).id, menuId: menu.id } });
   const fechar = async (tab: any, metodos: string[]) => {
     const conta = await api('GET', `/m/food/comandas/${tab.id}/conta`);

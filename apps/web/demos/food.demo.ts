@@ -30,7 +30,7 @@ test('food.salao', async ({ request, gravar }) => {
   await g.pausa(400);
   await g.clicar(modal.getByRole('button', { name: 'Enviar para a cozinha' }));
   const conta = modal.locator('.card:has-text("Conta")');
-  await expect(conta).toContainText('222,60'); // 170,30 + 2 × 19,90 + 12,90
+  await expect(conta).toContainText('223,00'); // 170,30 + 2 × 19,90 + 12,90
   await g.pausa(500);
   g.capa();
   await g.pausa(500);
