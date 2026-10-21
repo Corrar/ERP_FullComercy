@@ -250,14 +250,14 @@ test('core.integracoes', async ({ request, gravar }) => {
   const p = g.page;
   await expect(p.getByRole('button', { name: 'Novo webhook' })).toBeVisible();
   await g.inicio();
-  await g.pausa(700);
+  await g.pausa(500);
   await g.clicar(p.getByRole('button', { name: 'Novo webhook' }));
   const dlg = p.getByRole('dialog', { name: 'Novo webhook' });
-  await g.digitar(dlg.locator('input[name="url"]'), 'https://api.lojavirtual.com.br/erp/eventos');
+  await g.digitar(dlg.locator('input[name="url"]'), 'https://hooks.minhaloja.com.br/erp');
   for (const ev of ['order.created', 'order.paid', 'stock.low']) await g.clicar(dlg.getByRole('checkbox', { name: ev, exact: true }));
   await g.clicar(dlg.getByRole('button', { name: 'Salvar' }));
   await expect(p.getByText(/Segredo do HMAC/)).toBeVisible();
-  await expect(p.getByRole('cell', { name: 'https://api.lojavirtual.com.br/erp/eventos' })).toBeVisible();
+  await expect(p.getByRole('cell', { name: 'https://hooks.minhaloja.com.br/erp' })).toBeVisible();
   await g.pausa(900);
   g.capa();
   await g.clicar(p.getByRole('tab', { name: 'Eventos' }));

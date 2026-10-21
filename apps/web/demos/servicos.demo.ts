@@ -36,12 +36,16 @@ test('svc.veiculos', async ({ request, gravar }) => {
   const linhas = g.page.locator('table tbody tr');
   await expect(linhas).toHaveCount(12);
   await g.inicio();
-  await g.pausa(900);
+  await g.pausa(1200);
   g.capa();
+  await g.passar(linhas.filter({ hasText: 'FKQ8B31' }));
+  await g.pausa(900);
   await g.digitar(g.page.getByPlaceholder('placa, modelo ou dono'), 'GHT7C52');
   await expect(linhas).toHaveCount(1);
   await expect(linhas.first()).toContainText('Aline Barbosa');
-  await g.pausa(1600);
+  await g.pausa(500);
+  await g.passar(linhas.first().getByText('Chevrolet Onix 2022'));
+  await g.pausa(1800);
 });
 
 test('svc.agenda', async ({ request, gravar }) => {
@@ -50,16 +54,20 @@ test('svc.agenda', async ({ request, gravar }) => {
   const linhas = g.page.locator('table tbody tr');
   await expect(linhas).toHaveCount(6);
   await g.inicio();
-  await g.pausa(1000);
+  await g.pausa(1200);
   g.capa();
+  await g.passar(linhas.filter({ hasText: 'LTR8D52' }).getByText('Troca de pastilhas'));
+  await g.pausa(700);
   const primeira = linhas.filter({ hasText: 'PXN4C19' });
-  await g.passar(primeira);
-  await g.pausa(400);
+  await g.passar(primeira.getByText('Revisão dos 30 mil km'));
+  await g.pausa(700);
   await g.clicar(primeira.getByRole('button', { name: /Chegou/ }));
   await expect(g.page).toHaveURL(/\/servicos\/os\//);
   await expect(g.page.locator('h1')).toContainText('PXN4C19');
   await expect(g.page.getByText('Revisão dos 30 mil km').first()).toBeVisible();
-  await g.pausa(2000);
+  await g.pausa(800);
+  await g.passar(g.page.locator('.card', { hasText: 'Veículo e cliente' }).getByText('PXN4C19'));
+  await g.pausa(1800);
 });
 
 test('svc.relatorios', async ({ request, gravar }) => {
@@ -67,10 +75,13 @@ test('svc.relatorios', async ({ request, gravar }) => {
   const g = await gravar('svc.relatorios', e, '/servicos/relatorios');
   await expect(g.page.getByRole('cell', { name: 'Rogério Alves' })).toBeVisible();
   await g.inicio();
-  await g.pausa(1400);
+  await g.pausa(1200);
+  await g.passar(g.page.getByRole('cell', { name: /1\.639,60/ }));
+  await g.pausa(1200);
   await g.clicar(g.page.getByRole('tab', { name: 'Serviços mais vendidos' }));
   await expect(g.page.getByRole('cell', { name: 'Troca de óleo e filtro' })).toBeVisible();
-  await g.pausa(600);
+  await g.pausa(700);
   g.capa();
-  await g.pausa(1600);
+  await g.passar(g.page.getByRole('cell', { name: /320,00/ }));
+  await g.pausa(2000);
 });

@@ -59,13 +59,12 @@ test('gym.recepcao', async ({ request, gravar }) => {
   await expect(p.locator('.toast')).toHaveText('Ana Beatriz Souza: acesso liberado');
   await expect(p.getByRole('cell', { name: 'Ana Beatriz Souza' })).toBeVisible();
   await g.pausa(1000);
-  g.capa();
   await g.digitar(busca, 'Diego');
   const diego = p.getByRole('row', { name: /Diego Ramos/ });
   await expect(diego).toBeVisible();
   await g.clicar(diego.getByRole('button', { name: 'Check-in' }));
   await expect(p.getByRole('alert')).toHaveText('Diego Ramos: acesso negado — mensalidade em atraso');
-  await g.pausa(1800);
+  await g.pausa(1800); // capa = último quadro: Ana entre os presentes e o aviso de atraso do Diego
 });
 
 test('gym.catraca', async ({ request, gravar }) => {
@@ -76,10 +75,10 @@ test('gym.catraca', async ({ request, gravar }) => {
   await pronta(p, p.getByRole('cell', { name: 'Leitor biométrico' }).first());
   await g.inicio();
   await g.pausa(900);
-  g.capa();
   await g.passar(p.locator('.badge.ok').first());
   await g.pausa(500);
   await g.passar(p.getByText('INADIMPLENTE').first());
+  g.capa(); // o registro da catraca: liberado pela credencial, negado por atraso, cartão desconhecido
   await g.pausa(700);
   await g.clicar(p.getByRole('button', { name: 'Novo dispositivo' }));
   const modal = p.getByRole('dialog', { name: 'Novo dispositivo' });
