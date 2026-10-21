@@ -7,11 +7,14 @@ let sock: Socket | null = null;
 export function socket(): Socket | null {
   const s = session.get(); if (!s) return null;
   if (!sock) {
-    // API em outro domínio (front na Vercel, API no Railway): conecta na ORIGEM de VITE_API_URL.
-    // Sem ela (dev com proxy do Vite, nginx do compose), mesmo host do site.
+    // API em outro domínio: conecta na ORIGEM de VITE_API_URL. Sem ela (dev com proxy do Vite,
+    // nginx do compose, rewrite da Vercel), mesmo host do site.
     const api = import.meta.env.VITE_API_URL as string | undefined;
     const origin = api && /^https?:\/\//.test(api) ? new URL(api).origin : undefined;
-    sock = io(origin, { path: '/socket.io', auth: { token: s.accessToken }, autoConnect: true });
+    // O rewrite da Vercel não repassa WebSocket: lá o Socket.IO fica no long-polling (VITE_SOCKET_POLLING=1)
+    // em vez de tentar o upgrade a cada conexão e sujar o console.
+    const polling = import.meta.env.VITE_SOCKET_POLLING === '1';
+    sock = io(origin, { path: '/socket.io', auth: { token: s.accessToken }, autoConnect: true, ...(polling ? { transports: ['polling'] } : {}) });
     session.subscribe((ns) => { if (!ns) { sock?.disconnect(); sock = null; } });
   }
   return sock;

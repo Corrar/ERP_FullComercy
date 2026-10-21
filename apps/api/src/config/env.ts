@@ -12,6 +12,11 @@ export const envSchema = z.object({
   /// production, senão `local` — esquecer a variável nunca libera simulador num deploy.
   APP_STAGE: z.enum(['local', 'staging', 'production']).optional(),
   PORT: z.coerce.number().int().positive().default(3000),
+  /// Quantos proxies confiáveis ficam na frente do Express (`trust proxy`). Decide o `req.ip` que o
+  /// rate limit e o Turnstile usam. 1 = só o balanceador do host (Render). 2 = navegador → Vercel
+  /// (rewrite `/api`) → Render: com 1, todo cliente apareceria com o IP da Vercel e dividiria a mesma
+  /// cota do rate limit.
+  TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(1),
   /// Conexão do TENANT: papel comum, sujeito ao RLS. É a que o código de negócio usa.
   DATABASE_URL: z.string().min(1, 'DATABASE_URL ausente'),
   /// Conexão da PLATAFORMA: papel com BYPASSRLS (login, onboarding, jobs). Ausente = mesma URL

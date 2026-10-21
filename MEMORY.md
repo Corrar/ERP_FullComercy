@@ -71,7 +71,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 ## 4.1 Deploy (homologação)
 
 - Vercel: time `corrars-projects`, projeto `erp-modular` (`prj_rblBxDsI5N6bUjO1n4A6q4nyZiS1`), raiz
-  `apps/web`, `VITE_API_URL=https://erp-modular-api.onrender.com`. A branch de produção da Vercel é
+  `apps/web`, `VITE_API_URL=/api` + `VITE_SOCKET_POLLING=1` (rewrite da Vercel para o Render, ver abaixo). A branch de produção da Vercel é
   a default do repo; o deploy deste branch foi disparado como produção pela API da Vercel.
 - Render: workspace `tea-d4sqarumcj7s73crb7lg`, serviço `srv-dbcchrss728c73enbuo0` (só a API).
   Variáveis por mescla (`update_environment_variables`), nunca listando valores.
@@ -80,6 +80,13 @@ estratégia; outbox em tabela; front sem framework; monorepo.
   conector (`create_project` não devolve credencial). O executor NÃO chama `get_connection_string`
   nem lê/cola o `DATABASE_URL`: quem cola é o responsável, a URL **direta** (migration não vai pelo
   pooler, ver skill `regras-neon`). O Postgres `erp-modular-db` do Render ficou vazio e sobrando.
+- 21/10/2026: o navegador do responsável dava `ERR_CONNECTION_TIMED_OUT` em `*.onrender.com` com a
+  API saudável (log do Render: `[db] ok`, catálogo 200 no mesmo minuto). Rede/DNS do cliente até o
+  Render não é coisa que o código conserte: o front passou a chamar só a própria origem (`/api`) e a
+  Vercel repassa. Efeitos: sem CORS no caminho normal; a CSP perdeu o domínio do Render; Socket.IO só
+  por polling; `TRUST_PROXY_HOPS=2` no Render (senão todo mundo vira o IP da Vercel no rate limit).
+  ⚠ Quem bater DIRETO no Render pode forjar o primeiro `X-Forwarded-For` (o rate limit por IP perde
+  força para esse atalho; o Turnstile continua barrando robô nas rotas de credencial).
 - CORS: `CORS_ORIGINS` aceita curinga de um rótulo (`https://erp-modular-*-corrars-projects.vercel.app`).
 
 - Stripe: conta `acct_1USaDNRuCVjTlS47` ("Área restrita de Teste"), BR/BRL, modo teste. Cartão

@@ -72,7 +72,7 @@ export function buildApp() {
   startNotificationListeners();
 
   const app = express();
-  app.set('trust proxy', 1);
+  app.set('trust proxy', env.TRUST_PROXY_HOPS);
   app.use(helmet());
   app.use(compression());
   // O Stripe assina os BYTES do corpo: o webhook precisa do corpo cru além do JSON. Guardado só

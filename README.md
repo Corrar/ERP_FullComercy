@@ -33,7 +33,7 @@ Em desenvolvimento: `GOOGLE_AUTH_MOCK=1` (Google simulado) e `BILLING_PROVIDER=m
 | Parte | Onde | Endereço |
 |---|---|---|
 | Front (loja + ERP) | Vercel, projeto `erp-modular` | https://erp-modular-eta.vercel.app (exige login na Vercel: proteção padrão do time) |
-| API | Render, serviço `erp-modular-api` (free) | https://erp-modular-api.onrender.com |
+| API | Render, serviço `erp-modular-api` (free) | o navegador chama `https://erp-modular-eta.vercel.app/api/…`; a Vercel repassa para https://erp-modular-api.onrender.com |
 | Banco | **Neon**, projeto `ERP-Modular` (`empty-haze-70902164`), branch `homologacao`, banco `erp_modular`, Ohio | conexão **direta** (sem `-pooler`) |
 
 `APP_STAGE=staging`: Google simulado e cobrança simulada **ou** Stripe em modo de teste
@@ -45,6 +45,10 @@ O `DATABASE_URL` da API é colado pelo responsável no painel do Render: a conne
 Neon (console → projeto ERP-Modular → Connect, **pooling desligado**) — o executor não lê
 connection string (regra permanente). A API completa sozinha `connect_timeout=20` (cold start do Neon). `apps/api/railway.json`
 fica pronto para o dia em que o Railway liberar deploys nesta conta.
+
+O navegador **não fala com o Render**: `apps/web/vercel.json` reescreve `/api/*` e `/socket.io/*` para
+a API (`VITE_API_URL=/api`, `VITE_SOCKET_POLLING=1`; a Vercel não repassa WebSocket). Com esse salto
+a mais, a API roda com `TRUST_PROXY_HOPS=2` para o rate limit e o Turnstile verem o IP do cliente.
 
 ## Rodar tudo
 
