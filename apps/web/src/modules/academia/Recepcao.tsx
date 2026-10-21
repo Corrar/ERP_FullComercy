@@ -1,15 +1,28 @@
 import { useCallback, useState } from 'react';
-import { get, post } from '@/lib/api';
+import { ApiError, get, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
 import { useSocketEvent } from '@/lib/socket';
 import { Card, ErrorBox, Table, Toast } from '@/components/ui';
 import { hhmm } from '@/lib/format';
 
+/** Motivo da recusa (`decidirAcesso` na API) em português para a recepção — sem o `details` cru. */
+const MOTIVO: Record<string, string> = {
+  INADIMPLENTE: 'mensalidade em atraso', SEM_MATRICULA: 'sem matrícula ativa', MATRICULA_PAUSADA: 'matrícula pausada', CONTRATO_ENCERRADO: 'contrato encerrado',
+  FORA_DOS_DIAS: 'fora dos dias do plano', FORA_DO_HORARIO: 'fora do horário do plano', LIMITE_DIARIO: 'limite de check-ins do dia atingido',
+};
+
 export function Recepcao() {
   const [q, setQ] = useState(''); const alunos = useGet<any[]>(q.length >= 2 ? '/customers' : null, { q }); const presentes = useGet<any[]>('/m/academia/presentes');
   const [msg, setMsg] = useState<string | null>(null); const [ultimo, setUltimo] = useState<any | null>(null);
   useSocketEvent('gym.access', useCallback((p: any) => { setUltimo(p); void presentes.reload(); }, [presentes]));
-  const checkin = useAction(async (c: any) => { await post('/m/academia/checkins', { customerId: c.id }); setMsg(`${c.name}: acesso liberado`); setQ(''); await presentes.reload(); });
+  const checkin = useAction(async (c: any) => {
+    try { await post('/m/academia/checkins', { customerId: c.id }); } catch (e) {
+      const reason = e instanceof ApiError ? (e.details as { reason?: string } | undefined)?.reason : undefined;
+      if (reason) throw new Error(`${c.name}: acesso negado — ${MOTIVO[reason] ?? reason}`);
+      throw e;
+    }
+    setMsg(`${c.name}: acesso liberado`); setQ(''); await presentes.reload();
+  });
   const checkout = useAction(async (id: string) => { await post(`/m/academia/checkins/${id}/checkout`); await presentes.reload(); });
   const resumo = useAction(async (c: any) => get(`/customers/${c.id}/summary`));
   return <div className="grid">
