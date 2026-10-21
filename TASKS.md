@@ -26,7 +26,14 @@
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
+- [x] Stripe (cartão, SetupIntent + 3-D Secure, cobrança off_session idempotente, webhook assinado) como provedor da assinatura
+- [x] Cloudflare Turnstile (cadastro, login, equipe, esqueci a senha, checkout) e CSP/HSTS no front
+
 ## P0 — antes de produção
+
+- [ ] Colar no Render as chaves do Stripe (teste) e do Turnstile e trocar `BILLING_PROVIDER` para `stripe` — passo do responsável
+- [ ] Ativar boleto e Pix na conta Stripe e implementar no adaptador (hoje só cartão; Pix Automático o Stripe não oferece)
+- [ ] WAF/DDoS da Cloudflare exige domínio próprio com DNS na Cloudflare (proxy laranja na frente da Vercel e da API)
 
 - [ ] Colar `DATABASE_URL` (Neon `ERP-Modular`, conexão direta, sem `-pooler`) no serviço `erp-modular-api` — passo do responsável
 - [ ] Apagar o Postgres `erp-modular-db` do Render (vazio, substituído pelo Neon; expiraria em 20/11/2026)

@@ -8,17 +8,18 @@ import { asyncHandler, parse } from '../../shared/http';
 import { authenticateAccount, type AccountRequest } from './account.middleware';
 import * as account from './account.service';
 import * as billing from '../billing/billing.service';
+import { requireHuman } from '../../shared/turnstile';
 
 const router = Router();
 const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false });
 const meta = (req: Request) => ({ ip: req.ip, userAgent: req.get('user-agent') ?? undefined });
 const accountId = (req: Request) => (req as AccountRequest).accountId!;
 
-router.post('/register', authLimiter, asyncHandler(async (req, res) => {
+router.post('/register', authLimiter, requireHuman, asyncHandler(async (req, res) => {
   const b = parse(z.object({ name: z.string().trim().min(2).max(120), email: z.string().email(), password: z.string().min(8).max(200) }), req.body);
   res.status(201).json(await account.register(b));
 }));
-router.post('/login', authLimiter, asyncHandler(async (req, res) => {
+router.post('/login', authLimiter, requireHuman, asyncHandler(async (req, res) => {
   const b = parse(z.object({ email: z.string().email(), password: z.string().min(1) }), req.body);
   res.json(await account.login(b));
 }));
@@ -39,7 +40,12 @@ const checkoutSchema = z.object({
   features: z.array(z.string().max(60)).max(60),
   payment: z.object({ method: z.nativeEnum(BillingMethod), cardToken: z.string().max(200).optional() }),
 });
-router.post('/checkout', authLimiter, authenticateAccount, asyncHandler(async (req, res) => {
+// Preparo do cartão (SetupIntent do Stripe) antes do checkout: o navegador confirma o cartão com
+// o 3-D Secure do banco e devolve o `pm_…` que o checkout prende ao Customer.
+router.post('/billing/card-setup', authLimiter, authenticateAccount, asyncHandler(async (_req, res) => {
+  res.json(await billing.cardSetupForCheckout());
+}));
+router.post('/checkout', authLimiter, authenticateAccount, requireHuman, asyncHandler(async (req, res) => {
   res.status(201).json(await billing.checkout(accountId(req), parse(checkoutSchema, req.body), meta(req)));
 }));
 

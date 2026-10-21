@@ -8,7 +8,8 @@
 //     e-mail e senha (o login de sempre, `POST /auth/login`).
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { acct, post, pub } from '@/lib/api';
+import { acct, api, post, pub } from '@/lib/api';
+import { useTurnstile } from '@/lib/turnstile';
 import { accountSession } from '@/lib/account';
 import { cart } from '@/lib/cart';
 import { session } from '@/lib/session';
@@ -102,12 +103,19 @@ export function Login() {
   const [mode, setMode] = useState<'entrar' | 'cadastro' | 'funcionario'>(q.get('modo') === 'cadastro' ? 'cadastro' : q.get('modo') === 'funcionario' ? 'funcionario' : 'entrar');
   const [tenant, setTenant] = useState(localStorage.getItem('fc.tenant') ?? '');
   const go = (to: string) => nav(to, { replace: true });
+  // Anti-robô da Cloudflare nos formulários de senha (força bruta, contas falsas). O Google já faz
+  // a dele; o botão do Google não passa por aqui.
+  const human = useTurnstile(mode === 'funcionario' ? 'equipe' : mode);
+  const guarded = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    if (!human.ready) throw new Error('Aguarde a verificação anti-robô terminar.');
+    try { return await fn(); } finally { human.reset(); } // token de uso único
+  };
 
   const account = useAction(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const f = new FormData(e.currentTarget);
-    const r = mode === 'cadastro'
-      ? await pub.post('/account/register', { name: f.get('name'), email: f.get('email'), password: f.get('password') })
-      : await pub.post('/account/login', { email: f.get('email'), password: f.get('password') });
+    const r = await guarded(() => (mode === 'cadastro'
+      ? pub.post('/account/register', { name: f.get('name'), email: f.get('email'), password: f.get('password') }, human.headers())
+      : pub.post('/account/login', { email: f.get('email'), password: f.get('password') }, human.headers())));
     accountSession.set(r);
     await afterAccount(next, go);
   });
@@ -117,7 +125,7 @@ export function Login() {
   });
   const employee = useAction(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const f = new FormData(e.currentTarget);
-    const r = await post('/auth/login', { tenant: f.get('tenant'), email: f.get('email'), password: f.get('password') });
+    const r = await guarded(() => api('/auth/login', { method: 'POST', body: { tenant: f.get('tenant'), email: f.get('email'), password: f.get('password') }, headers: human.headers() }));
     localStorage.setItem('fc.tenant', String(f.get('tenant')));
     session.set({ accessToken: r.accessToken, refreshToken: r.refreshToken, user: r.user, tenant: r.tenant, permissions: r.permissions, modules: r.modules });
     go(loc.state?.from ?? '/');
@@ -135,7 +143,8 @@ export function Login() {
           <input className="pill" name="email" type="email" placeholder="E-mail" autoComplete="username" required />
           <PasswordInput name="password" placeholder="Senha" autoComplete="current-password" />
           <Link to="/esqueci-senha" className="linkish">Esqueceu a senha?</Link>
-          <button className="btn-pill main" disabled={busy}>{employee.busy ? <Spinner /> : <Icon name="arrowRight" />} Entrar</button>
+          <div className="ts-slot" ref={human.slot} /><ErrorBox error={human.error} />
+          <button className="btn-pill main" disabled={busy || !human.ready}>{employee.busy ? <Spinner /> : <Icon name="arrowRight" />} Entrar</button>
           <button type="button" className="linkish" style={{ alignSelf: 'center' }} onClick={() => setMode('entrar')}>Sou dono(a) da conta</button>
         </form>
       </AuthLayout>
@@ -154,7 +163,8 @@ export function Login() {
         {cadastro && <input className="pill" name="name" placeholder="Seu nome" autoComplete="name" required minLength={2} />}
         <input className="pill" name="email" type="email" placeholder="E-mail" autoComplete="email" required autoFocus={!cadastro} />
         <PasswordInput name="password" placeholder={cadastro ? 'Crie uma senha (mín. 8)' : 'Senha'} autoComplete={cadastro ? 'new-password' : 'current-password'} minLength={cadastro ? 8 : undefined} />
-        <button className="btn-pill main" disabled={busy}>{account.busy ? <Spinner /> : <Icon name="arrowRight" />} {cadastro ? 'Criar conta' : 'Entrar'}</button>
+        <div className="ts-slot" ref={human.slot} /><ErrorBox error={human.error} />
+        <button className="btn-pill main" disabled={busy || !human.ready}>{account.busy ? <Spinner /> : <Icon name="arrowRight" />} {cadastro ? 'Criar conta' : 'Entrar'}</button>
         <div className="row" style={{ justifyContent: 'center', gap: 6, fontSize: 13.5 }}>
           <span className="muted">{cadastro ? 'Já tem conta?' : 'Ainda não tem conta?'}</span>
           <button type="button" className="linkish" onClick={() => setMode(cadastro ? 'entrar' : 'cadastro')}>{cadastro ? 'Entrar' : 'Criar conta'}</button>
@@ -167,7 +177,13 @@ export function Login() {
 
 export function Forgot() {
   const [done, setDone] = useState(false);
-  const { run, busy, error } = useAction(async (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); await post('/auth/forgot', { tenant: f.get('tenant'), email: f.get('email') }); setDone(true); });
+  const human = useTurnstile('esqueci');
+  const { run, busy, error } = useAction(async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); const f = new FormData(e.currentTarget);
+    if (!human.ready) throw new Error('Aguarde a verificação anti-robô terminar.');
+    try { await api('/auth/forgot', { method: 'POST', body: { tenant: f.get('tenant'), email: f.get('email') }, headers: human.headers() }); } finally { human.reset(); }
+    setDone(true);
+  });
   return (
     <AuthLayout>
       <form onSubmit={(e) => void run(e)}>
@@ -176,7 +192,8 @@ export function Forgot() {
           <ErrorBox error={error} />
           <input className="pill" name="tenant" defaultValue={localStorage.getItem('fc.tenant') ?? ''} placeholder="Identificador da empresa" required />
           <input className="pill" name="email" type="email" placeholder="E-mail" required />
-          <button className="btn-pill main" disabled={busy}>{busy ? <Spinner /> : <Icon name="mail" />} Enviar link</button>
+          <div className="ts-slot" ref={human.slot} /><ErrorBox error={human.error} />
+          <button className="btn-pill main" disabled={busy || !human.ready}>{busy ? <Spinner /> : <Icon name="mail" />} Enviar link</button>
         </>}
         <Link to="/login?modo=funcionario" className="linkish" style={{ alignSelf: 'center' }}>Voltar</Link>
       </form>

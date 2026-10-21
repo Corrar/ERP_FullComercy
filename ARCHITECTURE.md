@@ -76,8 +76,13 @@ O app abre na **loja** (`/comecar`): a pessoa escolhe o comércio (módulo), lig
   grátis** só na 1ª compra da conta e do CPF/CNPJ.
 - **Plano → acesso**: o snapshot do tenant carrega `planKeys`; `canUse` corta antes do perfil
   (403 `NOT_IN_PLAN`). Mudar funções vale na hora; o valor, na próxima fatura.
-- **Cobrança** (`core/billing/providers`): cartão tokenizado no navegador, boleto e Pix Automático;
-  `mock` na caixa (recusado em produção). Job `core.billing-cycle`: fim do teste, renovação,
+- **Cobrança** (`core/billing/providers`): contrato com `methods` por gateway. **Stripe** (conta BR,
+  BRL): cartão via SetupIntent + Stripe.js (3-D Secure com o cliente presente), mensalidade como
+  PaymentIntent `off_session` com idempotência fatura+tentativa, webhook com assinatura sobre o corpo
+  cru. Boleto/Pix no Stripe dependem de ativação na conta (Pix Automático o Stripe não tem). `mock`
+  simula os três meios fora de produção.
+- **Segurança de borda**: Cloudflare Turnstile nas rotas de credencial e checkout (fail-closed);
+  CSP restritiva e HSTS/X-Frame-Options/Permissions-Policy no front (Vercel). Job `core.billing-cycle`: fim do teste, renovação,
   retentativa de cartão (24 h, até 4), atraso → `PAST_DUE`, carência (`BILLING_GRACE_DAYS`) →
   empresa `SUSPENDED`; pagar reabre. `/billing/*` fica aberto para a empresa suspensa.
 
@@ -122,3 +127,5 @@ por `scripts/apply-rls.js` (idempotente, após cada migration).
 | 11 | Plano corta permissão no `rbac.service` | uma regra de acesso só (rota, menu e `/auth/me` concordam) | gate separado por rota ou por módulo |
 | 12 | Conta do comprador fora do tenant (`plat_accounts`) com token próprio | a compra acontece antes de existir empresa; uma conta abre várias | criar tenant vazio no cadastro |
 | 13 | Cartão tokenizado no navegador | número do cartão nunca toca a API (escopo PCI mínimo) | receber o número e repassar ao gateway |
+| 14 | Stripe com cobrança própria (PaymentIntent por fatura), não Stripe Billing | o plano muda por função e o ciclo/suspensão já são nossos; Stripe só cobra | Stripe Subscriptions (duas fontes da verdade do plano) |
+| 15 | Turnstile fail-closed | verificação que cai deixando passar é o que o ataque provoca | fail-open com log |

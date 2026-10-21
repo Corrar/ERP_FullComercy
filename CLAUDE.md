@@ -76,7 +76,13 @@ Detalhe e justificativa em `docs/ARQUITETURA.md`. O resumo que não pode ser esq
     cobertura derruba chave sem função).
 14. **O plano corta permissão** em `rbac.service` (`canUse`): nem o admin usa o que não contratou.
     Empresa sem assinatura (seed/plataforma) não tem corte.
-15. **Cartão nunca passa pela API**: o navegador tokeniza (`lib/billing.ts`); a API guarda token,
-    bandeira e final. Simuladores (`BILLING_PROVIDER=mock`, `GOOGLE_AUTH_MOCK=1`) são recusados em produção.
+15. **Cartão nunca passa pela API**: com Stripe, o número fica no iframe de js.stripe.com (SetupIntent +
+    3-D Secure no navegador); a API guarda `pm_…`, bandeira e final. Simuladores (`BILLING_PROVIDER=mock`,
+    `GOOGLE_AUTH_MOCK=1`) são recusados em produção; chave Stripe de teste em produção e chave real fora
+    dela também (`configProblems` em `config/env.ts`).
 16. **Visual**: tokens do `styles.css` (referência: design do Fluxo 5.0), cor do módulo por `--accent`,
     marca neutra em `app/brand.ts` até a identidade nascer.
+17. **Anti-robô Cloudflare Turnstile** (`shared/turnstile.ts`, `requireHuman`) em cadastro, login, login
+    da equipe, esqueci a senha e checkout. Falha FECHADA; obrigatório em produção.
+18. **CSP e cabeçalhos de segurança** em `apps/web/vercel.json`. Domínio novo no front (script, iframe,
+    API) entra na CSP — e a jornada é conferida sob a CSP antes de publicar (MEMORY §4.1).

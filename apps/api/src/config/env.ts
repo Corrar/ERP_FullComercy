@@ -4,7 +4,7 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
-const schema = z.object({
+export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   /// ONDE este deploy roda, separado do NODE_ENV (que é modo de execução do Node/Express):
   /// `production` = clientes reais pagando; `staging` = homologação/demonstração pública com
@@ -54,7 +54,16 @@ const schema = z.object({
   GOOGLE_AUTH_MOCK: z.string().default('0').transform((v) => ['1', 'true', 'on'].includes(v.toLowerCase())),
   /// Provedor de cobrança da assinatura (`core/billing/providers`). `mock` simula cartão, boleto e Pix
   /// Automático; recusado em produção — lá entra o adaptador do gateway real.
-  BILLING_PROVIDER: z.string().default('mock'),
+  BILLING_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
+  /// Stripe (BILLING_PROVIDER=stripe). A chave secreta fica SÓ no servidor; a publicável vai para o
+  /// navegador pelo catálogo (é pública por definição). O segredo do webhook confere a assinatura.
+  STRIPE_SECRET_KEY: z.string().regex(/^(sk|rk)_(test|live)_/, 'STRIPE_SECRET_KEY deve começar com sk_test_/sk_live_').optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().regex(/^pk_(test|live)_/, 'STRIPE_PUBLISHABLE_KEY deve começar com pk_test_/pk_live_').optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().regex(/^whsec_/).optional(),
+  /// Cloudflare Turnstile (anti-robô em login, cadastro, esqueci a senha e checkout). Sem as duas,
+  /// a verificação fica desligada — permitido só fora de produção.
+  TURNSTILE_SITE_KEY: z.string().min(10).optional(),
+  TURNSTILE_SECRET_KEY: z.string().min(10).optional(),
   /// Token que o webhook do provedor `mock` precisa mandar em `x-billing-token`. Sem ele, o webhook mock não aceita nada.
   BILLING_MOCK_WEBHOOK_TOKEN: z.string().min(16).optional(),
   /// Dias de teste grátis da primeira compra.
@@ -63,17 +72,40 @@ const schema = z.object({
   BILLING_GRACE_DAYS: z.coerce.number().int().nonnegative().default(10),
 });
 
-const parsed = schema.safeParse(process.env);
+const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
   console.error('⛔ Ambiente inválido:', parsed.error.flatten().fieldErrors);
   process.exit(78); // EX_CONFIG
 }
 const stage = parsed.data.APP_STAGE ?? (parsed.data.NODE_ENV === 'production' ? 'production' : 'local');
-// Os dois simuladores dão acesso sem pagar ou sem Google de verdade: em PRODUÇÃO são erro de
-// configuração, não escolha. Falha no boot (mesma régua das variáveis obrigatórias). Homologação
-// (`APP_STAGE=staging`) é opt-in explícito e a loja avisa na tela que o pagamento é simulado.
-if (stage === 'production' && (parsed.data.GOOGLE_AUTH_MOCK || parsed.data.BILLING_PROVIDER === 'mock')) {
-  console.error('⛔ Ambiente inválido: GOOGLE_AUTH_MOCK=1 e BILLING_PROVIDER=mock só valem fora de produção (APP_STAGE=staging|local).');
+
+/**
+ * Combinações que NÃO podem subir. Função pura (testada em `test/config.test.ts`): o boot imprime e
+ * morre com exit 78 — melhor cair no deploy do que cobrar errado ou abrir a porta para robô.
+ *   • produção com simulador (cobrança mock, Google simulado) dá ERP sem pagar;
+ *   • produção com chave de TESTE do Stripe não cobra ninguém; homologação com chave REAL cobraria
+ *     de verdade numa tela que diz "demonstração";
+ *   • Stripe sem as duas chaves não tokeniza nem cobra;
+ *   • produção sem Turnstile deixa cadastro, login e checkout (teste de cartão roubado) abertos a robô.
+ */
+export function configProblems(c: z.infer<typeof envSchema>, st: 'local' | 'staging' | 'production'): string[] {
+  const out: string[] = [];
+  if (st === 'production' && (c.GOOGLE_AUTH_MOCK || c.BILLING_PROVIDER === 'mock')) out.push('GOOGLE_AUTH_MOCK=1 e BILLING_PROVIDER=mock só valem fora de produção (APP_STAGE=staging|local).');
+  if (c.BILLING_PROVIDER === 'stripe') {
+    if (!c.STRIPE_SECRET_KEY || !c.STRIPE_PUBLISHABLE_KEY) out.push('BILLING_PROVIDER=stripe exige STRIPE_SECRET_KEY e STRIPE_PUBLISHABLE_KEY.');
+    const live = [c.STRIPE_SECRET_KEY, c.STRIPE_PUBLISHABLE_KEY].filter(Boolean).map((k) => /_live_/.test(k!));
+    if (live.length === 2 && live[0] !== live[1]) out.push('Chaves do Stripe misturam modo de teste e modo real.');
+    if (st === 'production' && live.some((l) => !l)) out.push('Produção exige chaves REAIS do Stripe (sk_live_/pk_live_).');
+    if (st !== 'production' && live.some((l) => l)) out.push('Chave REAL do Stripe fora de produção cobraria de verdade numa tela de demonstração.');
+  }
+  if (!!c.TURNSTILE_SITE_KEY !== !!c.TURNSTILE_SECRET_KEY) out.push('TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY vão juntas.');
+  if (st === 'production' && !c.TURNSTILE_SECRET_KEY) out.push('Produção exige Cloudflare Turnstile (TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY).');
+  return out;
+}
+
+const problems = configProblems(parsed.data, stage);
+if (problems.length) {
+  console.error('⛔ Ambiente inválido:\n - ' + problems.join('\n - '));
   process.exit(78);
 }
 

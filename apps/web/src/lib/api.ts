@@ -63,9 +63,9 @@ export const apiBase = BASE;
 /** Chamadas da loja: `pub` sem token (vitrine), `acct` com o token da conta do comprador. */
 export const pub = {
   get: <T = any>(path: string) => api<T>(path, { auth: 'none' }),
-  post: <T = any>(path: string, body?: unknown) => api<T>(path, { method: 'POST', body: body ?? {}, auth: 'none' }),
+  post: <T = any>(path: string, body?: unknown, headers?: Record<string, string>) => api<T>(path, { method: 'POST', body: body ?? {}, auth: 'none', headers }),
 };
 export const acct = {
   get: <T = any>(path: string) => api<T>(path, { auth: 'account' }),
-  post: <T = any>(path: string, body?: unknown) => api<T>(path, { method: 'POST', body: body ?? {}, auth: 'account' }),
+  post: <T = any>(path: string, body?: unknown, headers?: Record<string, string>) => api<T>(path, { method: 'POST', body: body ?? {}, auth: 'account', headers }),
 };

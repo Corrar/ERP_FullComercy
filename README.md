@@ -36,7 +36,10 @@ Em desenvolvimento: `GOOGLE_AUTH_MOCK=1` (Google simulado) e `BILLING_PROVIDER=m
 | API | Render, serviço `erp-modular-api` (free) | https://erp-modular-api.onrender.com |
 | Banco | **Neon**, projeto `ERP-Modular` (`empty-haze-70902164`), branch `homologacao`, banco `erp_modular`, Ohio | conexão **direta** (sem `-pooler`) |
 
-`APP_STAGE=staging`: cobrança e Google **simulados**, faixa de aviso na loja. Migrations e RLS
+`APP_STAGE=staging`: Google simulado e cobrança simulada **ou** Stripe em modo de teste
+(`BILLING_PROVIDER=stripe` + chaves `sk_test_`/`pk_test_`), faixa de aviso na loja. Anti-robô
+Cloudflare Turnstile liga com `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY`. Webhook do Stripe:
+`https://erp-modular-api.onrender.com/public/billing/webhooks/stripe` (`STRIPE_WEBHOOK_SECRET`). Migrations e RLS
 rodam no start (`prisma:deploy && db:rls && start`; o plano free do Render não tem pre-deploy).
 O `DATABASE_URL` da API é colado pelo responsável no painel do Render: a connection string do
 Neon (console → projeto ERP-Modular → Connect, **pooling desligado**) — o executor não lê

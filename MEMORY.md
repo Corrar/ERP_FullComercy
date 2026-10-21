@@ -46,6 +46,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | (prevenção) cold start do Neon > 5 s do `connect_timeout` padrão do Prisma | compute adormecido | `withConnectTimeout` (20 s) em `infra/db-url.ts` e nos scripts |
 | Isolamento "falhava": a loja via um cliente na busca por "Segredo <run>" | a busca usava os dígitos soltos do texto contra o TELEFONE ("MVJ2K" → "2") — o cliente era da própria loja | telefone/documento só com número de ≥ 4 dígitos (`digitsQuery`) |
 | Food e2e com 409 intermitente | número de mesa sorteado em 90 valores, único por empresa, seed acumula mesas | `mesaLivre()` pega o próximo número livre |
+| Jornada sob CSP "falhou" com 500 no cadastro | o Postgres local tinha caído (container reinicia entre mensagens), não a CSP | `pg_isready` antes de culpar o código |
 | Postgres local caía "sozinho" | `pkill -f` com padrão que casava o próprio shell (exit 144) matou a sessão que iniciou o banco | iniciar com `setsid`; matar por `pgrep -f "[p]adrao"` |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
@@ -80,6 +81,14 @@ estratégia; outbox em tabela; front sem framework; monorepo.
   nem lê/cola o `DATABASE_URL`: quem cola é o responsável, a URL **direta** (migration não vai pelo
   pooler, ver skill `regras-neon`). O Postgres `erp-modular-db` do Render ficou vazio e sobrando.
 - CORS: `CORS_ORIGINS` aceita curinga de um rótulo (`https://erp-modular-*-corrars-projects.vercel.app`).
+
+- Stripe: conta `acct_1USaDNRuCVjTlS47` ("Área restrita de Teste"), BR/BRL, modo teste. Cartão
+  ativo; boleto e Pix "available: false" (ativar no painel). Chaves `sk_`/`pk_` só pelo painel.
+- CSP: conferida servindo o build com os MESMOS cabeçalhos do `vercel.json` (API trocada pela local)
+  e percorrendo a jornada no Chromium: 0 violações; contra-prova com fetch/script estranhos bloqueados.
+  ⚠ `page.evaluate` roda pelo DevTools e ignora CSP — `eval` "passar" ali não prova nada.
+- O proxy deste container recusa api.stripe.com, js.stripe.com e challenges.cloudflare.com: teste de
+  Stripe/Turnstile é com dublê (unit) e a prova real é no ambiente publicado.
 
 ## 5. Como rodar e verificar (atalho)
 

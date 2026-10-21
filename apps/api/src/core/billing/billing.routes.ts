@@ -17,7 +17,7 @@ publicBillingRouter.post('/quote', rateLimit({ windowMs: 60_000, limit: 240, sta
   res.json(billing.quote(parse(selection, req.body)));
 }));
 publicBillingRouter.post('/webhooks/:provider', rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: true, legacyHeaders: false }), asyncHandler(async (req, res) => {
-  res.json(await billing.handleWebhook(String(req.params.provider), req.headers, req.body));
+  res.json(await billing.handleWebhook(String(req.params.provider), req.headers, req.body, (req as { rawBody?: Buffer }).rawBody));
 }));
 
 /** /billing — a empresa logada sobre a própria assinatura. Montado com `tenantContextAllowSuspended`. */
@@ -25,6 +25,7 @@ const router = Router();
 const P = requirePermission('core.billing:manage');
 router.get('/subscription', P, asyncHandler(async (_req, res) => { res.json(await billing.getSubscription()); }));
 router.put('/subscription/features', P, asyncHandler(async (req, res) => { res.json(await billing.changeFeatures(parse(selection, req.body))); }));
+router.post('/card-setup', P, asyncHandler(async (_req, res) => { res.json(await billing.cardSetupForTenant()); }));
 router.put('/payment-method', P, asyncHandler(async (req, res) => {
   res.json(await billing.changePaymentMethod(parse(z.object({ method: z.nativeEnum(BillingMethod), cardToken: z.string().max(200).optional() }), req.body)));
 }));

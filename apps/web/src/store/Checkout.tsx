@@ -1,7 +1,7 @@
 // src/store/Checkout.tsx — o pagamento. Exige a conta logada (sem ela, o router manda ao login e
 // volta). Dados da empresa + forma de pagamento; o cartão é tokenizado no navegador. Quem decide
 // preço e teste grátis é o servidor: a confirmação mostra o que ELE devolveu.
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Icon } from '@/components/icons';
 import { ErrorBox, Spinner, Steps } from '@/components/ui';
@@ -12,7 +12,8 @@ import { session } from '@/lib/session';
 import { useAction } from '@/lib/use-api';
 import { maskDoc, METHOD_LABEL, onlyDigits, tokenizeCard, useCatalog, useQuote, type BillingMethod } from '@/lib/billing';
 import { brl, d } from '@/lib/format';
-import { CopyBox, EMPTY_CARD, ModuleBadge, PaymentForm, StoreLayout } from './shared';
+import { CopyBox, EMPTY_CARD, ModuleBadge, PaymentForm, StoreLayout, type StripeCardHandle } from './shared';
+import { useTurnstile } from '@/lib/turnstile';
 
 export function Checkout() {
   const c = useCart();
@@ -24,14 +25,32 @@ export function Checkout() {
   const [method, setMethod] = useState<BillingMethod>('CARD');
   const [card, setCard] = useState(EMPTY_CARD);
   const [done, setDone] = useState<any>(null);
+  const stripeCard = useRef<StripeCardHandle | null>(null);
+  // Checkout é a porta preferida de quem testa cartão roubado: Turnstile da Cloudflare na frente.
+  const human = useTurnstile('checkout');
+  const stripeKey = catalog?.provider === 'stripe' ? catalog.stripe?.publishableKey ?? null : null;
+
+  /** Cartão → token para a API. Stripe: SetupIntent + confirmação no iframe (3-D Secure se o banco
+   *  pedir) → `pm_…`. Simulador: validação e token montados aqui. */
+  const cardToken = async () => {
+    if (!stripeKey) return tokenizeCard(card, catalog!.provider);
+    if (card.name.trim().length < 3) throw new Error('Informe o nome como está no cartão.');
+    if (!stripeCard.current) throw new Error('O campo do cartão ainda está carregando. Aguarde um instante.');
+    const setup = await acct.post<{ clientSecret: string }>('/account/billing/card-setup');
+    return stripeCard.current.confirm(setup.clientSecret, card.name.trim());
+  };
   const nav = useNavigate();
 
   const { run, busy, error } = useAction(async (e: FormEvent) => {
     e.preventDefault();
     if (name.trim().length < 2) throw new Error('Informe o nome da empresa.');
     if (![11, 14].includes(onlyDigits(doc).length)) throw new Error('Informe um CPF ou CNPJ completo.');
-    const cardToken = method === 'CARD' ? await tokenizeCard(card, catalog!.provider) : undefined;
-    const r = await acct.post('/account/checkout', { company: { name: name.trim(), document: doc }, modules: c.modules, features: c.features, payment: { method, cardToken } });
+    if (!human.ready) throw new Error('Aguarde a verificação anti-robô terminar.');
+    let r;
+    try {
+      const token = method === 'CARD' ? await cardToken() : undefined;
+      r = await acct.post('/account/checkout', { company: { name: name.trim(), document: doc }, modules: c.modules, features: c.features, payment: { method, cardToken: token } }, human.headers());
+    } finally { human.reset(); } // token do Turnstile é de uso único
     if (r.trial) accountSession.patch({ trialAvailable: false });
     setDone(r);
   });
@@ -57,7 +76,7 @@ export function Checkout() {
           </section>
           <section className="card stack">
             <h2 style={{ margin: 0 }}>Forma de pagamento da assinatura</h2>
-            {catalog && <PaymentForm methods={catalog.methods} method={method} setMethod={setMethod} card={card} setCard={setCard} />}
+            {catalog && <PaymentForm methods={catalog.methods} method={method} setMethod={setMethod} card={card} setCard={setCard} stripeKey={stripeKey} onStripe={(h) => { stripeCard.current = h; }} />}
           </section>
         </div>
         <aside className="summary">
@@ -69,7 +88,9 @@ export function Checkout() {
               <div className="trial"><Icon name="gift" size={18} /><span>{catalog!.trialDays} dias grátis. A primeira cobrança ({METHOD_LABEL[method]}) é em {d(new Date(Date.now() + catalog!.trialDays * 86_400_000))}.</span></div>
             </> : <div className="line"><span>Pagar hoje</span><b className="mono">{quote ? brl(quote.total) : '—'}</b></div>}
             <ErrorBox error={error} />
-            <button className="btn primary lg block" disabled={busy || !quote || !catalog}>{busy ? <Spinner /> : <Icon name="check" />} {trial ? 'Começar teste grátis' : 'Assinar e pagar'}</button>
+            <div className="ts-slot" ref={human.slot} />
+            <ErrorBox error={human.error} />
+            <button className="btn primary lg block" disabled={busy || !quote || !catalog || !human.ready}>{busy ? <Spinner /> : <Icon name="check" />} {trial ? 'Começar teste grátis' : 'Assinar e pagar'}</button>
             <div className="muted small" style={{ textAlign: 'center' }}>Assinatura mensal. Altere funções ou cancele quando quiser, pelo próprio sistema.</div>
           </div>
         </aside>

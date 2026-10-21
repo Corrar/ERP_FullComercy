@@ -29,7 +29,7 @@ import { googleMode } from '../account/google';
 import { FEATURES, MODULE_OFFERS, resolveSelection, type Resolved } from './catalog';
 import { addDays, addMonths, normalizeDocument } from './periods';
 import { billingProvider } from './providers';
-import type { Payer } from './providers/types';
+import type { BillingProvider, Payer } from './providers/types';
 
 /** Boleto vence 3 dias depois de emitido (prazo usual para compensar). */
 const BOLETO_DUE_DAYS = 3;
@@ -52,8 +52,13 @@ export function publicCatalog() {
     // o menu real usa (`can(perm)`) — um segundo mapeamento "função → tela" no front divergiria.
     features: FEATURES,
     trialDays: env.BILLING_TRIAL_DAYS,
-    methods: ['CARD', 'BOLETO', 'PIX_AUTO'] as BillingMethod[],
+    // Só o que o gateway configurado sabe cobrar (Stripe nesta conta: cartão).
+    methods: [...billingProvider().methods],
     provider: env.BILLING_PROVIDER,
+    /// Chave PUBLICÁVEL do Stripe (pública por definição): o navegador monta o campo do cartão com ela.
+    stripe: env.BILLING_PROVIDER === 'stripe' ? { publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null } : null,
+    /// Cloudflare Turnstile: o navegador desenha o desafio com a chave do SITE (pública).
+    security: { turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? null },
     /// A loja mostra "ambiente de demonstração: pagamento simulado" fora de produção.
     stage: env.APP_STAGE,
     google: { mode: googleMode(), clientId: env.GOOGLE_CLIENT_ID ?? null },
@@ -83,8 +88,7 @@ async function uniqueSlug(name: string) {
 }
 
 /** O meio de pagamento no provedor: cartão guardado ou autorização do Pix Automático pedida. */
-async function setupPayment(customerId: string, payer: Payer, method: BillingMethod, cardToken: string | undefined, maxAmount: string) {
-  const p = billingProvider();
+async function setupPayment(p: BillingProvider, customerId: string, payer: Payer, method: BillingMethod, cardToken: string | undefined, maxAmount: string) {
   if (method === 'CARD') {
     if (!cardToken) throw AppError.validation('Informe os dados do cartão.');
     try {
@@ -108,6 +112,7 @@ export async function checkout(accountId: string, input: CheckoutInput, meta: { 
   if (!document) throw AppError.validation('CPF ou CNPJ inválido.', { field: 'document' });
   const resolved = resolveSelection({ modules: input.modules, features: input.features });
   const total = resolved.total.toFixed(2);
+  if (!billingProvider().methods.includes(input.payment.method)) throw AppError.validation('Forma de pagamento indisponível neste momento.', { method: input.payment.method });
 
   // Teste: primeira compra da conta E documento sem teste anterior.
   const docHadTrial = await prisma.subscription.findFirst({ where: { trialEndsAt: { not: null }, tenant: { document } }, select: { id: true } });
@@ -117,7 +122,7 @@ export async function checkout(accountId: string, input: CheckoutInput, meta: { 
   const payer: Payer = { name: input.company.name, email: account.email, document };
   const provider = billingProvider();
   const { customerId } = await provider.createCustomer(payer);
-  const pay = await setupPayment(customerId, payer, input.payment.method, input.payment.cardToken, total);
+  const pay = await setupPayment(provider, customerId, payer, input.payment.method, input.payment.cardToken, total);
 
   const slug = await uniqueSlug(input.company.name);
   const { tenant, adminUserId } = await onboardTenant({
@@ -191,8 +196,10 @@ export async function collectInvoice(invoiceId: string): Promise<InvoiceRow> {
 
   if (sub.method === 'CARD') {
     if (!sub.paymentRef) return prisma.invoice.update({ where: { id: inv.id }, data: { status: 'FAILED', method: 'CARD', failureReason: 'Nenhum cartão cadastrado.' } });
-    const r = await p.chargeCard({ customerId, cardRef: sub.paymentRef, amount, description, invoiceId: inv.id });
+    const r = await p.chargeCard({ customerId, cardRef: sub.paymentRef, amount, description, invoiceId: inv.id, attempt: inv.attempts + 1 });
     if (r.ok) return markInvoicePaid(inv.id, r.providerRef);
+    // Aceito e ainda não liquidado: fica em aberto com a referência; o webhook fecha.
+    if (r.pending) return prisma.invoice.update({ where: { id: inv.id }, data: { status: 'OPEN', method: 'CARD', attempts: { increment: 1 }, providerRef: r.providerRef, failureReason: null } });
     return prisma.invoice.update({ where: { id: inv.id }, data: { status: 'FAILED', method: 'CARD', attempts: { increment: 1 }, failureReason: r.failureReason ?? 'Cartão recusado.', providerRef: r.providerRef } });
   }
   if (sub.method === 'BOLETO') {
@@ -212,6 +219,9 @@ export async function collectInvoice(invoiceId: string): Promise<InvoiceRow> {
 
 /** Recebeu: fatura paga, assinatura em dia, e a empresa volta se foi a COBRANÇA que a suspendeu. */
 export async function markInvoicePaid(invoiceId: string, providerRef?: string) {
+  // Idempotente: o gateway confirma pela resposta da cobrança E pelo webhook; a segunda não muda nada.
+  const before = await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
+  if (before.status === 'PAID') return before;
   const inv = await prisma.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID', paidAt: new Date(), failureReason: null, ...(providerRef ? { providerRef } : {}) } });
   const stillOpen = await prisma.invoice.count({ where: { subscriptionId: inv.subscriptionId, status: { in: ['OPEN', 'FAILED'] }, dueAt: { lt: new Date() } } });
   const sub = await prisma.subscription.findUniqueOrThrow({ where: { id: inv.subscriptionId } });
@@ -290,15 +300,18 @@ export async function runBillingCycle(now = new Date()) {
 
 // ── Webhook do provedor ───────────────────────────────────────────────────────────────────
 
-export async function handleWebhook(providerKey: string, headers: Record<string, string | string[] | undefined>, body: unknown) {
+export async function handleWebhook(providerKey: string, headers: Record<string, string | string[] | undefined>, body: unknown, rawBody?: Buffer) {
   let p;
   try { p = billingProvider(providerKey); } catch { throw AppError.notFound('Provedor'); }
   let ev;
-  try { ev = await p.parseWebhook({ headers, body }); } catch (e) { throw new AppError('UNAUTHENTICATED', e instanceof Error ? e.message : 'webhook inválido'); }
+  try { ev = await p.parseWebhook({ headers, body, rawBody }); } catch (e) { throw new AppError('UNAUTHENTICATED', e instanceof Error ? e.message : 'webhook inválido'); }
 
+  if (ev.kind === 'ignored') return { ok: true, ignored: ev.type };
   if (ev.kind === 'invoice') {
     const inv = await prisma.invoice.findFirst({ where: { providerRef: ev.providerRef, subscription: { provider: providerKey } } });
-    if (!inv) throw AppError.notFound('Fatura');
+    // Evento autêntico de cobrança que não é nossa (outro produto na mesma conta Stripe): 200 e nada.
+    // Um 404 faria o gateway reenviar por dias.
+    if (!inv) return { ok: true, ignored: 'fatura desconhecida' };
     if (ev.status === 'PAID') await markInvoicePaid(inv.id);
     else if (inv.status !== 'PAID') await prisma.invoice.update({ where: { id: inv.id }, data: { status: 'FAILED', failureReason: 'Pagamento não confirmado pelo banco.' } });
     return { ok: true, invoiceId: inv.id };
@@ -313,6 +326,25 @@ export async function handleWebhook(providerKey: string, headers: Record<string,
     for (const i of open) await collectInvoice(i.id);
   }
   return { ok: true, subscriptionId: sub.id };
+}
+
+// ── Cartão com autenticação do banco (Stripe) ─────────────────────────────────────────────
+
+/** Preparo do cartão na COMPRA: ainda não há Customer (ele nasce no checkout, que prende o cartão). */
+export async function cardSetupForCheckout() {
+  const p = billingProvider();
+  if (!p.createCardSetup) throw AppError.validation('Este gateway não usa preparo de cartão.');
+  return p.createCardSetup({ customerId: null });
+}
+
+/** Preparo do cartão na TROCA de forma de pagamento: já existe Customer; o cartão nasce preso a ele. */
+export async function cardSetupForTenant() {
+  const sub = await mySubscription();
+  const p = billingProvider();
+  if (!p.createCardSetup) throw AppError.validation('Este gateway não usa preparo de cartão.');
+  // Customer só se a assinatura já é deste gateway; senão o cartão nasce solto e a troca o prende
+  // ao Customer novo (mesmo caminho do checkout).
+  return p.createCardSetup({ customerId: sub.provider === p.key ? sub.providerCustomerId : null });
 }
 
 // ── O que a empresa vê e muda (rotas /billing, permissão core.billing:manage) ─────────────
@@ -371,8 +403,13 @@ export async function changePaymentMethod(input: { method: BillingMethod; cardTo
   const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: sub.tenantId } });
   const account = await prisma.account.findUniqueOrThrow({ where: { id: sub.accountId } });
   const payer: Payer = { name: tenant.name, email: account.email, document: tenant.document };
-  const pay = await setupPayment(sub.providerCustomerId ?? '', payer, input.method, input.cardToken, sub.amount.toFixed(2));
-  await prisma.subscription.update({ where: { id: sub.id }, data: { method: input.method, paymentRef: pay.paymentRef, paymentInfo: pay.paymentInfo as Prisma.InputJsonValue } });
+  // Sempre pelo gateway ATUAL. Assinatura nascida em outro (ex.: simulador antes do Stripe) migra
+  // aqui: Customer novo no gateway atual, e a assinatura passa a apontar para ele.
+  const target = billingProvider();
+  if (!target.methods.includes(input.method)) throw AppError.validation('Forma de pagamento indisponível neste momento.', { method: input.method });
+  const customerId = sub.provider === target.key && sub.providerCustomerId ? sub.providerCustomerId : (await target.createCustomer(payer)).customerId;
+  const pay = await setupPayment(target, customerId, payer, input.method, input.cardToken, sub.amount.toFixed(2));
+  await prisma.subscription.update({ where: { id: sub.id }, data: { provider: target.key, providerCustomerId: customerId, method: input.method, paymentRef: pay.paymentRef, paymentInfo: pay.paymentInfo as Prisma.InputJsonValue } });
   // Trocou o meio com mensalidade pendente: tenta de novo já pelo meio novo.
   const open = await prisma.invoice.findMany({ where: { subscriptionId: sub.id, status: { in: ['OPEN', 'FAILED'] } }, select: { id: true } });
   for (const i of open) await collectInvoice(i.id);

@@ -1,7 +1,7 @@
 // src/store/shared.tsx — peças da LOJA DE MÓDULOS usadas em mais de uma tela: o topo da loja,
 // a lista de funções com interruptor e preço, o resumo com o total do servidor e o formulário
 // de pagamento (que a tela de Assinatura do ERP também usa para trocar o meio).
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon } from '@/components/icons';
 import { Avatar, Switch } from '@/components/ui';
@@ -13,6 +13,7 @@ import { useCart } from '@/lib/cart';
 import { brl } from '@/lib/format';
 import { useCatalog, BRAND_LABEL, cardBrand, maskCard, maskExp, METHOD_LABEL, onlyDigits, type BillingMethod, type CardInput, type Catalog, type Feature, type Quote } from '@/lib/billing';
 import type { ModuleKey } from '@/lib/session';
+import { cardStyle, getStripe, stripeErrorMessage } from '@/lib/stripe';
 
 export const MODULE_SLUG: Record<ModuleKey, string> = { VAREJO: 'varejo', FOOD: 'food', ACADEMIA: 'academia', SERVICOS: 'servicos' };
 export const slugToModule = (s?: string): ModuleKey | null => (Object.entries(MODULE_SLUG).find(([, v]) => v === s)?.[0] as ModuleKey) ?? null;
@@ -32,12 +33,16 @@ export function StoreLayout({ module, children, step }: { module?: ModuleKey | n
   const { theme, setTheme } = useTheme();
   const nav = useNavigate();
   const { data: catalog } = useCatalog();
-  // Fora de produção a cobrança é simulada: a loja diz isso em toda tela (ninguém digita cartão
-  // achando que vai ser cobrado de verdade, nem acredita que pagou).
-  const demo = catalog && catalog.stage !== 'production' && catalog.provider === 'mock';
+  // Fora de produção nada é cobrado de verdade: a loja diz isso em toda tela (ninguém digita cartão
+  // achando que vai ser cobrado, nem acredita que pagou). Com Stripe, a conta está em modo de teste.
+  const demo = catalog && catalog.stage !== 'production'
+    ? (catalog.provider === 'stripe'
+      ? 'Ambiente de demonstração: Stripe em modo de teste, nada é cobrado. Cartão 4242 4242 4242 4242, validade futura e qualquer CVV.'
+      : 'Ambiente de demonstração: pagamentos simulados, nada é cobrado. Cartão de teste 4242 4242 4242 4242.')
+    : null;
   return (
     <div className="store" style={accentStyle(module)}>
-      {demo && <div className="demo-strip" role="note"><Icon name="info" size={15} /> Ambiente de demonstração: pagamentos simulados, nada é cobrado. Cartão de teste 4242 4242 4242 4242.</div>}
+      {demo && <div className="demo-strip" role="note"><Icon name="info" size={15} /> {demo}</div>}
       <header className="store-top">
         <Link to="/comecar" className="brand" aria-label={`${BRAND.name} — início`}><span className="brand-mark"><Icon name="grid" size={18} stroke={2.2} /></span><span className="hide-sm">{BRAND.name}</span></Link>
         <div className="row" style={{ flexWrap: 'nowrap' }}>
@@ -135,7 +140,43 @@ const METHOD_INFO: Record<BillingMethod, { icon: string; sub: string }> = {
   PIX_AUTO: { icon: 'qr', sub: 'Autorize uma vez no app do banco' },
 };
 
-export function PaymentForm({ methods, method, setMethod, card, setCard }: { methods: BillingMethod[]; method: BillingMethod; setMethod: (m: BillingMethod) => void; card: CardInput; setCard: (c: CardInput) => void }) {
+/** O que o formulário entrega a quem envia: confirma o cartão no Stripe e devolve o `pm_…`. */
+export interface StripeCardHandle { confirm(clientSecret: string, name: string): Promise<string> }
+
+/** Campo do cartão do Stripe (iframe de js.stripe.com). Avisa o pai quando está pronto. */
+function StripeCard({ publishableKey, onReady }: { publishableKey: string; onReady: (h: StripeCardHandle | null) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let card: any; let alive = true;
+    getStripe(publishableKey).then((stripe) => {
+      if (!alive || !ref.current) return;
+      card = stripe.elements({ locale: 'pt-BR' }).create('card', { hidePostalCode: true, style: cardStyle() });
+      card.mount(ref.current);
+      card.on('ready', () => setLoading(false));
+      card.on('change', (e: { error?: { message?: string } }) => setErr(e.error?.message ?? null));
+      onReady({
+        async confirm(clientSecret, name) {
+          const r = await stripe.confirmCardSetup(clientSecret, { payment_method: { card, billing_details: { name } } });
+          if (r.error) throw new Error(stripeErrorMessage(r.error));
+          const pm = r.setupIntent.payment_method;
+          return typeof pm === 'string' ? pm : pm.id;
+        },
+      });
+    }, (e: Error) => { setErr(e.message); setLoading(false); });
+    return () => { alive = false; card?.destroy(); onReady(null); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publishableKey]);
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="input stripe-field" ref={ref} aria-label="Dados do cartão" data-testid="stripe-card">{loading && <span className="faint small">Carregando campo seguro do cartão…</span>}</div>
+      {err && <div className="small" style={{ color: 'var(--danger)', fontWeight: 600 }}>{err}</div>}
+    </div>
+  );
+}
+
+export function PaymentForm({ methods, method, setMethod, card, setCard, stripeKey, onStripe }: { methods: BillingMethod[]; method: BillingMethod; setMethod: (m: BillingMethod) => void; card: CardInput; setCard: (c: CardInput) => void; stripeKey?: string | null; onStripe?: (h: StripeCardHandle | null) => void }) {
   const [flip, setFlip] = useState(false);
   const brand = cardBrand(card.number);
   return (
@@ -148,7 +189,16 @@ export function PaymentForm({ methods, method, setMethod, card, setCard }: { met
           </button>
         ))}
       </div>
-      {method === 'CARD' && (
+      {method === 'CARD' && stripeKey && (
+        <div className="stack">
+          <label className="field"><span>Nome no cartão</span><input className="input" autoComplete="cc-name" placeholder="Como está impresso" value={card.name} onChange={(e) => setCard({ ...card, name: e.target.value })} /></label>
+          <label className="field"><span>Cartão</span></label>
+          <StripeCard publishableKey={stripeKey} onReady={(h) => onStripe?.(h)} />
+          <div className="note"><Icon name="shield" size={14} /><span>Pagamento processado pelo Stripe. O número do cartão vai direto para o Stripe (nem o sistema nem a API o veem); o banco pode pedir uma confirmação.</span></div>
+          <div className="note"><Icon name="info" size={14} /><span>Ao confirmar, você autoriza a cobrança mensal do valor do seu plano neste cartão até cancelar a assinatura, que pode ser feito a qualquer momento no menu Assinatura.</span></div>
+        </div>
+      )}
+      {method === 'CARD' && !stripeKey && (
         <div className="grid two" style={{ alignItems: 'start' }}>
           <div className="card-preview" aria-hidden="true">
             <div className="row between"><span style={{ fontWeight: 800 }}>{BRAND_LABEL[brand]}</span><Icon name="card" size={22} /></div>

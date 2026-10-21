@@ -75,7 +75,9 @@ export function buildApp() {
   app.set('trust proxy', 1);
   app.use(helmet());
   app.use(compression());
-  app.use(express.json({ limit: '5mb' }));
+  // O Stripe assina os BYTES do corpo: o webhook precisa do corpo cru além do JSON. Guardado só
+  // nas rotas de webhook (não custa memória no resto).
+  app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { if ((req as { url?: string }).url?.startsWith('/public/billing/webhooks/')) (req as { rawBody?: Buffer }).rawBody = Buffer.from(buf); } }));
   app.use(requestLog);
   app.use(csvMiddleware);
   app.use(rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: true, legacyHeaders: false }));
@@ -86,7 +88,7 @@ export function buildApp() {
       cb(new Error('Bloqueio CORS: origem não permitida'), false);
     },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key', 'X-Turnstile-Token'],
   }));
 
   // 1. Público.

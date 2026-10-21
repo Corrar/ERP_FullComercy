@@ -21,6 +21,7 @@ const pixAuth = new Map<string, 'PENDING' | 'AUTHORIZED' | 'REVOKED'>();
 
 export const mockBillingProvider: BillingProvider = {
   key: 'mock',
+  methods: ['CARD', 'BOLETO', 'PIX_AUTO'],
   async createCustomer() { return { customerId: id('cus_mock') }; },
   async attachCard({ cardToken }) {
     const m = TOKEN.exec(cardToken);

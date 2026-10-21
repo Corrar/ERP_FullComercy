@@ -1,10 +1,10 @@
 // src/core/billing/Subscription.tsx — a ASSINATURA vista de dentro do ERP: plano e valor, teste
 // grátis, trocar funções (o mesmo configurador da loja), forma de pagamento, faturas e
 // cancelamento. Fica aberta mesmo com a empresa suspensa — é por aqui que se regulariza.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { Card, ErrorBox, Modal, Spinner, Table, Toast } from '@/components/ui';
-import { FeatureList, ModuleBadge, PaymentForm, CopyBox, EMPTY_CARD } from '@/store/shared';
+import { FeatureList, ModuleBadge, PaymentForm, CopyBox, EMPTY_CARD, type StripeCardHandle } from '@/store/shared';
 import { api, put, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
 import { useSession, type ModuleKey } from '@/lib/session';
@@ -72,7 +72,7 @@ export function Subscription() {
       </div>
 
       {editing && <EditPlan sub={sub} onClose={() => setEditing(false)} onSaved={async (s) => { setData(s); setEditing(false); await refresh(); setToast('Plano atualizado. O novo valor vale a partir da próxima cobrança.'); }} />}
-      {paying && <ChangePayment provider={catalog.provider} methods={catalog.methods} current={sub.method} onClose={() => setPaying(false)} onSaved={async (s) => { setData(s); setPaying(false); await refresh().catch(() => undefined); setToast('Forma de pagamento atualizada.'); }} />}
+      {paying && <ChangePayment provider={catalog.provider} stripeKey={catalog.provider === 'stripe' ? catalog.stripe?.publishableKey ?? null : null} methods={catalog.methods} current={sub.method} onClose={() => setPaying(false)} onSaved={async (s) => { setData(s); setPaying(false); await refresh().catch(() => undefined); setToast('Forma de pagamento atualizada.'); }} />}
     </div>
   );
 }
@@ -107,17 +107,25 @@ function EditPlan({ sub, onClose, onSaved }: { sub: any; onClose: () => void; on
   );
 }
 
-function ChangePayment({ provider, methods, current, onClose, onSaved }: { provider: string; methods: BillingMethod[]; current: BillingMethod; onClose: () => void; onSaved: (s: any) => void }) {
-  const [method, setMethod] = useState<BillingMethod>(current);
+function ChangePayment({ provider, stripeKey, methods, current, onClose, onSaved }: { provider: string; stripeKey: string | null; methods: BillingMethod[]; current: BillingMethod; onClose: () => void; onSaved: (s: any) => void }) {
+  // A forma atual pode não existir mais no gateway (ex.: boleto antes do Stripe): começa na primeira que existe.
+  const [method, setMethod] = useState<BillingMethod>(methods.includes(current) ? current : methods[0]);
   const [card, setCard] = useState(EMPTY_CARD);
+  const stripeCard = useRef<StripeCardHandle | null>(null);
   const save = useAction(async () => {
-    const cardToken = method === 'CARD' ? await tokenizeCard(card, provider) : undefined;
+    let cardToken: string | undefined;
+    if (method === 'CARD' && stripeKey) {
+      if (card.name.trim().length < 3) throw new Error('Informe o nome como está no cartão.');
+      if (!stripeCard.current) throw new Error('O campo do cartão ainda está carregando. Aguarde um instante.');
+      const setup = await post<{ clientSecret: string }>('/billing/card-setup');
+      cardToken = await stripeCard.current.confirm(setup.clientSecret, card.name.trim());
+    } else if (method === 'CARD') cardToken = await tokenizeCard(card, provider);
     onSaved(await api('/billing/payment-method', { method: 'PUT', body: { method, cardToken } }));
   });
   return (
     <Modal title="Forma de pagamento" open onClose={onClose}>
       <div className="stack">
-        <PaymentForm methods={methods} method={method} setMethod={setMethod} card={card} setCard={setCard} />
+        <PaymentForm methods={methods} method={method} setMethod={setMethod} card={card} setCard={setCard} stripeKey={stripeKey} onStripe={(h) => { stripeCard.current = h; }} />
         <ErrorBox error={save.error} />
         <button className="btn primary block" disabled={save.busy} onClick={() => void save.run()}>{save.busy ? <Spinner /> : <Icon name="check" size={16} />} Salvar</button>
         <div className="muted small">Se houver mensalidade pendente, ela é cobrada de novo pela forma nova.</div>
