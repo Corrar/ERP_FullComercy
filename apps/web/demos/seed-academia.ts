@@ -32,7 +32,17 @@ const ALUNOS: [string, string, number, number][] = [
 
 export interface Academia { planos: any[]; alunos: Record<string, any>; matriculas: Record<string, any>; turmas: any[]; dispositivos: any[] }
 
-export async function semearAcademia(e: Empresa): Promise<Academia> {
+export async function semearAcademia(emp: Empresa): Promise<Academia> {
+  // A API local é dividida com outras gravações: 429 do limite global por IP espera e tenta de novo.
+  const api: Empresa['api'] = async (method, path, data) => {
+    for (let i = 0; ; i++) {
+      try { return await emp.api(method, path, data); } catch (err) {
+        if (i >= 8 || !/→ 429 /.test(String(err))) throw err;
+        await new Promise((r) => setTimeout(r, 4000));
+      }
+    }
+  };
+  const e = { ...emp, api };
   const planos: any[] = [];
   for (const p of PLANOS) planos.push(await e.api('POST', '/m/academia/planos', { ...p, accessRules: { maxCheckInsPerDay: 2 } }));
 
@@ -69,8 +79,9 @@ export async function semearAcademia(e: Empresa): Promise<Academia> {
   ];
   const valor = (nome: string, kind: string) => `${kind}-${alunos[nome].id.slice(0, 8)}`;
   for (const [nome, kind] of creds) await e.api('POST', '/m/academia/credenciais', { customerId: alunos[nome].id, kind, value: valor(nome, kind) });
-  const catraca = async (dev: any, kind: string, value: string) => {
+  const catraca = async (dev: any, kind: string, value: string): Promise<void> => {
     const r = await fetch(`${API}${dev.webhookUrl}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: dev.webhookToken, kind, value }) });
+    if (r.status === 429) { await new Promise((ok) => setTimeout(ok, 4000)); return catraca(dev, kind, value); }
     if (!r.ok) throw new Error(`catraca ${dev.name} → ${r.status} ${await r.text()}`);
   };
   for (const [nome, kind, d] of creds) await catraca(dispositivos[d], kind, valor(nome, kind));

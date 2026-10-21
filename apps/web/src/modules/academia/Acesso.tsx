@@ -5,7 +5,7 @@ import { Card, ErrorBox, Field, Form, Modal, Table } from '@/components/ui';
 import { dt } from '@/lib/format';
 
 export function Acesso() {
-  const devs = useGet<any[]>('/m/academia/dispositivos'); const eventos = useGet<any[]>('/m/academia/acessos', { take: 100 });
+  const devs = useGet<any[]>('/m/academia/dispositivos'); const eventos = useGet<any[]>('/m/academia/acessos');
   const [novo, setNovo] = useState(false); const [token, setToken] = useState<any | null>(null); const [cred, setCred] = useState(false);
   const criar = useAction(async (v: Record<string, any>) => { setToken(await post('/m/academia/dispositivos', v)); setNovo(false); await devs.reload(); });
   const girar = useAction(async (id: string) => { setToken(await post(`/m/academia/dispositivos/${id}/girar-token`)); });

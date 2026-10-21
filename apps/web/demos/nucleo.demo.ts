@@ -1,19 +1,34 @@
 // demos/nucleo.demo.ts — roteiros das funções do NÚCLEO (servem a qualquer comércio), gravados na
 // empresa de Varejo. Os dados extras daqui (perfis, equipe, grade, 2º depósito, compras, contas,
 // endereço) nascem pela API antes de qualquer gravação, uma vez por empresa.
-import { empresa, expect, test, type Empresa } from './_gravador';
+import { API, empresa, expect, test, type Empresa } from './_gravador';
 import { semearVarejo } from './seeds';
 
 type Req = Parameters<typeof empresa>[0];
 const SENHA_EQUIPE = 'Equipe-bella-2026';
 const prontas = new Map<string, Promise<void>>();
+test.describe.configure({ timeout: 600_000 }); // a espera por folga na API pode passar dos 3 min do padrão
 
 /** Empresa de Varejo + os extras do núcleo. Os extras rodam uma vez por empresa mesmo quando outro
  *  roteiro criou a empresa antes (o mapa de empresas é por processo e o primeiro `semear` vence). */
 async function loja(request: Req): Promise<Empresa> {
+  await folego(request);
   const e = await empresa(request, 'VAREJO', async (x) => { await semearVarejo(x); await extras(x); });
   await extras(e);
+  await folego(request, 150);
   return e;
+}
+/** A API limita 600 req/min por IP e os roteiros de todos os comércios gravam em paralelo contra a
+ *  mesma API: antes de semear ou abrir a tela, espera a janela ter folga (senão a tela fica em
+ *  "Carregando…" por um 429 no meio do vídeo). */
+async function folego(request: Req, minimo = 250) {
+  for (let i = 0; i < 40; i++) {
+    const r = await request.get(`${API}/health/ready`);
+    const resta = Number(r.headers()['ratelimit-remaining'] ?? 600);
+    if (r.ok() && resta >= minimo) return;
+    await new Promise((ok) => setTimeout(ok, Math.min(60, Math.max(3, Number(r.headers()['ratelimit-reset'] ?? 5))) * 1000));
+  }
+  throw new Error('API sem folga no limite de requisições por 40 tentativas.');
 }
 function extras(e: Empresa): Promise<void> {
   if (!prontas.has(e.slug)) prontas.set(e.slug, semearNucleo(e));

@@ -4,8 +4,11 @@ import { folego, semearFood } from './seed-food';
 
 let respirou = false; // o gravador guarda a empresa da rodada: só a primeira criação espera a cota
 const casa = async (request: Parameters<typeof empresa>[0]) => {
-  if (!respirou) { test.setTimeout(20 * 60_000); await folego(request); respirou = true; }
-  return empresa(request, 'FOOD', async (e) => { await semearFood(e); });
+  test.setTimeout(20 * 60_000); // esperar a cota (login e minuto) cabe no teste
+  if (!respirou) { await folego(request); respirou = true; }
+  const e = await empresa(request, 'FOOD', async (x) => { await semearFood(x); });
+  await folego(request, 150, false); // a tela e os gestos não podem tomar 429 (cota global dividida)
+  return e;
 };
 
 test('food.salao', async ({ request, gravar }) => {
@@ -83,12 +86,16 @@ test('food.delivery', async ({ request, gravar }) => {
   const select = pendente.locator('select');
   await g.passar(select);
   await select.selectOption({ label: 'Diego Martins' });
-  await expect(linhas.filter({ hasText: 'Diego Martins' })).toHaveCount(1);
+  // (as linhas ainda pendentes têm o <select> com os nomes; só conta quem já tem entregador)
+  const despachadas = linhas.filter({ hasNot: p.locator('select') });
+  await expect(despachadas.filter({ hasText: 'Diego Martins' })).toHaveCount(1);
+  await expect(linhas.filter({ has: p.locator('select') })).toHaveCount(1);
   await g.pausa(600);
   g.capa();
   // A atribuída saiu com o entregador.
-  await g.clicar(linhas.filter({ hasText: 'Aline Souza' }).getByRole('button', { name: 'Saiu' }));
-  await expect(linhas.filter({ hasText: 'Aline Souza' }).getByRole('button', { name: 'Entregue' })).toBeVisible();
+  const aline = despachadas.filter({ hasText: 'Aline Souza' });
+  await g.clicar(aline.getByRole('button', { name: 'Saiu' }));
+  await expect(aline.getByRole('button', { name: 'Entregue' })).toBeVisible();
   await g.pausa(1200);
 });
 

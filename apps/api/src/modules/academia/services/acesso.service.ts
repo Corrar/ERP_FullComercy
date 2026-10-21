@@ -94,5 +94,6 @@ export async function girarToken(id: string) {
 }
 export const revogarCredencial = (id: string) => ctx().db.gymAccessCredential.update({ where: { id }, data: { isActive: false, revokedAt: new Date() } });
 export const credenciaisDoAluno = (customerId: string) => ctx().db.gymAccessCredential.findMany({ where: { customerId }, select: { id: true, kind: true, isActive: true, createdAt: true, revokedAt: true } });
-export const eventosDeAcesso = (filter: { deviceId?: string; customerId?: string; allowed?: boolean; take?: number }) =>
-  ctx().db.gymAccessEvent.findMany({ where: filter, include: { customer: { select: { name: true } }, device: { select: { name: true } } }, orderBy: { occurredAt: 'desc' }, take: Math.min(filter.take ?? 100, 500) }).then((rows) => rows.map((r) => ({ ...r, id: r.id.toString() })));
+// `take` NÃO vai no `where` (o Prisma recusa o campo e a rota caía em 500: "Últimos acessos" ficava em "Carregando…").
+export const eventosDeAcesso = ({ take, ...where }: { deviceId?: string; customerId?: string; allowed?: boolean; take?: number }) =>
+  ctx().db.gymAccessEvent.findMany({ where, include: { customer: { select: { name: true } }, device: { select: { name: true } } }, orderBy: { occurredAt: 'desc' }, take: Math.min(take ?? 100, 500) }).then((rows) => rows.map((r) => ({ ...r, id: r.id.toString() })));

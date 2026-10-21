@@ -1,6 +1,16 @@
 // demos/academia.demo.ts — roteiros das funções da Academia (um vídeo por chave do catálogo).
+import type { Locator, Page } from '@playwright/test';
 import { empresa, expect, test } from './_gravador';
 import { semearAcademia } from './seed-academia';
+
+/** Antes da câmera: espera a tela com dado. A API local é dividida com outras gravações e o limite
+ *  global por IP às vezes devolve 429 a uma leitura da tela; aí recarrega a página. */
+async function pronta(p: Page, alvo: Locator) {
+  for (let i = 0; i < 6; i++) {
+    try { await expect(alvo).toBeVisible({ timeout: 6000 }); return; } catch { await p.waitForTimeout(4000); await p.reload(); }
+  }
+  await expect(alvo).toBeVisible();
+}
 
 const academia = (request: Parameters<typeof empresa>[0]) => empresa(request, 'ACADEMIA', async (e) => { await semearAcademia(e); });
 
@@ -8,7 +18,7 @@ test('gym.matriculas', async ({ request, gravar }) => {
   const e = await academia(request);
   const g = await gravar('gym.matriculas', e, '/academia/matriculas');
   const p = g.page;
-  await expect(p.getByRole('cell', { name: /Ana Beatriz Souza/ })).toBeVisible();
+  await pronta(p, p.getByRole('cell', { name: /Ana Beatriz Souza/ }));
   await g.inicio();
   await g.pausa(900);
   await g.clicar(p.getByRole('button', { name: 'Nova adesão' }));
@@ -39,7 +49,7 @@ test('gym.recepcao', async ({ request, gravar }) => {
   const g = await gravar('gym.recepcao', e, '/academia/recepcao');
   const p = g.page;
   const busca = p.getByPlaceholder('nome ou telefone do aluno');
-  await expect(p.getByText(/Presentes agora \([1-9]/)).toBeVisible();
+  await pronta(p, p.getByRole('cell', { name: 'Gustavo Pereira' }));
   await g.inicio();
   await g.pausa(700);
   await g.digitar(busca, 'Ana Be');
@@ -62,9 +72,8 @@ test('gym.catraca', async ({ request, gravar }) => {
   const e = await academia(request);
   const g = await gravar('gym.catraca', e, '/academia/acesso');
   const p = g.page;
-  await p.waitForTimeout(2500); await p.screenshot({ path: '/tmp/claude-0/-home-user/7d666d08-dab4-550a-b994-0bae765ca737/scratchpad/dbg-catraca.png', fullPage: true });
-  await expect(p.getByRole('cell', { name: 'Leitor biométrico' }).first()).toBeVisible();
-  await expect(p.getByText('CREDENCIAL_DESCONHECIDA')).toBeVisible();
+  await pronta(p, p.getByText('CREDENCIAL_DESCONHECIDA'));
+  await pronta(p, p.getByRole('cell', { name: 'Leitor biométrico' }).first());
   await g.inicio();
   await g.pausa(900);
   g.capa();
@@ -86,8 +95,8 @@ test('gym.turmas', async ({ request, gravar }) => {
   const e = await academia(request);
   const g = await gravar('gym.turmas', e, '/academia/turmas');
   const p = g.page;
-  await p.waitForTimeout(2500); await p.screenshot({ path: '/tmp/claude-0/-home-user/7d666d08-dab4-550a-b994-0bae765ca737/scratchpad/dbg-turmas.png', fullPage: true });
-  await expect(p.getByRole('cell', { name: 'Spinning' }).first()).toBeVisible();
+  await pronta(p, p.getByRole('cell', { name: 'Spinning' }).first());
+  await pronta(p, p.getByText('Thiago Mendes · 16 vagas'));
   await g.inicio();
   await g.pausa(900);
   g.capa();

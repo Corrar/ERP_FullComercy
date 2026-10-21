@@ -23,11 +23,15 @@ function paciente(api: Api): Api {
   };
 }
 
-/** Antes de criar a empresa (o gravador não repete em 429): espera a cota do minuto respirar. */
-export async function folego(request: APIRequestContext, minimo = 350) {
+/**
+ * Antes de criar a empresa (o gravador não repete em 429) e antes de ligar a câmera: espera a cota
+ * do minuto respirar. A tela não mostra erro de carga em todo lugar (o KDS guarda a lista antiga
+ * quando a API devolve 429), então gravar sem cota dá vídeo de clique que "não faz nada".
+ */
+export async function folego(request: APIRequestContext, minimo = 350, login = true) {
   // O login tem cota própria (20 por 15 min, dividida com as outras gravações): se esgotou, a
   // resposta 429 diz quando a janela vira. Uma sonda recusada (corpo vazio) gasta no máximo 1.
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; login && i < 20; i++) {
     const r = await request.post(`${API}/auth/login`, { data: {} });
     if (r.status() !== 429) break;
     await dormir((Number(r.headers()['ratelimit-reset'] ?? 30) + 1) * 1000);

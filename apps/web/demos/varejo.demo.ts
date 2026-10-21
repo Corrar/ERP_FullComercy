@@ -36,10 +36,11 @@ test('varejo.pdv', async ({ request, gravar }) => {
 test('varejo.grade', async ({ request, gravar }) => {
   const e = await loja(request); const api = apiDe(request, e);
   // Produto "com grade" ainda sem variantes + os eixos da loja (tamanho e cor) já cadastrados.
-  await api('POST', '/products', { name: 'Camisa Polo Piquet', salePrice: 119.9, costPrice: 46, hasVariants: true });
+  await api('POST', '/products', { name: 'Camisa Polo Piquet', sku: 'POLO', salePrice: 119.9, costPrice: 46, hasVariants: true });
   for (const [nome, valores] of [['Tamanho', ['P', 'M', 'G', 'GG']], ['Cor', ['Preto', 'Branco', 'Azul-marinho']]] as const) {
-    const eixo = await api('POST', '/m/varejo/grade/eixos', { name: nome });
-    for (const value of valores) await api('POST', `/m/varejo/grade/eixos/${eixo.id}/valores`, { value });
+    // A empresa de Varejo pode já nascer com os eixos: só cria o que falta.
+    const eixo = (await api<any[]>('GET', '/m/varejo/grade/eixos')).find((x) => x.name === nome) ?? await api('POST', '/m/varejo/grade/eixos', { name: nome });
+    for (const value of valores) if (!eixo.values?.some((v: any) => v.value === value)) await api('POST', `/m/varejo/grade/eixos/${eixo.id}/valores`, { value });
   }
   const g = await gravar('varejo.grade', e, '/varejo/grade');
   const p = g.page;
@@ -80,7 +81,8 @@ test('varejo.etiquetas', async ({ request, gravar }) => {
   await g.pausa(250);
   await g.clicar(p.getByRole('button', { name: 'Gerar lote' }));
   await expect(p.getByText('Camiseta Básica Algodão × 24')).toBeVisible();
-  await g.pausa(500);
+  await g.passar(p.getByText('Camiseta Básica Algodão × 24'));
+  await g.pausa(400);
   g.capa();
   const baixou = p.waitForEvent('download');
   await g.clicar(p.getByRole('button', { name: 'PDF (A4)' }));
@@ -93,17 +95,21 @@ test('varejo.comissoes', async ({ request, gravar }) => {
   const e = await loja(request);
   const g = await gravar('varejo.comissoes', e, '/varejo/comissoes');
   const p = g.page;
-  await expect(p.getByText('Ana Paula').first()).toBeVisible();
-  await expect(p.locator('.badge', { hasText: 'Pendente' }).first()).toBeVisible();
+  const linhas = p.locator('.card', { has: p.getByRole('button', { name: 'Aprovar pendentes' }) }).locator('tbody tr');
+  await expect(linhas).toHaveCount(8);
+  await expect(p.locator('.badge', { hasText: 'Pendente' })).toHaveCount(8);
   await g.inicio();
-  await g.pausa(900);
+  await g.pausa(800);
+  await g.passar(linhas.last());
+  await g.pausa(400);
   await g.clicar(p.getByRole('button', { name: 'Aprovar pendentes' }));
   await expect(p.locator('.badge', { hasText: 'Pendente' })).toHaveCount(0);
-  await expect(p.locator('.badge', { hasText: 'Aprovado' }).first()).toBeVisible();
-  await g.pausa(700);
+  await expect(p.locator('.badge', { hasText: 'Aprovado' })).toHaveCount(8);
+  await g.pausa(800);
   await g.clicar(p.locator('tr:has-text("Ana Paula")').getByRole('button', { name: 'Pagar aprovadas' }));
-  await expect(p.locator('.badge', { hasText: 'Pago' }).first()).toBeVisible();
-  await g.pausa(500);
+  await expect(p.locator('.badge', { hasText: 'Pago' })).toHaveCount(4);
+  await g.passar(linhas.last());
+  await g.pausa(400);
   g.capa();
   await g.pausa(1200);
 });
@@ -114,15 +120,17 @@ test('varejo.relatorios', async ({ request, gravar }) => {
   const p = g.page;
   await expect(p.locator('tbody tr', { hasText: 'Ana Paula' })).toBeVisible();
   await g.inicio();
-  await g.pausa(1100);
+  await g.pausa(800);
+  await g.passar(p.locator('tbody tr', { hasText: 'Ana Paula' }));
+  await g.pausa(900);
   await g.clicar(p.getByRole('tab', { name: 'Curva ABC' }));
-  await expect(p.locator('tbody tr', { hasText: 'Tênis Casual Branco' })).toBeVisible();
+  const camiseta = p.locator('tbody tr', { hasText: 'Camiseta Básica Algodão' });
+  await expect(camiseta).toBeVisible();
+  await expect(camiseta.locator('td').nth(3)).toHaveText(/^\d+$/);
   await expect(p.locator('tbody td', { hasText: /^A$/ }).first()).toBeVisible();
-  await g.pausa(600);
+  await g.pausa(500);
+  await g.passar(p.locator('tbody tr', { hasText: 'Bermuda Moletom' }).locator('td').nth(1));
+  await g.pausa(400);
   g.capa();
-  await g.passar(p.locator('tbody tr').first());
-  await g.pausa(1000);
-  await g.clicar(p.getByRole('tab', { name: 'Por hora' }));
-  await expect(p.locator('tbody tr').first()).toContainText('h');
-  await g.pausa(1000);
+  await g.pausa(1400);
 });
