@@ -24,7 +24,14 @@
 - [x] Front no visual do Fluxo 5.0 (tema claro/escuro, sidebar com troca de módulo, gaveta no celular)
 - [x] Testes: 26 unit, 26 e2e API, 5 Playwright
 
+- [x] Homologação no ar: front na Vercel (`erp-modular`), API + Postgres no Render (free)
+
 ## P0 — antes de produção
+
+- [ ] Colar `DATABASE_URL` (Internal Database URL do `erp-modular-db`) no serviço `erp-modular-api` — passo do responsável
+- [ ] Banco free do Render expira em 20/11/2026: plano pago ou migrar (dump) antes disso
+- [ ] Produção de verdade: `APP_STAGE=production`, gateway real, `GOOGLE_CLIENT_ID`, papel `app_rw` com LOGIN e senha (separar `DATABASE_ADMIN_URL`)
+- [ ] Decidir se a homologação abre ao público (hoje a Vercel exige login do time)
 
 - [ ] Gateway REAL da assinatura (cartão tokenizado pelo SDK JS do gateway, boleto, Pix Automático) em
       `core/billing/providers/` + `tokenizeCard` em `apps/web/src/lib/billing.ts`

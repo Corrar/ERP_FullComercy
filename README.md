@@ -28,6 +28,20 @@ mostra faturas e cancela. Detalhes em `ARCHITECTURE.md` §3.2; preços em
 Em desenvolvimento: `GOOGLE_AUTH_MOCK=1` (Google simulado) e `BILLING_PROVIDER=mock` (cartão
 `4242 4242 4242 4242` aprova; final `0002` recusa). Os dois são recusados em produção.
 
+## Ambiente de homologação (no ar)
+
+| Parte | Onde | Endereço |
+|---|---|---|
+| Front (loja + ERP) | Vercel, projeto `erp-modular` | https://erp-modular-eta.vercel.app (exige login na Vercel: proteção padrão do time) |
+| API | Render, serviço `erp-modular-api` (free) | https://erp-modular-api.onrender.com |
+| Banco | Render Postgres `erp-modular-db` (free, **expira em 20/11/2026**) | só rede interna do Render |
+
+`APP_STAGE=staging`: cobrança e Google **simulados**, faixa de aviso na loja. Migrations e RLS
+rodam no start (`prisma:deploy && db:rls && start`; o plano free do Render não tem pre-deploy).
+O `DATABASE_URL` da API é colado pelo responsável no painel do Render (Internal Database URL do
+`erp-modular-db`) — o executor não lê connection string (regra permanente). `apps/api/railway.json`
+fica pronto para o dia em que o Railway liberar deploys nesta conta.
+
 ## Rodar tudo
 
 ```bash

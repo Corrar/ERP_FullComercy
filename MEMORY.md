@@ -40,6 +40,9 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | PDV dava 403 em `/m/varejo/vendedores` numa empresa sem "Comissões" | o PDV buscava vendedores sempre | busca e campo só com `can('varejo.comissoes:view')` |
 | Google simulado no login mandava GET com e-mail na URL | Modal renderizado DENTRO do `<form>` do login (form dentro de form) | `Modal` por portal no `<body>` + `stopPropagation` no submit |
 | `npm run docs:api` falhava com ENOENT | caminho relativo ao cwd do workspace (`apps/api`) | caminho a partir de `__dirname` |
+| `npm start` da API não achava o arquivo | `rootDir: "."` no tsconfig gera `dist/src/server.js` | `start`/`main` apontam para `dist/src/` |
+| RLS não aplicava em banco gerenciado | `GRANT … TO app_rw` falha quando o papel não existe | `apply-rls.js` cria `app_rw NOLOGIN` se faltar |
+| Railway: "Deploys have been paused temporarily" ao criar projeto (21/10/2026) | bloqueio da conta/plataforma, não do código | API + banco foram para o Render; `apps/api/railway.json` fica pronto |
 | Postgres local caía "sozinho" | `pkill -f` com padrão que casava o próprio shell (exit 144) matou a sessão que iniciou o banco | iniciar com `setsid`; matar por `pgrep -f "[p]adrao"` |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
@@ -60,6 +63,16 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 - Chromium do Playwright em `/opt/pw-browsers/chromium-*/chrome-linux/chrome` (passar
   `CHROMIUM_PATH` se a versão do runner divergir). Playwright sobe API em 3300 e Vite em 5180.
 - Prisma 6.19; `prisma.config.ts` com `datasource.url` não bastou para o CLI — o wrapper resolve.
+
+## 4.1 Deploy (homologação)
+
+- Vercel: time `corrars-projects`, projeto `erp-modular` (`prj_rblBxDsI5N6bUjO1n4A6q4nyZiS1`), raiz
+  `apps/web`, `VITE_API_URL=https://erp-modular-api.onrender.com`. A branch de produção da Vercel é
+  a default do repo; o deploy deste branch foi disparado como produção pela API da Vercel.
+- Render: workspace `tea-d4sqarumcj7s73crb7lg`, serviço `srv-dbcchrss728c73enbuo0`, banco
+  `dpg-dbcchmrncjis7392tjtg-a`. Variáveis por mescla (`update_environment_variables`), nunca
+  listando valores. O executor NÃO lê nem cola o `DATABASE_URL`.
+- CORS: `CORS_ORIGINS` aceita curinga de um rótulo (`https://erp-modular-*-corrars-projects.vercel.app`).
 
 ## 5. Como rodar e verificar (atalho)
 
