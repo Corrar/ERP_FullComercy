@@ -48,13 +48,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Food e2e com 409 intermitente | número de mesa sorteado em 90 valores, único por empresa, seed acumula mesas | `mesaLivre()` pega o próximo número livre |
 | Jornada sob CSP "falhou" com 500 no cadastro | o Postgres local tinha caído (container reinicia entre mensagens), não a CSP | `pg_isready` antes de culpar o código |
 | Postgres local caía "sozinho" | `pkill -f` com padrão que casava o próprio shell (exit 144) matou a sessão que iniciou o banco | iniciar com `setsid`; matar por `pgrep -f "[p]adrao"` |
-
-- **Script de terceiro monta em elemento SEM filhos do React** (21/10/2026). O Stripe.js troca o
-  conteúdo de onde monta; o aviso "Carregando…" que o React pôs ali sumiu por baixo dele e, no
-  `ready`, o React tentou removê-lo: tela inteira caiu com `removeChild` no pagamento. Vale para
-  Stripe, Turnstile e o botão do Google: o alvo fica vazio, o resto vai ao lado
-  (`e2e/stripe-campo.spec.ts`, com dublê do Stripe.js — as outras specs usam o simulador e nunca
-  montam o campo).
+| Pagamento com Stripe caía com `removeChild` ("Unexpected Application Error") | o Stripe.js troca o conteúdo de onde monta; o aviso "Carregando…" (filho React ali) sumiu por baixo do React, que tentou removê-lo no `ready`. As specs usam o simulador e nunca montavam o campo | alvo de script de terceiro (Stripe, Turnstile, Google) fica SEM filhos React; `e2e/stripe-campo.spec.ts` com dublê do Stripe.js |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 
