@@ -7,7 +7,7 @@ import { cart, useCart } from '@/lib/cart';
 import { useAccount } from '@/lib/account';
 import { useCatalog, useQuote } from '@/lib/billing';
 import { brl, d } from '@/lib/format';
-import { MODULE_SLUG, ModuleBadge, MobileBar, StoreLayout } from './shared';
+import { BackLink, MODULE_SLUG, ModuleBadge, MobileBar, StoreLayout } from './shared';
 
 export function Cart() {
   const c = useCart();
@@ -24,7 +24,8 @@ export function Cart() {
 
   return (
     <StoreLayout module={m} step={<Steps current={2} />}>
-      <h1>Seu carrinho</h1>
+      <BackLink to={`/comecar/${MODULE_SLUG[m]}`}>Voltar às funções</BackLink>
+      <h1 style={{ marginTop: 0 }}>Seu carrinho</h1>
       <ErrorBox error={error ?? qErr} />
       <div className="cfg">
         <div className="card stack" style={{ gap: 4 }}>

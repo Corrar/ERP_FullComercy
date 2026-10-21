@@ -34,6 +34,11 @@ test('loja: comércio → funções → prévia → carrinho → login → cart�
 
   await page.goto('/carrinho');
   await expect(page.getByText('dias grátis para testar tudo')).toBeVisible();
+  // Voltar do carrinho leva às funções do MESMO comércio, sem perder o que foi ligado.
+  await page.getByRole('button', { name: 'Voltar às funções' }).click();
+  await expect(page.getByRole('heading', { name: 'Monte o seu ERP de Varejo' })).toBeVisible();
+  await expect(page.getByTestId('total').first()).toContainText('124,40');
+  await page.goto('/carrinho');
   await page.getByRole('button', { name: 'Entrar para finalizar' }).first().click();
   await expect(page).toHaveURL(/\/login\?next=\/checkout/);
   await page.getByRole('button', { name: 'Criar conta' }).last().click();
@@ -41,6 +46,11 @@ test('loja: comércio → funções → prévia → carrinho → login → cart�
   await page.getByPlaceholder('E-mail').fill(`dona-ui-${run.toLowerCase()}@exemplo.com`);
   await page.getByPlaceholder('Crie uma senha (mín. 8)').fill('Senha-forte-123');
   await page.locator('form button.btn-pill.main').click();
+  await expect(page).toHaveURL(/\/checkout$/);
+  // Voltar do pagamento vai ao carrinho (destino fixo: o histórico apontaria para o login).
+  await page.getByRole('button', { name: 'Voltar ao carrinho' }).click();
+  await expect(page.getByRole('heading', { name: 'Seu carrinho' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continuar para pagamento' }).first().click();
   await expect(page).toHaveURL(/\/checkout$/);
 
   await page.locator('input[name=company]').fill(`Loja UI ${run}`);

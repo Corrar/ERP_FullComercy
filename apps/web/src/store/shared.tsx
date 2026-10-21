@@ -27,6 +27,13 @@ const FEATURE_ICON: Record<string, string> = {
   'svc.os': 'clipboard', 'svc.veiculos': 'car', 'svc.agenda': 'calendar', 'svc.relatorios': 'chart',
 };
 
+/** "← Voltar" das etapas da loja. Vai a um destino FIXO, não ao histórico: quem chega ao pagamento
+ *  vindo do login voltaria para o login. */
+export function BackLink({ to, children }: { to: string; children: ReactNode }) {
+  const nav = useNavigate();
+  return <button type="button" className="linkish row" style={{ gap: 4, marginBottom: 8 }} onClick={() => nav(to)}><Icon name="arrowLeft" size={15} /> {children}</button>;
+}
+
 export function StoreLayout({ module, children, step }: { module?: ModuleKey | null; children: ReactNode; step?: ReactNode }) {
   const account = useAccount();
   const c = useCart();

@@ -7,7 +7,7 @@ import { ErrorBox, Steps } from '@/components/ui';
 import { cart, useCart } from '@/lib/cart';
 import { useAccount } from '@/lib/account';
 import { useCatalog, useQuote } from '@/lib/billing';
-import { FeatureList, MobileBar, slugToModule, StoreLayout, Summary } from './shared';
+import { BackLink, FeatureList, MobileBar, slugToModule, StoreLayout, Summary } from './shared';
 
 export function Configurator() {
   const { modulo } = useParams();
@@ -31,7 +31,7 @@ export function Configurator() {
     <StoreLayout module={m} step={<Steps current={1} />}>
       <div className="row between" style={{ marginBottom: 20, alignItems: 'flex-end' }}>
         <div>
-          <button className="linkish row" style={{ gap: 4, marginBottom: 8 }} onClick={() => nav('/comecar')}><Icon name="arrowLeft" size={15} /> Trocar de comércio</button>
+          <BackLink to="/comecar">Trocar de comércio</BackLink>
           <h1 style={{ margin: 0 }}>Monte o seu ERP de {off?.name ?? '…'}</h1>
           <p className="muted" style={{ margin: '6px 0 0' }}>Ligue as funções que você quer. O essencial já vem marcado; o valor atualiza na hora.</p>
         </div>

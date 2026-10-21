@@ -12,7 +12,7 @@ import { session } from '@/lib/session';
 import { useAction } from '@/lib/use-api';
 import { maskDoc, METHOD_LABEL, onlyDigits, tokenizeCard, useCatalog, useQuote, type BillingMethod } from '@/lib/billing';
 import { brl, d } from '@/lib/format';
-import { CopyBox, EMPTY_CARD, ModuleBadge, PaymentForm, StoreLayout, type StripeCardHandle } from './shared';
+import { BackLink, CopyBox, EMPTY_CARD, ModuleBadge, PaymentForm, StoreLayout, type StripeCardHandle } from './shared';
 import { useTurnstile } from '@/lib/turnstile';
 
 export function Checkout() {
@@ -62,7 +62,8 @@ export function Checkout() {
 
   return (
     <StoreLayout module={c.modules[0]} step={<Steps current={3} />}>
-      <h1>Pagamento</h1>
+      <BackLink to="/carrinho">Voltar ao carrinho</BackLink>
+      <h1 style={{ marginTop: 0 }}>Pagamento</h1>
       <ErrorBox error={cErr} />
       <form className="cfg" onSubmit={(e) => void run(e)}>
         <div className="stack" style={{ gap: 18 }}>
