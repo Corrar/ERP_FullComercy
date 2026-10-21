@@ -2,7 +2,15 @@
 // Rodar: E2E=1 npm run test:e2e   (com .env apontando para um banco migrado + seed)
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { E2E, start, stop, login, api, run } from './_harness';
+import { E2E, start, stop, login, api, run, type Api } from './_harness';
+
+/** Próximo número de mesa livre. Número de mesa é único por empresa e o seed acumula mesas a cada
+ *  rodada: sortear em 90 valores (`900 + Date.now() % 90`) colidia de tempos em tempos (409
+ *  intermitente no Food). Achado em 21/10/2026, depois de várias rodadas no mesmo banco. */
+async function mesaLivre(A: Api): Promise<number> {
+  const mesas: { number: number }[] = await A.get('/m/food/mesas');
+  return Math.max(899, ...mesas.map((m) => m.number)) + 1;
+}
 
 if (!E2E) {
   test('e2e pulado: defina E2E=1 e DATABASE_URL', { skip: true }, () => {});
@@ -66,7 +74,7 @@ if (!E2E) {
     const cat = await A.post(`/m/food/menus/${menu.id}/categorias`, { name: 'Lanches' });
     const item = await A.post(`/m/food/menus/${menu.id}/itens`, { categoryId: cat.id, variantId: burger.variants[0].id, displayName: 'X-Burger da casa', price: 29.9, station: 'CHAPA' });
 
-    const mesa = await A.post('/m/food/mesas', { number: 900 + (Date.now() % 90), seats: 2 });
+    const mesa = await A.post('/m/food/mesas', { number: await mesaLivre(A), seats: 2 });
     const comanda = await A.post('/m/food/comandas', { code: `C-${run}`, tableId: mesa.id, guests: 2 });
 
     // Rodada 1 — preço do cardápio (29.90) vence o de tabela (25).
@@ -191,7 +199,7 @@ if (!E2E) {
     const { api: A, me } = await login('posto-demo');
     assert.deepEqual(me.modules.sort(), ['FOOD', 'VAREJO']);
     const p = await A.post('/products', { name: `Água ${run}`, sku: `AGUA-${run}`, salePrice: 3, trackStock: false });
-    const mesa = await A.post('/m/food/mesas', { number: 800 + (Date.now() % 90) });
+    const mesa = await A.post('/m/food/mesas', { number: await mesaLivre(A) });
     const comanda = await A.post('/m/food/comandas', { code: `P-${run}`, tableId: mesa.id });
     assert.equal((await A.post('/orders', { channel: 'TABLE', items: [{ variantId: p.variants[0].id, quantity: 1 }], moduleData: { tabId: comanda.id } })).moduleKey, 'FOOD');
     assert.equal((await A.post('/orders', { channel: 'COUNTER', items: [{ variantId: p.variants[0].id, quantity: 1 }] })).moduleKey, 'VAREJO', 'defaultSalesModule da empresa');

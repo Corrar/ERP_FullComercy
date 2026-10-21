@@ -44,6 +44,8 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | RLS não aplicava em banco gerenciado | `GRANT … TO app_rw` falha quando o papel não existe | `apply-rls.js` cria `app_rw NOLOGIN` se faltar |
 | Railway: "Deploys have been paused temporarily" ao criar projeto (21/10/2026) | bloqueio da conta/plataforma, não do código | API + banco foram para o Render; `apps/api/railway.json` fica pronto |
 | (prevenção) cold start do Neon > 5 s do `connect_timeout` padrão do Prisma | compute adormecido | `withConnectTimeout` (20 s) em `infra/db-url.ts` e nos scripts |
+| Isolamento "falhava": a loja via um cliente na busca por "Segredo <run>" | a busca usava os dígitos soltos do texto contra o TELEFONE ("MVJ2K" → "2") — o cliente era da própria loja | telefone/documento só com número de ≥ 4 dígitos (`digitsQuery`) |
+| Food e2e com 409 intermitente | número de mesa sorteado em 90 valores, único por empresa, seed acumula mesas | `mesaLivre()` pega o próximo número livre |
 | Postgres local caía "sozinho" | `pkill -f` com padrão que casava o próprio shell (exit 144) matou a sessão que iniciou o banco | iniciar com `setsid`; matar por `pgrep -f "[p]adrao"` |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão

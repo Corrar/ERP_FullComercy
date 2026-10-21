@@ -57,3 +57,14 @@ test('toda chave cobrada por rota existe no catálogo (depois de montar o app)',
   const soNavegacao = [...catalogo].filter((k) => !KEYS_REQUIRED_BY_ROUTES.has(k));
   assert.ok(soNavegacao.length <= 2, `chaves sem rota: ${soNavegacao.join(', ')}`);
 });
+
+test('busca de cliente: telefone/documento só com número de verdade (≥ 4 dígitos)', async () => {
+  const { digitsQuery } = await import('../src/core/customers/customers.service');
+  assert.equal(digitsQuery('(11) 98888-7777'), '11988887777');
+  assert.equal(digitsQuery('529.982.247-25'), '52998224725');
+  assert.equal(digitsQuery('9888'), '9888');
+  // Contra-prova: texto com dígitos soltos não vira busca de telefone (casaria qualquer um).
+  assert.equal(digitsQuery('Segredo MVJ2K3A1'), undefined);
+  assert.equal(digitsQuery('Mesa 12'), undefined);
+  assert.equal(digitsQuery('123'), undefined);
+});

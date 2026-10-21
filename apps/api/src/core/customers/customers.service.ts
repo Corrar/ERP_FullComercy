@@ -8,9 +8,20 @@ export interface CustomerInput {
 
 const onlyDigits = (s?: string) => (s ? s.replace(/\D/g, '') || undefined : undefined);
 
+/** Dígitos para buscar em telefone/documento — só quando a busca É um número (com máscara ou
+ *  não) de pelo menos 4 dígitos. Antes, os dígitos soltos de um texto ("Segredo MVJ2K") viravam
+ *  "2" e casavam todo telefone com 2: a loja via clientes que não procurou. Achado por um e2e que
+ *  falhava conforme o sufixo aleatório da rodada tinha dígito. */
+export function digitsQuery(q?: string): string | undefined {
+  if (!q) return undefined;
+  const bare = q.replace(/[\s().\-/+]/g, '');
+  return /^\d{4,}$/.test(bare) ? bare : undefined;
+}
+
 export async function list(q?: string) {
+  const digits = digitsQuery(q);
   return ctx().db.customer.findMany({
-    where: q ? { OR: [{ name: { contains: q, mode: 'insensitive' } }, { phone: { contains: onlyDigits(q) ?? q } }, { document: onlyDigits(q) }] } : undefined,
+    where: q ? { OR: [{ name: { contains: q, mode: 'insensitive' } }, ...(digits ? [{ phone: { contains: digits } }, { document: digits }] : [])] } : undefined,
     orderBy: { name: 'asc' }, take: 100,
   });
 }
