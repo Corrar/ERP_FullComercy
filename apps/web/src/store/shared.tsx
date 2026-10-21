@@ -170,7 +170,12 @@ function StripeCard({ publishableKey, onReady }: { publishableKey: string; onRea
   }, [publishableKey]);
   return (
     <div className="stack" style={{ gap: 6 }}>
-      <div className="input stripe-field" ref={ref} aria-label="Dados do cartão" data-testid="stripe-card">{loading && <span className="faint small">Carregando campo seguro do cartão…</span>}</div>
+      {/* O Stripe troca TODO o conteúdo do elemento onde monta: ele fica sem filhos do React (um
+          filho ali some por baixo do React e derruba a tela ao desmontar). O aviso vai ao lado. */}
+      <div className="stripe-wrap">
+        <div className="input stripe-field" ref={ref} aria-label="Dados do cartão" data-testid="stripe-card" />
+        {loading && <span className="stripe-loading faint small">Carregando campo seguro do cartão…</span>}
+      </div>
       {err && <div className="small" style={{ color: 'var(--danger)', fontWeight: 600 }}>{err}</div>}
     </div>
   );

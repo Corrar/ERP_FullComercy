@@ -49,6 +49,13 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Jornada sob CSP "falhou" com 500 no cadastro | o Postgres local tinha caído (container reinicia entre mensagens), não a CSP | `pg_isready` antes de culpar o código |
 | Postgres local caía "sozinho" | `pkill -f` com padrão que casava o próprio shell (exit 144) matou a sessão que iniciou o banco | iniciar com `setsid`; matar por `pgrep -f "[p]adrao"` |
 
+- **Script de terceiro monta em elemento SEM filhos do React** (21/10/2026). O Stripe.js troca o
+  conteúdo de onde monta; o aviso "Carregando…" que o React pôs ali sumiu por baixo dele e, no
+  `ready`, o React tentou removê-lo: tela inteira caiu com `removeChild` no pagamento. Vale para
+  Stripe, Turnstile e o botão do Google: o alvo fica vazio, o resto vai ao lado
+  (`e2e/stripe-campo.spec.ts`, com dublê do Stripe.js — as outras specs usam o simulador e nunca
+  montam o campo).
+
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 
 - Postgres 16 local em `127.0.0.1:5433`, cluster `/var/lib/postgresql/fc/data`, auth `trust`

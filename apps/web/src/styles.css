@@ -209,6 +209,8 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; backgro
 .pay-opt.on { border-color: var(--accent); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 16%, transparent); }
 .stripe-field { height: auto; min-height: 44px; padding: 12px 14px; display: block; }
 .stripe-field.StripeElement--focus { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent); }
+.stripe-wrap { position: relative; }
+.stripe-loading { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); pointer-events: none; }
 .ts-slot:empty { display: none; }
 .card-preview { border-radius: 18px; padding: 20px; color: #fff; min-height: 170px; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(135deg, #1f2433, #3a4157); box-shadow: var(--shadow); font-variant-numeric: tabular-nums; }
 .card-preview .num { font-size: 19px; letter-spacing: .12em; font-weight: 700; }
