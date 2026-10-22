@@ -34,7 +34,9 @@
 - [x] Conta do comprador: esqueci a senha da conta (leva junto a senha das empresas que usam a da conta), reenviar dados de acesso, assinatura e faturas de cada empresa na Minha conta
 - [x] Funções prontas ao contratar: teste que percorre TODAS as funções opcionais (antes cortada pelo plano, depois responde na hora, menu e guia do painel) + regra no CLAUDE.md; guia de primeiros passos ganhou os passos das funções opcionais e volta quando entra função nova
 - [x] Cobrança online de verdade: chave Pix da empresa, "Cobrar por Pix" no pedido e nas contas abertas (BR Code do Banco Central com valor, QR), link público `/pagar/<token>` para o cliente, confirmação do recebimento; tela própria "Cobranças online" (antes ficava escondida em Integrações, outra função paga)
-- [x] Testes: 46 unit, 49 e2e API, 24 Playwright
+- [x] Promessas da loja cumpridas: Relatórios da loja por forma de pagamento + resumo com ticket médio e peças por venda (período na tela); Relatórios do restaurante por garçom e tempo de cozinha por estação; conta da comanda dividida por pessoa (partes antes de fechar, taxa já na 1ª parte)
+- [x] Testes de navegador do dia a dia em empresa recém-criada: salão → KDS → conta dividida → relatórios; recepção da academia (libera, barra, saída); OS → kanban → orçamento → aprovação
+- [x] Testes: 46 unit, 51 e2e API, 27 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
@@ -81,7 +83,6 @@
 
 - [ ] Emissão fiscal por adaptador (NFC-e no PDV, NF-e na compra) ouvindo `order.status` COMPLETED
 - [ ] Socket.IO entre instâncias (adapter Redis) e fila para o outbox quando houver várias réplicas
-- [ ] Testes de navegador para Food (KDS), Academia (recepção) e Serviços (kanban → OS) — o salão (mesas) já tem
 
 ## P2 — quando couber
 

@@ -14,6 +14,8 @@ router.get('/comandas', P('food.salao:operate'), asyncHandler(c.getComandas));
 router.post('/comandas', P('food.salao:operate'), asyncHandler(c.postComanda));
 router.get('/comandas/:id/conta', P('food.salao:operate'), asyncHandler(c.getConta));
 router.post('/comandas/:id/fechar', P('food.salao:close'), asyncHandler(c.postFecharComanda));
+// Dividir a conta: cada pessoa paga a sua parte; a comanda segue aberta até fechar.
+router.post('/comandas/:id/partes', P('food.salao:close'), asyncHandler(c.postParteComanda));
 router.post('/comandas/:id/transferir', P('food.salao:operate'), asyncHandler(c.postTransferirComanda));
 router.post('/comandas/:id/cancelar', P('food.salao:close'), asyncHandler(c.postCancelarComanda));
 
@@ -49,6 +51,8 @@ router.post('/adicionais', P('food.cardapio:manage'), asyncHandler(c.postGrupo))
 router.get('/relatorios/itens', P('food.relatorios:view'), asyncHandler(c.getRelItens));
 router.get('/relatorios/tipos', P('food.relatorios:view'), asyncHandler(c.getRelTipos));
 router.get('/relatorios/horas', P('food.relatorios:view'), asyncHandler(c.getRelHoras));
+router.get('/relatorios/cozinha', P('food.relatorios:view'), asyncHandler(c.getRelCozinha));
+router.get('/relatorios/garcons', P('food.relatorios:view'), asyncHandler(c.getRelGarcons));
 router.get('/relatorios/entregadores', P('food.relatorios:view'), asyncHandler(c.getRelEntregadores));
 export default router;
 

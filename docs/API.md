@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-22. 346 rotas.
+> Gerado por `npm run docs:api` em 2026-10-22. 351 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
 
@@ -346,6 +346,7 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `POST` | `/m/food/comandas` | `food.salao:operate` |
 | `GET` | `/m/food/comandas/:id/conta` | `food.salao:operate` |
 | `POST` | `/m/food/comandas/:id/fechar` | `food.salao:close` |
+| `POST` | `/m/food/comandas/:id/partes` | `food.salao:close` |
 | `POST` | `/m/food/comandas/:id/transferir` | `food.salao:operate` |
 | `POST` | `/m/food/comandas/:id/cancelar` | `food.salao:close` |
 | `GET` | `/m/food/cozinha/fila` | `food.cozinha:view` |
@@ -377,6 +378,8 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/m/food/relatorios/itens` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/tipos` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/horas` | `food.relatorios:view` |
+| `GET` | `/m/food/relatorios/cozinha` | `food.relatorios:view` |
+| `GET` | `/m/food/relatorios/garcons` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/entregadores` | `food.relatorios:view` |
 
 ## Módulo HOTEL
@@ -480,6 +483,8 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/m/varejo/relatorios/vendedores` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/horas` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/abc` | `varejo.relatorios:view` |
+| `GET` | `/m/varejo/relatorios/resumo` | `varejo.relatorios:view` |
+| `GET` | `/m/varejo/relatorios/pagamentos` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/sem-giro` | `varejo.relatorios:view` |
 
 ## Catálogo de permissões (75)

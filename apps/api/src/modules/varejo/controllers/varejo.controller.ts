@@ -95,4 +95,6 @@ export const getVales = async (req: Request, res: Response) => res.json(await de
 export const getRelVendedores = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.vendasPorVendedor(a, b)); };
 export const getRelHoras = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.vendasPorHora(a, b)); };
 export const getRelAbc = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.curvaAbc(a, b)); };
+export const getRelResumo = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.resumo(a, b)); };
+export const getRelPagamentos = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.vendasPorPagamento(a, b)); };
 export const getRelSemGiro = async (req: Request, res: Response) => res.json(await rel.semGiro(Number(req.query.dias ?? 60)));

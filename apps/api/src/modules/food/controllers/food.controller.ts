@@ -21,8 +21,13 @@ export const getComandas = async (_req: Request, res: Response) => res.json(awai
 export const postComanda = async (req: Request, res: Response) => res.status(201).json(await mesas.abrirComanda(parse(z.object({ code: z.string().min(1).max(20), tableId: z.string().uuid().optional(), customerName: z.string().optional(), guests: z.number().int().positive().optional() }), req.body)));
 export const getConta = async (req: Request, res: Response) => res.json(await mesas.contaDaComanda(String(req.params.id)));
 export const postFecharComanda = async (req: Request, res: Response) => {
-  const b = parse(z.object({ payments: z.array(z.object({ method: z.nativeEnum(PaymentMethod), amount: z.number().positive() })).min(1), cobrarTaxa: z.boolean().default(true) }), req.body);
+  // Sem pagamento quando as partes já cobriram tudo (conta dividida): só fecha.
+  const b = parse(z.object({ payments: z.array(z.object({ method: z.nativeEnum(PaymentMethod), amount: z.number().positive() })).default([]), cobrarTaxa: z.boolean().default(true) }), req.body);
   res.json(await mesas.fecharComanda(String(req.params.id), b.payments, b.cobrarTaxa));
+};
+export const postParteComanda = async (req: Request, res: Response) => {
+  const b = parse(z.object({ payments: z.array(z.object({ method: z.nativeEnum(PaymentMethod), amount: z.number().positive() })).min(1), cobrarTaxa: z.boolean().default(true) }), req.body);
+  res.json(await mesas.pagarParte(String(req.params.id), b.payments, b.cobrarTaxa));
 };
 export const postTransferirComanda = async (req: Request, res: Response) => res.json(await mesas.transferirComanda(String(req.params.id), parse(z.object({ toTableId: z.string().uuid() }), req.body).toTableId));
 export const postCancelarComanda = async (req: Request, res: Response) => { await mesas.cancelarComanda(String(req.params.id), parse(z.object({ reason: z.string().min(3) }), req.body).reason); res.status(204).end(); };
@@ -64,6 +69,8 @@ export const getFicha = async (req: Request, res: Response) => res.json({ ficha:
 export const getRelItens = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.vendasPorItem(a, b)); };
 export const getRelTipos = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.porTipoDeServico(a, b)); };
 export const getRelHoras = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.movimentoPorHora(a, b)); };
+export const getRelCozinha = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.tempoDeCozinha(a, b)); };
+export const getRelGarcons = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.porGarcom(a, b)); };
 export const getRelEntregadores = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.desempenhoEntregadores(a, b)); };
 
 // ── Público ──
