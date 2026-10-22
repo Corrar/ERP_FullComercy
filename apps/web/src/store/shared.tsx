@@ -15,7 +15,7 @@ import { useCatalog, BRAND_LABEL, cardBrand, maskCard, maskExp, METHOD_LABEL, on
 import type { ModuleKey } from '@/lib/session';
 import { cardStyle, getStripe, stripeErrorMessage } from '@/lib/stripe';
 
-export const MODULE_SLUG: Record<ModuleKey, string> = { VAREJO: 'varejo', FOOD: 'food', ACADEMIA: 'academia', SERVICOS: 'servicos' };
+export const MODULE_SLUG: Record<ModuleKey, string> = { VAREJO: 'varejo', FOOD: 'food', ACADEMIA: 'academia', SERVICOS: 'servicos', BELEZA: 'beleza', PET: 'pet', CLINICA: 'clinica', HOTEL: 'hotel' };
 export const slugToModule = (s?: string): ModuleKey | null => (Object.entries(MODULE_SLUG).find(([, v]) => v === s)?.[0] as ModuleKey) ?? null;
 
 /** Ícone de cada função na lista do configurador. */
@@ -25,6 +25,10 @@ const FEATURE_ICON: Record<string, string> = {
   'food.salao': 'utensils', 'food.cozinha': 'flame', 'food.delivery': 'truck', 'food.relatorios': 'chart',
   'gym.matriculas': 'clipboard', 'gym.recepcao': 'userCheck', 'gym.catraca': 'idCard', 'gym.turmas': 'calendar',
   'svc.os': 'clipboard', 'svc.veiculos': 'car', 'svc.agenda': 'calendar', 'svc.relatorios': 'chart',
+  'bel.agenda': 'calendar', 'bel.comissoes': 'users', 'bel.pacotes': 'gift', 'bel.relatorios': 'chart',
+  'pet.cadastro': 'paw', 'pet.banho': 'sparkles', 'pet.vet': 'syringe', 'pet.relatorios': 'chart',
+  'cli.agenda': 'calendar', 'cli.prontuario': 'clipboard', 'cli.convenios': 'shield', 'cli.relatorios': 'chart',
+  'hot.reservas': 'bed', 'hot.governanca': 'sparkles', 'hot.relatorios': 'chart',
 };
 
 /** "← Voltar" das etapas da loja. Vai a um destino FIXO, não ao histórico: quem chega ao pagamento

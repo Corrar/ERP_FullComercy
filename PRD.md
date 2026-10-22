@@ -96,6 +96,40 @@ consumo na entrega); orçamento com aprovação e recusa parcial; status de manu
 projetado no status do pedido; técnico, checklist de entrada/saída, anexos; agenda com
 capacidade de boxes e chegada que abre a OS; catálogo de serviços; relatórios.
 
+### 5.6 Módulo Beleza e estética
+
+Profissionais com comissão e cor na agenda; serviços com duração e preço (comissão própria
+opcional); agenda por profissional sem choque de horário (trava a linha do profissional); comanda
+do atendimento aberta pela agenda, com produtos e preço do serviço vindo do cadastro; comissão no
+fechamento (taxa do serviço, senão a do profissional); pacotes de sessões com validade, consumo de
+uma sessão por atendimento e comissão pelo valor proporcional da sessão; estorno devolve a sessão;
+relatórios por profissional, por serviço e taxa de faltas.
+
+### 5.7 Módulo Pet shop e veterinária
+
+Ficha do pet ligada ao tutor (espécie, raça, porte, peso, alergias); banho e tosa com agenda,
+táxi dog e andamento até "pronto", cobrado no balcão com o preço do agendamento (a venda é a
+entrega); vacinas com próxima dose; prontuário (consulta, retorno, exame) visível só para quem tem
+permissão; lembretes de vacina vencida/vencendo (só a dose mais recente conta) e retornos; venda
+no balcão com histórico por pet; relatório de banhos, serviços × produtos e pets atendidos.
+
+### 5.8 Módulo Clínica e consultório
+
+Profissionais (especialidade, registro, duração e valor padrão); convênios com valor de tabela;
+ficha do paciente (nascimento, convênio, carteirinha, alergias); agenda por profissional sem
+choque, com tipo (consulta, retorno, exame, procedimento) e pagador; cobrança da consulta como
+pedido — particular paga e conclui, convênio fica a receber até o repasse, retorno de valor zero
+conclui na hora; prontuário (anamnese, evolução, prescrição) com acesso por permissão; recibo para
+imprimir; relatórios por profissional, por convênio (com a receber) e faltas.
+
+### 5.9 Módulo Hotelaria e pousada
+
+Quartos com tipo, capacidade e diária; reservas por período sem sobreposição no mesmo quarto
+(saída e entrada no mesmo dia não é choque); quartos livres por período; check-in abre a conta
+do hóspede com as diárias; consumo lançado na conta; check-out só com a conta paga, manda o
+quarto para a limpeza; governança (limpo, manutenção); painel da recepção com mapa, chegadas e
+saídas; ocupação, diária média (ADR) e RevPAR.
+
 ## 6. Requisitos não funcionais
 
 | Requisito | Alvo | Como se garante |
@@ -123,5 +157,5 @@ nativo, marketplace de módulos de terceiros, multi-moeda, multi-idioma.
 ## 9. Estado atual
 
 Ver `TASKS.md` (feito × pendente) e `MEMORY.md` (decisões e lições). Números do último corte:
-250 rotas documentadas em `docs/API.md`, 84 tabelas com RLS, 17 testes unitários, 18 e2e de API,
-4 e2e de navegador.
+324 rotas documentadas em `docs/API.md`, 108 tabelas com RLS, 8 módulos de comércio, 40 testes
+unitários, 31 e2e de API, 14 e2e de navegador.

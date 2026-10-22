@@ -190,6 +190,10 @@ como convidado para retirada ou entrega, pagamento na entrega ou PIX online, e a
 | `fit-demo` | ACADEMIA | `admin@fit-demo.local` |
 | `oficina-demo` | SERVICOS | `admin@oficina-demo.local` |
 | `posto-demo` | VAREJO + FOOD (`defaultSalesModule: VAREJO`) | `admin@posto-demo.local` |
+| `salao-demo` | BELEZA | `admin@salao-demo.local` |
+| `pet-demo` | PET | `admin@pet-demo.local` |
+| `clinica-demo` | CLINICA | `admin@clinica-demo.local` |
+| `pousada-demo` | HOTEL | `admin@pousada-demo.local` |
 
 Senha: `SEED_ADMIN_PASSWORD` do `.env`.
 

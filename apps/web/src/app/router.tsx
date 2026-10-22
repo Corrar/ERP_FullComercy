@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useSession } from '@/lib/session';
+import { useSession, type ModuleKey } from '@/lib/session';
 import { Shell } from './Shell';
 import { MODULES } from './modules';
 import { Login, Forgot, Reset } from '@/core/auth/pages';
@@ -37,7 +37,7 @@ function RequireAuth() {
   return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
 }
 /** Rota de módulo: 404 amigável se a empresa não tem o módulo (o back já devolveria 403). */
-function RequireModule({ k }: { k: 'VAREJO' | 'FOOD' | 'ACADEMIA' | 'SERVICOS' }) {
+function RequireModule({ k }: { k: ModuleKey }) {
   const { hasModule } = useSession();
   return hasModule(k) ? <Outlet /> : <div className="card">Este módulo não está ativo para a sua empresa. Adicione em <a href="/assinatura">Assinatura</a> ou ative em <a href="/empresa">Empresa e módulos</a>.</div>;
 }

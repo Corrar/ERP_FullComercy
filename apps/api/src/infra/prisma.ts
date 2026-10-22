@@ -94,12 +94,14 @@ export function prismaForTenant(tenantId: string) {
             // pela transação), redireciona para a transação: na conexão de fora não há GUC e o
             // RLS devolveria VAZIO em silêncio — achado pelo e2e no addItems.
             if (isItx(internals)) return query(scoped);
-            return (scope.tx as any)[lcFirst(model)][operation](scoped) as ReturnType<typeof query>;
+            // Sem `as ReturnType<typeof query>`: com ~110 modelos o TS estoura a profundidade de
+            // instanciação (TS2589). A expressão já é `any`, que o retorno do hook aceita.
+            return (scope.tx as any)[lcFirst(model)][operation](scoped);
           }
           // Fora de transação: lote [GUC, operação] no client BASE (não passa de novo por aqui).
           const delegate = (rlsBase as any)[lcFirst(model)];
           const [, result] = await rlsBase.$transaction([setGuc(tenantId), delegate[operation](scoped)]);
-          return result as Awaited<ReturnType<typeof query>>;
+          return result; // `any` pelo delegate; o cast tipado também estoura o TS2589
         },
       },
       async $queryRaw({ args, query }) {

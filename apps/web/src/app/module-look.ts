@@ -9,6 +9,10 @@ export const MODULE_LOOK: Record<ModuleKey, { icon: string; accent: string }> = 
   FOOD: { icon: 'utensils', accent: '#ea580c' },
   ACADEMIA: { icon: 'dumbbell', accent: '#7c3aed' },
   SERVICOS: { icon: 'wrench', accent: '#0d9488' },
+  BELEZA: { icon: 'scissors', accent: '#db2777' },
+  PET: { icon: 'paw', accent: '#ca8a04' },
+  CLINICA: { icon: 'stethoscope', accent: '#0891b2' },
+  HOTEL: { icon: 'bed', accent: '#4f46e5' },
 };
 
 /** `style` que troca a cor de destaque de um contêiner (o CSS lê `--accent`). */
@@ -22,4 +26,8 @@ export const NAV_ICON: Record<string, string> = {
   '/food/salao': 'utensils', '/food/cozinha': 'flame', '/food/entregas': 'truck', '/food/cardapio': 'clipboard',
   '/academia': 'chart', '/academia/recepcao': 'userCheck', '/academia/matriculas': 'clipboard', '/academia/planos': 'tag', '/academia/turmas': 'calendar', '/academia/acesso': 'idCard',
   '/servicos': 'clipboard', '/servicos/nova': 'plus', '/servicos/agenda': 'calendar', '/servicos/veiculos': 'car',
+  '/beleza/agenda': 'calendar', '/beleza/comandas': 'receipt', '/beleza/cadastros': 'scissors', '/beleza/pacotes': 'gift', '/beleza/comissoes': 'users', '/beleza/relatorios': 'chart',
+  '/pet/pets': 'paw', '/pet/banho-tosa': 'sparkles', '/pet/balcao': 'monitor', '/pet/veterinaria': 'syringe', '/pet/relatorios': 'chart',
+  '/clinica/agenda': 'calendar', '/clinica/pacientes': 'heart', '/clinica/cadastros': 'stethoscope', '/clinica/convenios': 'shield', '/clinica/relatorios': 'chart',
+  '/hotel/painel': 'bed', '/hotel/reservas': 'calendar', '/hotel/quartos': 'grid', '/hotel/relatorios': 'chart',
 };

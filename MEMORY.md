@@ -56,6 +56,9 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Troca com vale deixava o a receber da venda nova em aberto pelo valor do vale | o afterCreate gravava `orderPayment` direto, sem baixar o título | vale entra por `registerPayments` do core (`retail-sales.strategy.ts`) |
 | Venda paga só com vale ficava OPEN | o core só concluía se o rascunho trouxesse `payments` | conta também o que a estratégia pagou no afterCreate (`order.service.ts` 4e) |
 | PDV aceitava "STORE_CREDIT" digitado | não abatia vale nenhum: dinheiro sumia | vale só por "Usar vale" (`moduleData.valeFinanceEntryId`) |
+| `tsc` estourou TS2589 ("instantiation excessively deep") em `infra/prisma.ts` ao passar de ~85 para ~108 modelos | `as ReturnType<typeof query>` / `Awaited<…>` no `$allOperations` fazem o TS montar o tipo de toda operação de todo modelo | os dois casts saíram (a expressão já é `any`); tipagem dos services conferida com arquivo-sonda que tem de dar erro |
+| Atendimento pago só com sessão de pacote (total 0) ficaria OPEN para sempre | sem pagamento no rascunho o core não concluía, e título de valor 0 é recusado | `order.service.ts` 4e: total zero + `completeOnFullPayment` conclui na criação, sem financeiro |
+| Hotel: consumo lançado depois ganharia diárias de novo | `price()` também roda no `addItems`, com o mesmo `moduleData` relido do pedido | diárias só quando a reserva ainda está `BOOKED` (check-in); pacote do salão idem: só com itens no rascunho |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 
@@ -65,7 +68,8 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 - `apps/api/.env` (ignorado pelo git) aponta `DATABASE_URL` para `app_rw` e `DATABASE_ADMIN_URL`
   para `postgres`. `JOBS_ENABLED=0` em teste.
 - Seed cria `loja-demo` (VAREJO), `burger-demo` (FOOD), `fit-demo` (ACADEMIA), `oficina-demo`
-  (SERVICOS), `posto-demo` (VAREJO+FOOD, padrão VAREJO); admin `admin@<slug>.local`, senha
+  (SERVICOS), `posto-demo` (VAREJO+FOOD, padrão VAREJO), `salao-demo` (BELEZA), `pet-demo` (PET),
+  `clinica-demo` (CLINICA), `pousada-demo` (HOTEL); admin `admin@<slug>.local`, senha
   `SEED_ADMIN_PASSWORD` (`Demo-12345678` no dev). Seed não tem assinatura: plano não corta nada.
 - Loja em dev: `.env` com `GOOGLE_AUTH_MOCK=1` (Google simulado) e `BILLING_MOCK_WEBHOOK_TOKEN`.
   Cartões de teste do mock: final `0002` recusa ao cadastrar, `0341` cadastra e recusa a cobrança,

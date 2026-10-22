@@ -7,11 +7,15 @@ import { varejoModule } from '@/modules/varejo';
 import { foodModule } from '@/modules/food';
 import { academiaModule } from '@/modules/academia';
 import { servicosModule } from '@/modules/servicos';
+import { belezaModule } from '@/modules/beleza';
+import { petModule } from '@/modules/pet';
+import { clinicaModule } from '@/modules/clinica';
+import { hotelModule } from '@/modules/hotel';
 
 export interface NavItem { to: string; label: string; perm?: string }
 export interface FrontModule { key: ModuleKey; label: string; nav: NavItem[]; routes: RouteObject[] }
 
-export const MODULES: FrontModule[] = [varejoModule, foodModule, academiaModule, servicosModule];
+export const MODULES: FrontModule[] = [varejoModule, foodModule, academiaModule, servicosModule, belezaModule, petModule, clinicaModule, hotelModule];
 
 /** Menu do núcleo (sempre presente; a permissão filtra). */
 export const CORE_NAV: NavItem[] = [

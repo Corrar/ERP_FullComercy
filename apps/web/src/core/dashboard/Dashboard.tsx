@@ -5,8 +5,10 @@ import { brl } from '@/lib/format';
 const LABEL: Record<string, string> = {
   caixasAbertos: 'Caixas abertos', comissoesPendentes: 'Comissões pendentes', mesasOcupadas: 'Mesas ocupadas', comandasAbertas: 'Comandas abertas', naCozinha: 'Na cozinha', entregasEmCurso: 'Entregas em curso',
   alunosAtivos: 'Alunos ativos', inadimplentes: 'Inadimplentes', checkinsHoje: 'Check-ins hoje', osNoPatio: 'OS no pátio', aguardandoAprovacao: 'Aguardando aprovação', prontos: 'Prontos p/ retirada', agendadosHoje: 'Agendados hoje',
+  emAtendimento: 'Em atendimento', faltasHoje: 'Faltas hoje', banhosHoje: 'Banhos hoje', prontosParaBuscar: 'Prontos para buscar', vacinasVencidas: 'Vacinas vencidas',
+  consultasHoje: 'Consultas hoje', naRecepcao: 'Na recepção', convenioAReceber: 'Convênio a receber', quartosOcupados: 'Quartos ocupados', chegadasHoje: 'Chegadas hoje', saidasHoje: 'Saídas hoje', emLimpeza: 'Em limpeza',
 };
-const MOD: Record<string, string> = { VAREJO: 'Varejo', FOOD: 'Food & Delivery', ACADEMIA: 'Academia', SERVICOS: 'Serviços' };
+const MOD: Record<string, string> = { VAREJO: 'Varejo', FOOD: 'Food & Delivery', ACADEMIA: 'Academia', SERVICOS: 'Serviços', BELEZA: 'Beleza', PET: 'Pet', CLINICA: 'Clínica', HOTEL: 'Hotelaria' };
 
 export function Dashboard() {
   const { data, loading } = useGet('/dashboard');

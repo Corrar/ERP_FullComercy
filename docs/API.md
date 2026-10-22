@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-21. 267 rotas.
+> Gerado por `npm run docs:api` em 2026-10-22. 324 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
 
@@ -268,6 +268,51 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/m/academia/relatorios/pico` | `gym.matriculas:view` |
 | `GET` | `/m/academia/relatorios/sumidos` | `gym.matriculas:view` |
 
+## Módulo BELEZA
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/m/beleza/profissionais` | `bel.agenda:operate` |
+| `POST` | `/m/beleza/profissionais` | `bel.cadastro:manage` |
+| `PATCH` | `/m/beleza/profissionais/:id` | `bel.cadastro:manage` |
+| `GET` | `/m/beleza/servicos` | `bel.agenda:operate` |
+| `POST` | `/m/beleza/servicos` | `bel.cadastro:manage` |
+| `PATCH` | `/m/beleza/servicos/:id` | `bel.cadastro:manage` |
+| `GET` | `/m/beleza/agenda` | `bel.agenda:operate` |
+| `POST` | `/m/beleza/agenda` | `bel.agenda:operate` |
+| `PATCH` | `/m/beleza/agenda/:id` | `bel.agenda:operate` |
+| `GET` | `/m/beleza/pacotes` | `bel.agenda:operate` |
+| `POST` | `/m/beleza/pacotes` | `bel.pacotes:manage` |
+| `PATCH` | `/m/beleza/pacotes/:id` | `bel.pacotes:manage` |
+| `GET` | `/m/beleza/pacotes/cliente/:customerId` | `bel.agenda:operate` |
+| `GET` | `/m/beleza/comissoes` | `bel.comissoes:view` |
+| `POST` | `/m/beleza/comissoes/pagar` | `bel.comissoes:manage` |
+| `GET` | `/m/beleza/relatorios/profissionais` | `bel.relatorios:view` |
+| `GET` | `/m/beleza/relatorios/servicos` | `bel.relatorios:view` |
+| `GET` | `/m/beleza/relatorios/faltas` | `bel.relatorios:view` |
+
+## Módulo CLINICA
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/m/clinica/profissionais` | `cli.agenda:operate` |
+| `POST` | `/m/clinica/profissionais` | `cli.cadastro:manage` |
+| `PATCH` | `/m/clinica/profissionais/:id` | `cli.cadastro:manage` |
+| `GET` | `/m/clinica/convenios` | `cli.agenda:operate` |
+| `POST` | `/m/clinica/convenios` | `cli.convenios:manage` |
+| `PATCH` | `/m/clinica/convenios/:id` | `cli.convenios:manage` |
+| `GET` | `/m/clinica/convenios-a-receber` | `cli.convenios:manage` |
+| `GET` | `/m/clinica/pacientes/:customerId` | `cli.agenda:operate` |
+| `PUT` | `/m/clinica/pacientes/:customerId/ficha` | `cli.agenda:operate` |
+| `POST` | `/m/clinica/pacientes/:customerId/prontuario` | `cli.prontuario:manage` |
+| `GET` | `/m/clinica/agenda` | `cli.agenda:operate` |
+| `POST` | `/m/clinica/agenda` | `cli.agenda:operate` |
+| `PATCH` | `/m/clinica/agenda/:id` | `cli.agenda:operate` |
+| `GET` | `/m/clinica/recibos/:orderId` | `cli.agenda:operate` |
+| `GET` | `/m/clinica/relatorios/profissionais` | `cli.relatorios:view` |
+| `GET` | `/m/clinica/relatorios/convenios` | `cli.relatorios:view` |
+| `GET` | `/m/clinica/relatorios/faltas` | `cli.relatorios:view` |
+
 ## Módulo FOOD
 
 | Método | Rota | Permissão |
@@ -311,6 +356,38 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/m/food/relatorios/tipos` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/horas` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/entregadores` | `food.relatorios:view` |
+
+## Módulo HOTEL
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/m/hotel/painel` | `hot.reservas:operate` |
+| `GET` | `/m/hotel/quartos` | `hot.reservas:operate` |
+| `POST` | `/m/hotel/quartos` | `hot.quartos:manage` |
+| `PATCH` | `/m/hotel/quartos/:id` | `hot.quartos:manage` |
+| `POST` | `/m/hotel/quartos/:id/status` | `hot.governanca:operate` |
+| `GET` | `/m/hotel/disponiveis` | `hot.reservas:operate` |
+| `GET` | `/m/hotel/reservas` | `hot.reservas:operate` |
+| `POST` | `/m/hotel/reservas` | `hot.reservas:operate` |
+| `PATCH` | `/m/hotel/reservas/:id` | `hot.reservas:operate` |
+| `POST` | `/m/hotel/reservas/:id/checkout` | `hot.reservas:operate` |
+| `GET` | `/m/hotel/relatorios/ocupacao` | `hot.relatorios:view` |
+
+## Módulo PET
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/m/pet/pets` | `pet.pets:view` |
+| `GET` | `/m/pet/pets/:id` | `pet.pets:view` |
+| `POST` | `/m/pet/pets` | `pet.pets:manage` |
+| `PATCH` | `/m/pet/pets/:id` | `pet.pets:manage` |
+| `GET` | `/m/pet/banho-tosa` | `pet.banho:operate` |
+| `POST` | `/m/pet/banho-tosa` | `pet.banho:operate` |
+| `POST` | `/m/pet/banho-tosa/:id/mover` | `pet.banho:operate` |
+| `POST` | `/m/pet/pets/:id/vacinas` | `pet.vet:manage` |
+| `POST` | `/m/pet/pets/:id/atendimentos` | `pet.vet:manage` |
+| `GET` | `/m/pet/lembretes` | `pet.vet:view` |
+| `GET` | `/m/pet/relatorios/resumo` | `pet.relatorios:view` |
 
 ## Módulo SERVICOS
 
@@ -383,7 +460,7 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/m/varejo/relatorios/abc` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/sem-giro` | `varejo.relatorios:view` |
 
-## Catálogo de permissões (52)
+## Catálogo de permissões (74)
 
 | Chave | Descrição | Módulo |
 |---|---|---|
@@ -439,6 +516,28 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `svc.catalogo:manage` | Gerir catálogo de serviços | SERVICOS |
 | `svc.agenda:operate` | Agendar e atender agenda | SERVICOS |
 | `svc.relatorios:view` | Ver relatórios da oficina | SERVICOS |
+| `bel.agenda:operate` | Agendar e atender | BELEZA |
+| `bel.cadastro:manage` | Cadastrar profissionais e serviços | BELEZA |
+| `bel.pacotes:manage` | Criar pacotes de sessões | BELEZA |
+| `bel.comissoes:view` | Ver comissões dos profissionais | BELEZA |
+| `bel.comissoes:manage` | Pagar comissões | BELEZA |
+| `bel.relatorios:view` | Ver relatórios do salão | BELEZA |
+| `pet.pets:view` | Ver pets e tutores | PET |
+| `pet.pets:manage` | Cadastrar pets | PET |
+| `pet.banho:operate` | Agendar e tocar banho e tosa | PET |
+| `pet.vet:view` | Ver prontuário, vacinas e lembretes | PET |
+| `pet.vet:manage` | Registrar atendimento e vacina | PET |
+| `pet.relatorios:view` | Ver relatórios do pet shop | PET |
+| `cli.agenda:operate` | Agendar, receber e cobrar consultas | CLINICA |
+| `cli.cadastro:manage` | Cadastrar profissionais | CLINICA |
+| `cli.prontuario:view` | Ler prontuário | CLINICA |
+| `cli.prontuario:manage` | Escrever no prontuário | CLINICA |
+| `cli.convenios:manage` | Gerir convênios e repasses | CLINICA |
+| `cli.relatorios:view` | Ver relatórios da clínica | CLINICA |
+| `hot.reservas:operate` | Reservar, fazer check-in e check-out | HOTEL |
+| `hot.quartos:manage` | Cadastrar quartos e diárias | HOTEL |
+| `hot.governanca:operate` | Marcar limpeza e manutenção | HOTEL |
+| `hot.relatorios:view` | Ver ocupação e diária média | HOTEL |
 
 ## Jobs
 

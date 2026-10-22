@@ -44,6 +44,10 @@ export const MODULE_OFFERS: ModuleOffer[] = [
   { key: ModuleKey.VAREJO, name: 'Varejo', tagline: 'Loja, PDV e estoque', forWho: 'Lojas de roupa, calçados, presentes, mercadinhos e conveniências.' },
   { key: ModuleKey.FOOD, name: 'Food & Delivery', tagline: 'Mesas, cozinha e entrega', forWho: 'Restaurantes, lanchonetes, hamburguerias, pizzarias e bares.' },
   { key: ModuleKey.ACADEMIA, name: 'Academia', tagline: 'Planos, recepção e turmas', forWho: 'Academias, estúdios, escolas de luta, dança e natação.' },
+  { key: ModuleKey.BELEZA, name: 'Beleza e estética', tagline: 'Agenda, comanda e comissão', forWho: 'Salões, barbearias, clínicas de estética, esmalterias e spas.' },
+  { key: ModuleKey.PET, name: 'Pet shop e veterinária', tagline: 'Pets, banho e tosa, vacinas', forWho: 'Pet shops, banho e tosa, clínicas veterinárias e agropets.' },
+  { key: ModuleKey.CLINICA, name: 'Clínica e consultório', tagline: 'Agenda, prontuário e convênio', forWho: 'Consultórios médicos e odontológicos, psicologia, fisioterapia e nutrição.' },
+  { key: ModuleKey.HOTEL, name: 'Hotelaria e pousada', tagline: 'Reservas, check-in e conta', forWho: 'Pousadas, hotéis pequenos, hostels e chalés.' },
   { key: ModuleKey.SERVICOS, name: 'Serviços / Oficina', tagline: 'Ordens de serviço e agenda', forWho: 'Oficinas mecânicas, assistências técnicas, lava-rápidos e prestadores.' },
 ];
 
@@ -139,6 +143,63 @@ export const FEATURES: Feature[] = [
   { key: 'svc.relatorios', module: ModuleKey.SERVICOS, price: '14.90', label: 'Relatórios da oficina',
     description: 'Faturamento por serviço, por técnico e tempo médio de OS.',
     permissions: ['svc.relatorios:view'] },
+
+  // ── Beleza e estética ───────────────────────────────────────────────────────────────
+  { key: 'bel.agenda', module: ModuleKey.BELEZA, required: true, price: '39.90', label: 'Agenda e comanda',
+    requires: ['core.pedidos', 'core.clientes'],
+    description: 'Agenda por profissional sem choque de horário, serviços com duração e a comanda do atendimento com produtos.',
+    permissions: ['bel.agenda:operate', 'bel.cadastro:manage'] },
+  { key: 'bel.comissoes', module: ModuleKey.BELEZA, price: '19.90', label: 'Comissão dos profissionais',
+    description: 'Comissão por serviço ou por profissional, calculada no fechamento da comanda e paga como título.',
+    permissions: ['bel.comissoes:view', 'bel.comissoes:manage'] },
+  { key: 'bel.pacotes', module: ModuleKey.BELEZA, price: '19.90', label: 'Pacotes de sessões',
+    description: 'Venda de pacotes (ex.: 10 escovas) com validade; cada atendimento consome uma sessão.',
+    permissions: ['bel.pacotes:manage'] },
+  { key: 'bel.relatorios', module: ModuleKey.BELEZA, price: '14.90', label: 'Relatórios do salão',
+    description: 'Faturamento e comissão por profissional, serviços mais vendidos e taxa de faltas.',
+    permissions: ['bel.relatorios:view'] },
+
+  // ── Pet shop e veterinária ──────────────────────────────────────────────────────────
+  { key: 'pet.cadastro', module: ModuleKey.PET, required: true, price: '34.90', label: 'Pets e balcão',
+    requires: ['core.pedidos', 'core.clientes', 'core.produtos'],
+    description: 'Ficha do pet ligada ao tutor (espécie, raça, porte, alergias) e venda no balcão com histórico por pet.',
+    permissions: ['pet.pets:view', 'pet.pets:manage'] },
+  { key: 'pet.banho', module: ModuleKey.PET, price: '24.90', label: 'Banho e tosa',
+    description: 'Agenda de banho e tosa, táxi dog, andamento até "pronto" e cobrança na entrega.',
+    permissions: ['pet.banho:operate'] },
+  { key: 'pet.vet', module: ModuleKey.PET, price: '29.90', label: 'Veterinária',
+    description: 'Prontuário do pet, vacinas com próxima dose e lembretes de vacina e retorno.',
+    permissions: ['pet.vet:view', 'pet.vet:manage'] },
+  { key: 'pet.relatorios', module: ModuleKey.PET, price: '14.90', label: 'Relatórios do pet shop',
+    description: 'Banhos por status, faturamento de serviços x produtos e pets atendidos no período.',
+    permissions: ['pet.relatorios:view'] },
+
+  // ── Clínica e consultório ───────────────────────────────────────────────────────────
+  { key: 'cli.agenda', module: ModuleKey.CLINICA, required: true, price: '49.90', label: 'Agenda e cobrança',
+    requires: ['core.pedidos', 'core.clientes'],
+    description: 'Agenda por profissional sem choque, ficha do paciente, cobrança da consulta e recibo para imprimir.',
+    permissions: ['cli.agenda:operate', 'cli.cadastro:manage'] },
+  { key: 'cli.prontuario', module: ModuleKey.CLINICA, price: '29.90', label: 'Prontuário',
+    description: 'Anamnese, evolução e prescrição por consulta, com acesso só para quem tem permissão.',
+    permissions: ['cli.prontuario:view', 'cli.prontuario:manage'] },
+  { key: 'cli.convenios', module: ModuleKey.CLINICA, price: '19.90', label: 'Convênios',
+    description: 'Tabela de valor por convênio, consulta por convênio e controle do que falta o convênio repassar.',
+    permissions: ['cli.convenios:manage'] },
+  { key: 'cli.relatorios', module: ModuleKey.CLINICA, price: '14.90', label: 'Relatórios da clínica',
+    description: 'Consultas por profissional e por convênio, a receber e taxa de faltas.',
+    permissions: ['cli.relatorios:view'] },
+
+  // ── Hotelaria e pousada ─────────────────────────────────────────────────────────────
+  { key: 'hot.reservas', module: ModuleKey.HOTEL, required: true, price: '49.90', label: 'Reservas e recepção',
+    requires: ['core.pedidos', 'core.clientes'],
+    description: 'Quartos, reservas sem sobreposição, check-in que abre a conta com as diárias, consumo e check-out.',
+    permissions: ['hot.reservas:operate', 'hot.quartos:manage'] },
+  { key: 'hot.governanca', module: ModuleKey.HOTEL, price: '14.90', label: 'Governança',
+    description: 'Quarto sai do check-out para limpeza; camareira marca limpo ou em manutenção.',
+    permissions: ['hot.governanca:operate'] },
+  { key: 'hot.relatorios', module: ModuleKey.HOTEL, price: '14.90', label: 'Relatórios da pousada',
+    description: 'Taxa de ocupação, diária média e RevPAR do período.',
+    permissions: ['hot.relatorios:view'] },
 ];
 
 const BY_KEY = new Map(FEATURES.map((f) => [f.key, f]));

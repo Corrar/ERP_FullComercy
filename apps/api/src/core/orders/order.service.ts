@@ -115,6 +115,10 @@ export async function createOrder(draft: OrderDraft) {
       if (paid.gte(total) && strategy.completeOnFullPayment(draft)) {
         await transitionWithin(tx, order, OrderStatus.COMPLETED, strategy, policy, 'Pago integralmente na criação.');
       }
+    } else if (total.isZero() && strategy.completeOnFullPayment(draft)) {
+      // Nada a pagar (sessão de pacote, cortesia 100%): não há pagamento que dispare a conclusão
+      // nem título de valor zero a criar. Conclui já, se a estratégia fecha por pagamento.
+      await transitionWithin(tx, order, OrderStatus.COMPLETED, strategy, policy, 'Total zero: nada a pagar.');
     }
 
     await tx.auditLog.create({ data: { tenantId, userId, action: 'order.create', entity: 'Order', entityId: order.id, details: { number, module: strategy.moduleKey, total } } });

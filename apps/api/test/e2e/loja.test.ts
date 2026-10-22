@@ -30,7 +30,7 @@ if (!E2E) {
     const cat = await api().get('/public/billing/catalog');
     assert.equal(cat.trialDays, 7);
     assert.deepEqual(cat.methods, ['CARD', 'BOLETO', 'PIX_AUTO']);
-    assert.equal(cat.modules.length, 4);
+    assert.deepEqual(cat.modules.map((m: any) => m.key).sort(), ['ACADEMIA', 'BELEZA', 'CLINICA', 'FOOD', 'HOTEL', 'PET', 'SERVICOS', 'VAREJO']);
     assert.ok(cat.features.every((f: any) => Array.isArray(f.permissions) && f.permissions.length), 'a prévia precisa das chaves de cada função');
     const q = await api().post('/public/billing/quote', { modules: ['VAREJO'], features: ['varejo.etiquetas'] });
     // mínimo do Varejo 114,50 + Etiquetas 9,90

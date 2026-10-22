@@ -7,11 +7,12 @@ export const STATUS_PT: Record<string, string> = {
   DRAFT: 'Rascunho', OPEN: 'Aberto', CONFIRMED: 'Confirmado', IN_PROGRESS: 'Em andamento', READY: 'Pronto', COMPLETED: 'Concluído', CANCELLED: 'Cancelado',
   QUEUED: 'Na fila', PREPARING: 'Preparando', SERVED: 'Servido', PENDING: 'Pendente', ASSIGNED: 'Atribuída', PICKED_UP: 'Saiu', DELIVERED: 'Entregue', FAILED: 'Falhou',
   RECEIVED: 'Recebido', DIAGNOSING: 'Diagnóstico', AWAITING_APPROVAL: 'Aguardando aprovação', APPROVED: 'Aprovado', AWAITING_PARTS: 'Aguardando peça', IN_SERVICE: 'Em serviço', QUALITY_CHECK: 'Qualidade',
+  SCHEDULED: 'Agendado', ARRIVED: 'Chegou', NO_SHOW: 'Faltou', DONE: 'Concluído', BOOKED: 'Reservada', CHECKED_IN: 'Hospedado', CHECKED_OUT: 'Saiu',
   ACTIVE: 'Ativa', PAUSED: 'Pausada', OVERDUE: 'Inadimplente', EXPIRED: 'Expirada', PAID: 'Pago', PARTIAL: 'Parcial', REFUNDED: 'Reembolsada', ORDERED: 'Enviado', FREE: 'Livre', OCCUPIED: 'Ocupada', RESERVED: 'Reservada', CLOSING: 'Fechando',
 };
 export const st = (s: string) => STATUS_PT[s] ?? s;
 export const tone = (s: string): 'ok' | 'warn' | 'danger' | 'info' | '' =>
-  ['COMPLETED', 'PAID', 'REFUNDED', 'ACTIVE', 'DELIVERED', 'SERVED', 'RECEIVED', 'FREE', 'SENT'].includes(s) ? 'ok'
-  : ['CANCELLED', 'FAILED', 'OVERDUE', 'EXPIRED'].includes(s) ? 'danger'
-  : ['PREPARING', 'IN_PROGRESS', 'AWAITING_APPROVAL', 'AWAITING_PARTS', 'OCCUPIED', 'PARTIAL', 'PAUSED'].includes(s) ? 'warn'
+  ['COMPLETED', 'PAID', 'REFUNDED', 'DONE', 'CHECKED_OUT', 'ACTIVE', 'DELIVERED', 'SERVED', 'RECEIVED', 'FREE', 'SENT'].includes(s) ? 'ok'
+  : ['CANCELLED', 'FAILED', 'OVERDUE', 'EXPIRED', 'NO_SHOW'].includes(s) ? 'danger'
+  : ['PREPARING', 'IN_PROGRESS', 'IN_SERVICE', 'CHECKED_IN', 'ARRIVED', 'AWAITING_APPROVAL', 'AWAITING_PARTS', 'OCCUPIED', 'PARTIAL', 'PAUSED'].includes(s) ? 'warn'
   : ['OPEN', 'READY', 'CONFIRMED', 'QUEUED', 'PENDING', 'ASSIGNED', 'PICKED_UP'].includes(s) ? 'info' : '';
