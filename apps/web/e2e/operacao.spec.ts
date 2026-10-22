@@ -4,16 +4,9 @@
 //     dividida entre duas pessoas, relatórios por garçom e de tempo de cozinha;
 //   • academia: recepção libera quem tem matrícula, barra quem não tem, registra a saída;
 //   • oficina: abrir OS, ela aparece no kanban, diagnóstico → orçamento → cliente aprovou.
-import { test, expect, type APIRequestContext } from '@playwright/test';
-import { API, SENHA, run, uiLogin } from './_helpers';
+import { test, expect } from '@playwright/test';
+import { API, cadastrarClienteNoSeletor, empresaNova, run, uiLogin } from './_helpers';
 
-async function empresaNova(request: APIRequestContext, prefixo: string, modulo: string) {
-  const slug = `${prefixo}-${run.toLowerCase()}`;
-  const r = await request.post(`${API}/platform/tenants`, { headers: { 'x-platform-key': process.env.PLATFORM_API_KEY! }, data: { slug, name: `${prefixo} ${run}`, adminEmail: `admin@${slug}.local`, adminPassword: SENHA, modules: [modulo] } });
-  expect(r.status()).toBe(201);
-  const l = await (await request.post(`${API}/auth/login`, { data: { tenant: slug, email: `admin@${slug}.local`, password: SENHA } })).json();
-  return { slug, h: { authorization: `Bearer ${l.accessToken}` } };
-}
 
 test('restaurante: comanda → cozinha → conta dividida → relatórios', async ({ page, request }) => {
   const { slug, h } = await empresaNova(request, 'op-food', 'FOOD');
@@ -83,13 +76,12 @@ test('academia: recepção libera matriculado, barra quem não tem matrícula e 
 });
 
 test('oficina: abrir OS, ver no kanban, diagnóstico, orçamento e aprovação', async ({ page, request }) => {
-  const { slug, h } = await empresaNova(request, 'op-svc', 'SERVICOS');
-  await request.post(`${API}/customers`, { headers: h, data: { name: `Cliente Carro ${run}` } });
+  const { slug } = await empresaNova(request, 'op-svc', 'SERVICOS');
   const placa = `OPS${String(Date.now()).slice(-4)}`;
 
   await uiLogin(page, slug);
   await page.goto('/servicos/nova');
-  await page.locator('select[name=customerId]').selectOption({ label: `Cliente Carro ${run}` });
+  await cadastrarClienteNoSeletor(page, `Cliente Carro ${run}`);
   await page.locator('input[name=plate]').fill(placa);
   await page.locator('textarea[name=complaint]').fill('Barulho na suspensão');
   await page.getByRole('button', { name: 'Abrir OS' }).click();

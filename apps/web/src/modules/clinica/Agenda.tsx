@@ -1,7 +1,7 @@
 // Agenda da clínica: o dia por profissional. "Cobrar" gera a cobrança da consulta (POST /orders):
 // particular recebe na hora; convênio fica a receber até o repasse.
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { patch, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
 import { Badge, Card, ErrorBox, Field, Modal } from '@/components/ui';
@@ -63,6 +63,7 @@ function NovaConsulta({ profs, dia, onDone }: { profs: any[]; dia: string; onDon
     if (!pac) throw new Error('Escolha o paciente.');
     await post('/m/clinica/agenda', { customerId: pac.id, professionalId: prof, startsAt: new Date(`${dia}T${hora}:00`).toISOString(), kind: tipo, payer, insuranceId: payer === 'CONVENIO' && conv ? conv : undefined, price: valor === '' ? undefined : Number(valor) }); onDone();
   });
+  if (!profs.length) return <div className="banner warn" style={{ margin: 0 }}>Antes de agendar, cadastre ao menos um profissional em <Link to="/clinica/cadastros">Profissionais</Link>.</div>;
   return <div className="grid" style={{ gap: 12 }}>
     <EscolherCliente value={pac} onChange={setPac} rotulo="Paciente" />
     <div className="row"><Field label="Profissional"><select className="input" value={prof} onChange={(e) => setProf(e.target.value)}>{profs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field><Field label="Hora"><input className="input" type="time" step={300} value={hora} onChange={(e) => setHora(e.target.value)} /></Field></div>

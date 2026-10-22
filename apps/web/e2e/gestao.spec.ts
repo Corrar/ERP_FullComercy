@@ -33,7 +33,7 @@ test('troca: devolve em vale na tela de Trocas e o PDV abate o vale na venda nov
   await bipe.fill(sku); await bipe.press('Enter');
   await expect(page.locator('.total')).toHaveText(/150,00/);
   await page.getByRole('button', { name: 'Usar vale' }).click();
-  await page.getByPlaceholder(/Nome, telefone ou documento/).fill(`Cliente Vale ${run}`);
+  await page.getByRole('dialog').getByPlaceholder(/Nome, telefone ou documento/).fill(`Cliente Vale ${run}`);
   await page.getByRole('cell', { name: `Cliente Vale ${run}` }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Usar' }).click();
   await expect(page.getByText(`Vale de Cliente Vale ${run}`)).toBeVisible();

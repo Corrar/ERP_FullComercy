@@ -32,6 +32,7 @@ function NovaReserva({ onDone }: { onDone: () => void }) {
   const hoje = iso(new Date());
   const [hosp, setHosp] = useState<ClienteMin | null>(null); const [ent, setEnt] = useState(hoje); const [sai, setSai] = useState(mais(hoje, 2)); const [pessoas, setPessoas] = useState(2);
   const livres = useGet<any[]>(ent < sai ? '/m/hotel/disponiveis' : null, { checkIn: ent, checkOut: sai, guests: pessoas });
+  const quartos = useGet<any[]>('/m/hotel/quartos');
   const noites = Math.max(0, Math.round((new Date(`${sai}T12:00:00`).getTime() - new Date(`${ent}T12:00:00`).getTime()) / 86400000));
   const reservar = useAction(async (q: any) => { if (!hosp) throw new Error('Escolha o hóspede.'); await post('/m/hotel/reservas', { customerId: hosp.id, roomId: q.id, checkIn: ent, checkOut: sai, guests: pessoas, source: 'balcão' }); onDone(); });
   return <div className="grid" style={{ gap: 12 }}>
@@ -39,6 +40,6 @@ function NovaReserva({ onDone }: { onDone: () => void }) {
     <div className="row"><Field label="Entrada"><input className="input" type="date" value={ent} onChange={(e) => setEnt(e.target.value)} /></Field><Field label="Saída"><input className="input" type="date" value={sai} min={mais(ent, 1)} onChange={(e) => setSai(e.target.value)} /></Field><Field label="Pessoas"><input className="input" type="number" min={1} max={20} value={pessoas} onChange={(e) => setPessoas(Number(e.target.value) || 1)} /></Field></div>
     <div className="muted">{noites} diária(s). Quartos livres no período:</div>
     <ErrorBox error={reservar.error ?? livres.error} />
-    <Table rows={livres.data} empty="Nenhum quarto livre para esse período e número de pessoas." cols={[{ h: 'Quarto', c: (q) => q.number }, { h: 'Tipo', c: (q) => q.type }, { h: 'Capacidade', c: (q) => q.capacity, right: true }, { h: 'Diária', c: (q) => <Money v={q.dailyRate} />, right: true }, { h: 'Total', c: (q) => <Money v={Number(q.dailyRate) * noites} />, right: true }, { h: '', c: (q) => <button className="btn primary" disabled={!hosp || reservar.busy} onClick={() => void reservar.run(q)}>Reservar</button> }]} />
+    <Table rows={livres.data} empty={quartos.data && !quartos.data.length ? 'Nenhum quarto cadastrado ainda: crie em Quartos.' : 'Nenhum quarto livre para esse período e número de pessoas.'} cols={[{ h: 'Quarto', c: (q) => q.number }, { h: 'Tipo', c: (q) => q.type }, { h: 'Capacidade', c: (q) => q.capacity, right: true }, { h: 'Diária', c: (q) => <Money v={q.dailyRate} />, right: true }, { h: 'Total', c: (q) => <Money v={Number(q.dailyRate) * noites} />, right: true }, { h: '', c: (q) => <button className="btn primary" disabled={!hosp || reservar.busy} onClick={() => void reservar.run(q)}>Reservar</button> }]} />
   </div>;
 }

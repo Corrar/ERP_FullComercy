@@ -5,11 +5,13 @@ import { useAction, useGet } from '@/lib/use-api';
 import { Card, ErrorBox, Modal, Money, Table, Toast } from '@/components/ui';
 import { brl } from '@/lib/format';
 import { useSession } from '@/lib/session';
+import { EscolherCliente, type ClienteMin } from '@/components/EscolherCliente';
 
 interface Linha { variantId: string; sku: string; nome: string; preco: number; qtd: number }
 // Vale-troca não é um meio digitado: entra por "Usar vale", que abate o vale da devolução certo
 // (`moduleData.valeFinanceEntryId`). Um STORE_CREDIT digitado à mão não abatia vale nenhum.
-const MEIOS = ['PIX', 'CASH', 'DEBIT', 'CREDIT', 'VOUCHER'];
+const MEIOS: [string, string][] = [['PIX', 'Pix'], ['CASH', 'Dinheiro'], ['DEBIT', 'Débito'], ['CREDIT', 'Crédito'], ['VOUCHER', 'Voucher']];
+const NOME_MEIO = Object.fromEntries(MEIOS);
 interface Vale { id: string; saldo: number; cliente: { id: string; name: string } }
 
 export function Pdv() {
@@ -21,7 +23,7 @@ export function Pdv() {
   const vendedores = useGet<any[]>(comVendedor ? '/m/varejo/vendedores' : null);
   const [linhas, setLinhas] = useState<Linha[]>([]); const [codigo, setCodigo] = useState(''); const [desconto, setDesconto] = useState(0);
   const [pag, setPag] = useState<{ method: string; amount: number }[]>([]); const [meio, setMeio] = useState('PIX'); const [valor, setValor] = useState('');
-  const [vendedor, setVendedor] = useState(''); const [cliente, setCliente] = useState(''); const [msg, setMsg] = useState<string | null>(null);
+  const [vendedor, setVendedor] = useState(''); const [cliente, setCliente] = useState<ClienteMin | null>(null); const [msg, setMsg] = useState<string | null>(null);
   const [vale, setVale] = useState<Vale | null>(null); const [buscaVale, setBuscaVale] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => { input.current?.focus(); }, [linhas.length]);
@@ -39,10 +41,18 @@ export function Pdv() {
   });
   const finalizar = useAction(async () => {
     if (!caixa.data) throw new Error('Abra o caixa antes de vender.');
-    if (falta > 0.009) throw new Error(`Faltam ${brl(falta)}.`);
-    const o = await post('/orders', { channel: 'POS', items: linhas.map((l) => ({ variantId: l.variantId, quantity: l.qtd, unitPrice: l.preco })), discount: desconto, payments: pag, customerId: (vale?.cliente.id ?? cliente) || null, moduleData: { posSessionId: caixa.data.id, salespersonId: vendedor || undefined, valeFinanceEntryId: vale?.id } });
-    setMsg(`Venda #${o.number} concluída.`); setLinhas([]); setPag([]); setDesconto(0); setVale(null);
+    // Venda rápida: sem linha de pagamento lançada, o total vai no meio escolhido (Pix, débito…).
+    const pagamentos = pag.length ? pag : falta > 0.009 ? [{ method: meio, amount: falta }] : [];
+    if (pag.length && falta > 0.009) throw new Error(`Faltam ${brl(falta)}.`);
+    const o = await post('/orders', { channel: 'POS', items: linhas.map((l) => ({ variantId: l.variantId, quantity: l.qtd, unitPrice: l.preco })), discount: desconto, payments: pagamentos, customerId: vale?.cliente.id ?? cliente?.id ?? null, moduleData: { posSessionId: caixa.data.id, salespersonId: vendedor || undefined, valeFinanceEntryId: vale?.id } });
+    setMsg(`Venda #${o.number} concluída.`); setLinhas([]); setPag([]); setDesconto(0); setVale(null); setCliente(null);
   });
+  // F12 finaliza, como diz o botão (teclado de caixa).
+  const { run: finalizarAgora } = finalizar;
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'F12') { e.preventDefault(); if (linhas.length) void finalizarAgora(); } };
+    window.addEventListener('keydown', tecla); return () => window.removeEventListener('keydown', tecla);
+  }, [finalizarAgora, linhas.length]);
 
   return <div className="pdv">
     <div className="grid">
@@ -55,13 +65,13 @@ export function Pdv() {
     <div className="grid">
       <Card title="Total"><div className="total mono">{brl(total)}</div><div className="row"><label className="field">Desconto<input className="input" type="number" step="0.01" value={desconto} onChange={(e) => setDesconto(Number(e.target.value))} /></label>
         {comVendedor && <label className="field">Vendedor<select className="input" value={vendedor} onChange={(e) => setVendedor(e.target.value)}><option value="">—</option>{vendedores.data?.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}</div>
-        <label className="field">Cliente (id, opcional)<input className="input" value={vale?.cliente.id ?? cliente} disabled={!!vale} onChange={(e) => setCliente(e.target.value)} /></label>
+        {vale ? null : <EscolherCliente value={cliente} onChange={setCliente} rotulo="Cliente (opcional)" />}
         {vale ? <div className="row between" style={{ marginTop: 8 }}><span>Vale de {vale.cliente.name} <span className="muted">(saldo {brl(vale.saldo)})</span></span><span className="row"><span className="mono">− {brl(doVale)}</span><button className="btn" aria-label="Tirar o vale" onClick={() => setVale(null)}>✕</button></span></div>
           : <button className="btn" style={{ marginTop: 8 }} onClick={() => setBuscaVale(true)}>Usar vale</button>}</Card>
-      <Card title="Pagamento"><div className="row"><select className="input" value={meio} onChange={(e) => setMeio(e.target.value)} style={{ width: 130 }}>{MEIOS.map((m) => <option key={m}>{m}</option>)}</select>
+      <Card title="Pagamento"><div className="row"><select className="input" value={meio} onChange={(e) => setMeio(e.target.value)} style={{ width: 130 }}>{MEIOS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         <input className="input" type="number" step="0.01" placeholder={falta.toFixed(2)} value={valor} onChange={(e) => setValor(e.target.value)} />
         <button className="btn" onClick={() => { const a = Number(valor || falta); if (a > 0) { setPag((p) => [...p, { method: meio, amount: a }]); setValor(''); } }}>+</button></div>
-        {pag.map((p, i) => <div key={i} className="row between"><span>{p.method}</span><span className="row"><Money v={p.amount} /><button className="btn" onClick={() => setPag((x) => x.filter((_, j) => j !== i))}>✕</button></span></div>)}
+        {pag.map((p, i) => <div key={i} className="row between"><span>{NOME_MEIO[p.method] ?? p.method}</span><span className="row"><Money v={p.amount} /><button className="btn" onClick={() => setPag((x) => x.filter((_, j) => j !== i))}>✕</button></span></div>)}
         <div className="row between" style={{ marginTop: 8 }}><span>{falta > 0 ? 'Falta' : 'Troco'}</span><strong><Money v={Math.abs(falta)} /></strong></div>
         <ErrorBox error={finalizar.error} />
         <button className="btn primary" style={{ width: '100%', marginTop: 8, padding: 14 }} disabled={!linhas.length || finalizar.busy} onClick={() => void finalizar.run()}>Finalizar venda (F12)</button></Card>

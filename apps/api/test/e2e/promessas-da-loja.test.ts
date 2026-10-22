@@ -90,4 +90,20 @@ if (!E2E) {
     assert.deepEqual([k.espera_min, k.preparo_min, k.total_min].map(Math.round), [5, 8, 13]);
     assert.equal(k.acima_20min, 0);
   });
+
+  test('Cardápio do zero: prato sem produto prévio nasce com o produto dele (sem saldo) e vende', async () => {
+    const { A } = await empresa('cardzero', 'FOOD');
+    const menu = await A.post('/m/food/menus', { name: 'Almoço', slug: `almoco-${run.toLowerCase()}` });
+    const cat = await A.post(`/m/food/menus/${menu.id}/categorias`, { name: 'Pratos' });
+    const item = await A.post(`/m/food/menus/${menu.id}/itens`, { categoryId: cat.id, displayName: 'Feijoada Completa', price: 39.9 });
+    const [prod] = await A.get('/products?q=Feijoada');
+    assert.equal(prod.name, 'Feijoada Completa'); assert.equal(prod.trackStock, false); assert.equal(Number(prod.salePrice), 39.9);
+    assert.match(prod.variants[0].sku, /^FEIJOADA-COMPLETA-[0-9A-F]{4}$/);
+    assert.equal(item.variantId, prod.variants[0].id);
+    const mesa = (await A.get('/m/food/mesas')).find((m: any) => m.status === 'FREE');
+    const tab = await A.post('/m/food/comandas', { code: `Z-${run}`, tableId: mesa.id });
+    const r = await A.post('/orders', { channel: 'TABLE', items: [{ variantId: item.variantId, quantity: 1 }], moduleData: { tabId: tab.id, tableId: mesa.id, menuId: menu.id } });
+    assert.equal(r.total, '39.9');
+  });
 }
+

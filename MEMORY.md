@@ -78,6 +78,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | "Cobrança online" era vendida sem botão de cobrar; a lista só aparecia em Integrações (outra função paga) | nenhum teste olhava se a função vendida tinha tela | `test/funcoes-prontas.test.ts` (rota + menu de toda função) e e2e `funcoes-prontas` (contratar e já responder); contra-prova: tirar o item do menu derruba o teste |
 | Spec de navegador via a sessão "velha" depois de mudar o plano | `page.addInitScript` roda de novo a cada navegação e regravava a sessão injetada | injetar só se `localStorage` estiver vazio |
 | Teste esperava `code: 'NOT_IN_PLAN'` | o corte do plano responde `FORBIDDEN` com `details.reason = 'NOT_IN_PLAN'` | ler `body.details.reason` |
+| Testes de navegador passavam, mas o cliente novo não conseguia montar o cardápio pela tela | os testes PREPARAVAM cadastros pela API; a tela de item exigia um produto que a empresa nova não tem | `e2e/primeiro-dia.spec.ts`: cada comércio do zero, só pela tela — nada preparado pela API |
 | "Depois de anonimizar a busca não acha" passava no vazio | a busca não olha e-mail, e o telefone de teste montado de `run` (letras) nem era único | asserção do ANTES (acha 1) com documento e telefone únicos; só então o DEPOIS (acha 0) vale |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão

@@ -45,6 +45,8 @@ test('função nova: adicionar Agenda na assinatura e já agendar', async ({ pag
 
   await page.getByRole('button', { name: 'Agendar' }).click();
   const dlg = page.getByRole('dialog', { name: 'Agendar' });
+  await dlg.getByLabel('Buscar cliente').fill(`Cliente Agenda ${run}`);
+  await dlg.getByRole('button', { name: new RegExp(`^Cliente Agenda ${run}`) }).click();
   const amanha = new Date(Date.now() + 86_400_000); amanha.setHours(10, 0, 0, 0);
   const local = new Date(amanha.getTime() - amanha.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
   await dlg.locator('input[name=scheduledAt]').fill(local);
