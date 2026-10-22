@@ -1,6 +1,7 @@
 import { useGet } from '@/lib/use-api';
 import { Card, Kpi } from '@/components/ui';
 import { brl } from '@/lib/format';
+import { PrimeirosPassos } from './PrimeirosPassos';
 
 const LABEL: Record<string, string> = {
   caixasAbertos: 'Caixas abertos', comissoesPendentes: 'Comissões pendentes', mesasOcupadas: 'Mesas ocupadas', comandasAbertas: 'Comandas abertas', naCozinha: 'Na cozinha', entregasEmCurso: 'Entregas em curso',
@@ -16,6 +17,7 @@ export function Dashboard() {
   if (loading || !data) return <div className="muted">Carregando…</div>;
   return <div className="grid">
     <h1>Hoje</h1>
+    <PrimeirosPassos />
     <div className="grid kpis">
       <Kpi label="Vendas concluídas" value={data.hoje.vendas} />
       <Kpi label="Faturamento" value={data.hoje.faturamento} money />

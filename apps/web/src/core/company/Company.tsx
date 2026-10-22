@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { put } from '@/lib/api';
+import { post, put } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
 import { useSession } from '@/lib/session';
 import { Card, ErrorBox, Field, Form, Toast } from '@/components/ui';
@@ -9,10 +9,11 @@ export function Company() {
   const mods = useGet<any[]>('/tenant/modules'); const cfg = useGet<any>('/tenant/settings');
   const toggle = useAction(async (m: any) => { await put(`/tenant/modules/${m.key}`, { enabled: !m.enabled }); await mods.reload(); await refresh(); setMsg(`${m.name} ${m.enabled ? 'desligado' : 'ligado'}.`); });
   const salvar = useAction(async (v: Record<string, any>) => { await put('/tenant/settings', { name: v.name, document: v.document, defaultSalesModule: v.defaultSalesModule || null }); await cfg.reload(); await refresh(); setMsg('Configurações salvas.'); });
+  const reverGuia = useAction(async () => { await post('/tenant/primeiros-passos/dispensar', { dispensar: false }); await cfg.reload(); setMsg('O guia de primeiros passos voltou para o painel.'); });
   const salvarMarca = useAction(async (v: Record<string, any>) => { await put('/tenant/settings', { marca: { cor: v.cor, logoUrl: v.logoUrl ?? '' } }); await cfg.reload(); setMsg('Marca dos e-mails salva.'); });
   return <div className="grid">
     <h1>Empresa e módulos</h1>
-    <ErrorBox error={toggle.error ?? salvar.error ?? salvarMarca.error} />
+    <ErrorBox error={toggle.error ?? salvar.error ?? salvarMarca.error ?? reverGuia.error} />
     <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
       {mods.data?.map((m) => <Card key={m.key} title={m.name} actions={<button className={`btn ${m.enabled ? '' : 'primary'}`} onClick={() => void toggle.run(m)} disabled={toggle.busy}>{m.enabled ? 'Desligar' : 'Ligar'}</button>}><div className="muted">{m.description}</div><div style={{ marginTop: 8 }}>{m.enabled ? <span className="badge ok">ativo</span> : <span className="badge">inativo</span>}</div></Card>)}
     </div>
@@ -24,6 +25,7 @@ export function Company() {
       <Form key={JSON.stringify(cfg.data.settings?.marca ?? {})} onSubmit={(v) => void salvarMarca.run(v)} busy={salvarMarca.busy}>
         <div className="row"><Field label="Cor"><input className="input" name="cor" type="color" defaultValue={cfg.data.settings?.marca?.cor ?? '#2563eb'} style={{ width: 80, padding: 2 }} /></Field>
           <Field label="Logo (endereço https da imagem, opcional)"><input className="input" name="logoUrl" type="url" pattern="https://.*" placeholder="https://…/logo.png" defaultValue={cfg.data.settings?.marca?.logoUrl ?? ''} /></Field></div></Form></Card>}
+    {cfg.data?.settings?.primeirosPassos?.dispensadoEm && <Card title="Primeiros passos"><div className="row between"><span className="muted">O guia do painel foi dispensado.</span><button className="btn" onClick={() => void reverGuia.run()} disabled={reverGuia.busy}>Mostrar de novo</button></div></Card>}
     <Toast msg={msg} />
   </div>;
 }
