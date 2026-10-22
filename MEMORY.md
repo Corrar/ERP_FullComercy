@@ -50,6 +50,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Postgres local caía "sozinho" | `pkill -f` com padrão que casava o próprio shell (exit 144) matou a sessão que iniciou o banco | iniciar com `setsid`; matar por `pgrep -f "[p]adrao"` |
 | Pagamento com Stripe caía com `removeChild` ("Unexpected Application Error") | o Stripe.js troca o conteúdo de onde monta; o aviso "Carregando…" (filho React ali) sumiu por baixo do React, que tentou removê-lo no `ready`. As specs usam o simulador e nunca montavam o campo | alvo de script de terceiro (Stripe, Turnstile, Google) fica SEM filhos React; `e2e/stripe-campo.spec.ts` com dublê do Stripe.js |
 | CI vermelho em TODAS as rodadas (até 21/10/2026), sempre no `typecheck` | `npm ci` na raiz não gera o Prisma Client: o postinstall do `@prisma/client` procura `prisma/schema.prisma` na raiz e o schema mora em `apps/api/prisma`; sem client, todo tipo do Prisma some (`ModuleKey`, `Decimal`…) | passo `npm run prisma:generate -w apps/api` logo após o `npm ci` (`ci.yml`); local, o mesmo depois de `npm install` |
+| Unitários passavam aqui e falhavam no CI: `Could not find '…/test/*.test.ts'` | glob entre aspas em `node --test 'test/*.test.ts'` só é expandido pelo Node 21+; o CI (e o `engines`) é Node 20 | glob sem aspas: quem expande é o shell (`apps/api/package.json`); conferido com Node 20 de verdade |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 
