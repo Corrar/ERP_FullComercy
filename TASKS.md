@@ -29,7 +29,8 @@
 - [x] Telas que faltavam sobre rotas prontas: estoque (movimento, transferência, armazéns, inventário), financeiro (editar, cancelar, baixa com conta, cadastros), DRE com PDF, auditoria, usuários (exceções, nova senha), integrações (entregas, reenvio, intenções), compras (itens do rascunho, fornecedor inativo), Food (ficha técnica, adicionais, transferir/cancelar comanda, mesas), Serviços (catálogo, checklist, técnico, anexos, ficha do veículo), Academia (reservas e chamada, planos, credenciais, cobrança manual, pico/frequência), Varejo (eixos da grade, editar/desativar vendedor, etiqueta impressa)
 - [x] Acompanhamento público em tempo real (token por pedido, sala só do pedido), e-mails em HTML com a marca da empresa (cor e logo na tela Empresa), paginação no núcleo (clientes, produtos, pedidos, títulos, compras, razão do estoque, auditoria)
 - [x] Pós-compra pronto: perfis da equipe por módulo (modelo), e-mail de boas-vindas com dados de acesso e link de senha, dados de acesso na tela de conclusão; produção sem SMTP não sobe
-- [x] Testes: 43 unit, 36 e2e API, 17 Playwright
+- [x] Modelo de perfis aplicado nas empresas antigas (job `core.perfis-modelo`, uma vez por empresa, só perfil vazio)
+- [x] Testes: 43 unit, 37 e2e API, 17 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 

@@ -67,6 +67,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | CSV com nome de cliente `=HYPERLINK(...)` virava fórmula no Excel | célula começando com `= + - @` saía crua; nome vem até de pedido público | `shared/csv.ts` prefixa apóstrofo (teste em `unidades.test.ts`) |
 | Teste de webhooks falhava às vezes ("recebeu order.created") | esperava 300 ms fixos pelo outbox (`setImmediate`) | despacha em laço até a entrega aparecer, com teto |
 | Provedor de e-mail "console" imprimia o corpo (link de senha de uso único) no log da homologação | o log do Render é compartilhado e guardado | corpo só com `APP_STAGE=local`; fora disso só o aviso "NÃO ENVIADO"; produção sem `SMTP_HOST` não sobe (`configProblems`) |
+| Job das empresas antigas não achava nenhuma empresa sem a marca `perfisModelo` | filtro JSON do Prisma (`NOT: { settings: { path, equals } }`): caminho ausente vira NULL e a linha some | filtra a marca em código (`aplicarModeloNasEmpresasAntigas`); teste simula empresa antiga |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 

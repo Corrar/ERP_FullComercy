@@ -6,7 +6,7 @@
 import { ModuleKey, Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../infra/prisma';
-import { aplicarModelo, semearModulo } from '../rbac/role-templates';
+import { aplicarModelo, marcarModelo, semearModulo } from '../rbac/role-templates';
 import { invalidateTenantCache } from '../tenancy/tenant-modules.service';
 import { AppError } from '../../shared/errors';
 
@@ -46,6 +46,8 @@ export async function onboardTenant(input: OnboardInput) {
     await prisma.tenantModule.upsert({ where: { tenantId_moduleKey: { tenantId, moduleKey } }, create: { tenantId, moduleKey, enabled: true }, update: { enabled: true } });
     await semearModulo(tenantId, moduleKey);
   }
+  // Nasceu com o modelo: o job das empresas antigas não volta a mexer nela.
+  await marcarModelo(tenantId, (await prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { settings: true } })).settings);
   invalidateTenantCache(tenantId);
   return { tenant, adminUserId: user.id };
 }

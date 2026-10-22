@@ -11,7 +11,7 @@
 //   • perfis com a mesma chave em módulos diferentes somam (Posto VAREJO+FOOD: um Caixa só).
 // Prontuário (clínica) e prontuário veterinário NÃO entram no Gerente: sigilo de saúde fica com
 // quem atende.
-import type { ModuleKey } from '@prisma/client';
+import type { ModuleKey, Prisma } from '@prisma/client';
 import { prisma } from '../../infra/prisma';
 import { moduleRegistry } from '../../modules/module.registry';
 import { permissionExists } from './permissions';
@@ -83,6 +83,44 @@ export async function aplicarModelo(tenantId: string, de: 'CORE' | ModuleKey) {
     await prisma.rolePermission.createMany({ data: p.permissions.map((permissionKey) => ({ tenantId, roleId: role.id, permissionKey })), skipDuplicates: true });
   }
 }
+
+/** Marca em `tenant.settings`: a empresa já recebeu o modelo (nasceu com ele ou foi preenchida). */
+export const MARCA_MODELO = 'perfisModelo';
+
+/**
+ * EMPRESAS ANTIGAS (criadas antes do modelo): roda UMA vez por empresa (marca em settings) e só
+ * preenche perfil que não existe ou que está VAZIO. Perfil que o dono já configurou não é tocado —
+ * somar chaves ali ampliaria um acesso que ele restringiu de propósito. Job de plataforma.
+ */
+export async function aplicarModeloNasEmpresasAntigas() {
+  // Filtro em código: o filtro JSON do banco não acha quem NÃO tem a chave (NULL ≠ "diferente").
+  const todas = await prisma.tenant.findMany({ select: { id: true, settings: true } });
+  const ids = todas.filter((t) => (t.settings as Record<string, unknown> | null)?.[MARCA_MODELO] !== 1).map((t) => t.id);
+  const tenants = await prisma.tenant.findMany({ where: { id: { in: ids } }, select: { id: true, settings: true, modules: { where: { enabled: true }, select: { moduleKey: true } } } });
+  let preenchidos = 0;
+  for (const t of tenants) {
+    // Perfis com a mesma chave em módulos diferentes somam (um Caixa só no Posto).
+    const alvo = new Map<string, { name: string; keys: Set<string> }>();
+    for (const de of ['CORE' as const, ...t.modules.map((m) => m.moduleKey)]) {
+      for (const p of MODELOS[de] ?? []) {
+        const a = alvo.get(p.key) ?? { name: p.name, keys: new Set<string>() };
+        p.permissions.forEach((k) => a.keys.add(k)); alvo.set(p.key, a);
+      }
+    }
+    for (const [key, { name, keys }] of alvo) {
+      const role = await prisma.role.findUnique({ where: { tenantId_key: { tenantId: t.id, key } }, include: { _count: { select: { permissions: true } } } });
+      if (role?.isSystem || (role && role._count.permissions > 0)) continue;
+      const r = role ?? await prisma.role.create({ data: { tenantId: t.id, key, name } });
+      await prisma.rolePermission.createMany({ data: [...keys].map((permissionKey) => ({ tenantId: t.id, roleId: r.id, permissionKey })), skipDuplicates: true });
+      preenchidos++;
+    }
+    await marcarModelo(t.id, t.settings);
+  }
+  return { empresas: tenants.length, perfisPreenchidos: preenchidos };
+}
+
+export const marcarModelo = (tenantId: string, settings: unknown) =>
+  prisma.tenant.update({ where: { id: tenantId }, data: { settings: { ...((settings ?? {}) as Record<string, unknown>), [MARCA_MODELO]: 1 } as Prisma.InputJsonValue } });
 
 /** Ligar um módulo numa empresa = a semente do módulo (`onEnable`) + os perfis do modelo. Todo
  *  caminho que liga módulo (onboarding, troca de plano, tela Empresa, plataforma) passa aqui. */
