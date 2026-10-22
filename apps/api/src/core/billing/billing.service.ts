@@ -26,6 +26,7 @@ import { invalidateTenantCache, enableModule, disableModule } from '../tenancy/t
 import { ctx } from '../tenancy/tenant-context';
 import { semearModulo } from '../rbac/role-templates';
 import { enviarBoasVindas } from './boas-vindas';
+import { avisarFaturaAberta, avisarPagamentoRecebido, avisarPagamentoRecusado, avisarSuspensa, avisarTesteAcabando, CARD_MAX_ATTEMPTS } from './avisos';
 import { googleMode } from '../account/google';
 import { FEATURES, MODULE_OFFERS, resolveSelection, type Resolved } from './catalog';
 import { addDays, addMonths, normalizeDocument } from './periods';
@@ -34,8 +35,10 @@ import type { BillingProvider, Payer } from './providers/types';
 
 /** Boleto vence 3 dias depois de emitido (prazo usual para compensar). */
 const BOLETO_DUE_DAYS = 3;
-/** Cartão recusado: nova tentativa a cada 24 h, até 4 no total. */
-const CARD_MAX_ATTEMPTS = 4;
+/** Aviso de fim do teste sai quando faltam até 2 dias. */
+const TRIAL_NOTICE_DAYS = 2;
+// Cartão recusado: nova tentativa a cada 24 h, até CARD_MAX_ATTEMPTS (4) no total — o número mora em
+// avisos.ts, que avisa na primeira e na última.
 
 const serializeResolved = (r: Resolved) => ({
   modules: r.modules,
@@ -187,8 +190,19 @@ export const invoiceView = (i: InvoiceRow) => ({
   dueAt: i.dueAt, paidAt: i.paidAt, attempts: i.attempts, failureReason: i.failureReason, boletoUrl: i.boletoUrl, boletoLine: i.boletoLine, pixCode: i.pixCode,
 });
 
-/** Tenta receber a fatura pelo meio atual da assinatura. Devolve a fatura atualizada. */
+/**
+ * Tenta receber a fatura pelo meio atual da assinatura. Devolve a fatura atualizada. Todo caminho
+ * de cobrança passa por aqui (checkout, ciclo, nova tentativa, "pagar agora", troca de cartão): é
+ * aqui que sai o aviso de recusa ou de boleto gerado (o de pagamento recebido sai em markInvoicePaid).
+ */
 export async function collectInvoice(invoiceId: string): Promise<InvoiceRow> {
+  const inv = await cobrar(invoiceId);
+  if (inv.status === 'FAILED') await avisarPagamentoRecusado(inv);
+  else if (inv.status === 'OPEN') await avisarFaturaAberta(inv);
+  return inv;
+}
+
+async function cobrar(invoiceId: string): Promise<InvoiceRow> {
   const inv = await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { subscription: { include: { tenant: true, account: true } } } });
   if (inv.status === 'PAID' || inv.status === 'VOID') return inv;
   const sub = inv.subscription;
@@ -228,14 +242,17 @@ export async function markInvoicePaid(invoiceId: string, providerRef?: string) {
   const inv = await prisma.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID', paidAt: new Date(), failureReason: null, ...(providerRef ? { providerRef } : {}) } });
   const stillOpen = await prisma.invoice.count({ where: { subscriptionId: inv.subscriptionId, status: { in: ['OPEN', 'FAILED'] }, dueAt: { lt: new Date() } } });
   const sub = await prisma.subscription.findUniqueOrThrow({ where: { id: inv.subscriptionId } });
+  let reativou = false;
   if (!stillOpen && sub.status !== 'CANCELED') {
     await prisma.subscription.update({ where: { id: sub.id }, data: { status: 'ACTIVE', pastDueSince: null, suspendedByBilling: false } });
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: sub.tenantId } });
-    if ((sub.suspendedByBilling && tenant.status === 'SUSPENDED') || tenant.status === 'TRIAL') {
+    reativou = sub.suspendedByBilling && tenant.status === 'SUSPENDED';
+    if (reativou || tenant.status === 'TRIAL') {
       await prisma.tenant.update({ where: { id: sub.tenantId }, data: { status: 'ACTIVE' } });
     }
     invalidateTenantCache(sub.tenantId);
   }
+  await avisarPagamentoRecebido(inv, reativou);
   return inv;
 }
 
@@ -243,14 +260,20 @@ export async function markInvoicePaid(invoiceId: string, providerRef?: string) {
 
 /**
  * Uma passada do faturamento. `now` é parâmetro para o e2e "viajar no tempo" sem relógio falso.
+ *   0. teste grátis acabando em até 2 dias → aviso por e-mail (uma vez por período);
  *   1. período vencido → nova fatura e cobrança (fim do teste vira a 1ª cobrança); cancelamento
  *      pedido → encerra no fim do período;
  *   2. cartão recusado → nova tentativa a cada 24 h, até 4;
  *   3. fatura vencida sem pagamento → assinatura PAST_DUE;
  *   4. PAST_DUE além da carência → empresa SUSPENDED (só as rotas de assinatura seguem abertas).
+ * Recusa, boleto gerado, pagamento recebido e suspensão também viram e-mail (avisos.ts).
  */
 export async function runBillingCycle(now = new Date()) {
   const out = { renewed: 0, canceled: 0, retried: 0, pastDue: 0, suspended: 0 };
+
+  // 0. Teste grátis terminando nos próximos 2 dias: avisa quando, quanto e por onde vai cobrar.
+  const acabando = await prisma.subscription.findMany({ where: { status: 'TRIALING', cancelAtPeriodEnd: false, currentPeriodEnd: { gt: now, lte: addDays(now, TRIAL_NOTICE_DAYS) } }, select: { id: true } });
+  for (const s of acabando) await avisarTesteAcabando(s.id);
 
   const due = await prisma.subscription.findMany({ where: { status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] }, currentPeriodEnd: { lte: now } }, include: { items: true } });
   for (const sub of due) {
@@ -296,6 +319,7 @@ export async function runBillingCycle(now = new Date()) {
       prisma.subscription.update({ where: { id: s.id }, data: { suspendedByBilling: true } }),
     ]);
     invalidateTenantCache(s.tenantId);
+    await avisarSuspensa(s.id);
     out.suspended++;
   }
   return out;
@@ -316,7 +340,7 @@ export async function handleWebhook(providerKey: string, headers: Record<string,
     // Um 404 faria o gateway reenviar por dias.
     if (!inv) return { ok: true, ignored: 'fatura desconhecida' };
     if (ev.status === 'PAID') await markInvoicePaid(inv.id);
-    else if (inv.status !== 'PAID') await prisma.invoice.update({ where: { id: inv.id }, data: { status: 'FAILED', failureReason: 'Pagamento não confirmado pelo banco.' } });
+    else if (inv.status !== 'PAID') await avisarPagamentoRecusado(await prisma.invoice.update({ where: { id: inv.id }, data: { status: 'FAILED', failureReason: 'Pagamento não confirmado pelo banco.' } }));
     return { ok: true, invoiceId: inv.id };
   }
   const sub = await prisma.subscription.findFirst({ where: { paymentRef: ev.authorizationId, provider: providerKey } });

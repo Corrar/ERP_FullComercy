@@ -147,6 +147,7 @@ model Tenant {
   subscription        Subscription?
   subscriptionItems   SubscriptionItem[]
   invoices            Invoice[]
+  billingNotices      BillingNotice[]
   // módulos
   retailGradeAxes        RetailGradeAxis[]
   retailGradeValues      RetailGradeValue[]
@@ -2489,6 +2490,7 @@ model Subscription {
   account  Account            @relation(fields: [accountId], references: [id], onDelete: Restrict)
   items    SubscriptionItem[]
   invoices Invoice[]
+  notices  BillingNotice[]
 
   @@unique([tenantId])
   @@unique([tenantId, id])
@@ -2543,6 +2545,26 @@ model Invoice {
   @@index([status, dueAt])
   @@index([providerRef])
   @@map("core_invoices")
+}
+
+/// Aviso de cobrança já mandado ao comprador (teste acabando, pagamento recebido/recusado, fatura,
+/// suspensão). Um por tipo + referência: o ciclo e o webhook passam pelo mesmo fato mais de uma
+/// vez (e em mais de uma instância); o e-mail sai uma vez só.
+model BillingNotice {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  subscriptionId String   @map("subscription_id") @db.Uuid
+  kind           String   @db.VarChar(30)
+  /// O fato avisado: fim do teste (data), fatura (id) ou fatura + tentativa, suspensão (data).
+  ref            String   @db.VarChar(120)
+  sentTo         String   @map("sent_to") @db.VarChar(254)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, kind, ref])
+  @@map("core_billing_notices")
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

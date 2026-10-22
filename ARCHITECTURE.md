@@ -85,6 +85,9 @@ O app abre na **loja** (`/comecar`): a pessoa escolhe o comércio (módulo), lig
   CSP restritiva e HSTS/X-Frame-Options/Permissions-Policy no front (Vercel). Job `core.billing-cycle`: fim do teste, renovação,
   retentativa de cartão (24 h, até 4), atraso → `PAST_DUE`, carência (`BILLING_GRACE_DAYS`) →
   empresa `SUSPENDED`; pagar reabre. `/billing/*` fica aberto para a empresa suspensa.
+  Avisos por e-mail à conta que paga (`core/billing/avisos.ts`): teste acabando (2 dias antes), fatura
+  disponível (boleto/Pix), pagamento recusado (1ª recusa e última tentativa), suspensão e comprovante.
+  Cada um sai uma vez por (tipo, referência) em `core_billing_notices`; falha de envio não mexe na cobrança.
 
 ## 4. Eventos e integrações
 

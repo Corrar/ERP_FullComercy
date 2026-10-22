@@ -32,7 +32,7 @@
 - [x] Modelo de perfis aplicado nas empresas antigas (job `core.perfis-modelo`, uma vez por empresa, só perfil vazio)
 - [x] Primeiros passos no painel: roteiro por módulo comprado, marcado pelos dados da empresa, "Fazer agora" leva à tela, dispensável (volta em Empresa)
 - [x] Conta do comprador: esqueci a senha da conta (leva junto a senha das empresas que usam a da conta), reenviar dados de acesso, assinatura e faturas de cada empresa na Minha conta
-- [x] Testes: 43 unit, 39 e2e API, 19 Playwright
+- [x] Testes: 43 unit, 40 e2e API, 19 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
@@ -43,18 +43,20 @@
 
 - [x] SMTP no Render pelo Resend (smtp.resend.com:465, chave só de envio) — em MODO TESTE: remetente `onboarding@resend.dev`, que só entrega para o e-mail da conta Resend
 - [ ] Domínio próprio no Resend (registros SPF/DKIM no DNS) e trocar `MAIL_FROM` no Render — sem isso o cliente real não recebe os dados de acesso nem o "esqueci a senha" — passo do responsável
-- [ ] Colar no Render as chaves do Stripe (teste) e do Turnstile e trocar `BILLING_PROVIDER` para `stripe` — passo do responsável
+- [x] Chaves do Stripe (teste) no Render e `BILLING_PROVIDER=stripe` — conferido pela API no ar (catálogo: provider `stripe`, `pk_test_`)
+- [ ] Chaves do Turnstile no Render (`TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY`; widget na Cloudflare para os domínios da Vercel) — passo do responsável
 - [ ] Ativar boleto e Pix na conta Stripe e implementar no adaptador (hoje só cartão; Pix Automático o Stripe não oferece)
 - [ ] WAF/DDoS da Cloudflare exige domínio próprio com DNS na Cloudflare (proxy laranja na frente da Vercel e da API)
 
-- [ ] Colar `DATABASE_URL` (Neon `ERP-Modular`, conexão direta, sem `-pooler`) no serviço `erp-modular-api` — passo do responsável
+- [x] `DATABASE_URL` do Neon no `erp-modular-api` (log: `[db] ok`)
 - [ ] Apagar o Postgres `erp-modular-db` do Render (vazio, substituído pelo Neon; expiraria em 20/11/2026)
 - [ ] Produção de verdade: `APP_STAGE=production`, gateway real, `GOOGLE_CLIENT_ID`, papel `app_rw` com LOGIN e senha (separar `DATABASE_ADMIN_URL`)
 - [ ] Decidir se a homologação abre ao público (hoje a Vercel exige login do time)
 
 - [ ] Gateway REAL da assinatura (cartão tokenizado pelo SDK JS do gateway, boleto, Pix Automático) em
       `core/billing/providers/` + `tokenizeCard` em `apps/web/src/lib/billing.ts`
-- [ ] `GOOGLE_CLIENT_ID` de produção (origem autorizada no console do Google)
+- [x] `GOOGLE_CLIENT_ID` na homologação (login real com Google aceito pela API em 21/10)
+- [ ] `GOOGLE_CLIENT_ID` de produção (origem do domínio próprio autorizada no console do Google)
 - [ ] Nota fiscal de serviço da mensalidade do SaaS
 
 - [ ] Gateway de pagamento real (PIX dinâmico de um banco/PSP) como provedor em `core/payments/providers/`
@@ -67,7 +69,7 @@
 
 - [ ] Identidade visual (nome, logo, cor) — trocar `app/brand.ts`, `--brand` e o ícone
 - [ ] Proporcional (pro rata) ao adicionar função no meio do ciclo; hoje o valor novo vale na próxima fatura
-- [ ] E-mail de aviso: fim do teste em 2 dias, fatura gerada, pagamento recusado, suspensão
+- [x] E-mails de aviso da cobrança: fim do teste em 2 dias, fatura disponível (boleto/Pix), recusa (1ª e última tentativa), suspensão e comprovante — uma vez cada (`core_billing_notices`)
 - [ ] Painel do dia esconder KPI de módulo cuja função não está no plano (ex.: comissões pendentes)
 
 - [ ] Emissão fiscal por adaptador (NFC-e no PDV, NF-e na compra) ouvindo `order.status` COMPLETED
