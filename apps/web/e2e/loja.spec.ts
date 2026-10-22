@@ -21,14 +21,7 @@ test('loja: comércio → funções → prévia → carrinho → login → cart�
   // Obrigatório não desliga; dependência explica quem exige.
   await expect(page.locator('[data-feature="varejo.pdv"] [role=switch]')).toBeDisabled();
   await expect(page.locator('[data-feature="core.clientes"]')).toContainText('Exigido por PDV e caixa');
-  // A "tela" do card abre a demonstração; ligar a função é pela chave (ou pelo texto do card).
-  await page.locator('[data-feature="varejo.pdv"] .feat-media').click();
-  const player = page.getByRole('dialog', { name: 'PDV e caixa' });
-  await expect(player.locator('video source[type="video/mp4"]')).toHaveAttribute('src', /\/demos\/varejo\.pdv\.mp4\?v=/);
-  await expect(player.getByText('Essencial do módulo')).toBeVisible();
-  await player.getByRole('button', { name: 'Fechar' }).click();
-  await expect(page.getByTestId('total').first()).toContainText('114,50'); // abrir o vídeo não liga nada
-  await page.locator('[data-feature="varejo.etiquetas"] [role=switch]').click();
+  await page.locator('[data-feature="varejo.etiquetas"]').click();
   await expect(page.getByTestId('total').first()).toContainText('124,40');
 
   await page.getByRole('button', { name: 'Visualizar meu ERP' }).first().click();
