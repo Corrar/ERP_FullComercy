@@ -12,7 +12,11 @@ export function Turmas() {
   const { can } = useSession(); const gerir = can('gym.turmas:manage');
   const turmas = useGet<any[]>('/m/academia/turmas'); const agenda = useGet<any[]>('/m/academia/agenda'); const [nova, setNova] = useState(false);
   const [reservar, setReservar] = useState<any | null>(null); const [chamada, setChamada] = useState<any | null>(null);
-  const criar = useAction(async (v: Record<string, any>) => { await post('/m/academia/turmas', { name: v.name, capacity: v.capacity, durationMin: v.durationMin, schedule: [{ weekday: Number(v.weekday), time: v.time }] }); setNova(false); await turmas.reload(); await post('/m/academia/turmas/gerar-sessoes?dias=14'); await agenda.reload(); });
+  // Vários dias por turma (Spinning seg/qua/sex = UMA turma), todos no mesmo horário.
+  const criar = useAction(async (v: Record<string, any>) => {
+    const dias = DIAS.map((_, i) => i).filter((i) => v[`dia_${i}`]);
+    if (!dias.length) throw new Error('Marque ao menos um dia da semana.');
+    await post('/m/academia/turmas', { name: v.name, capacity: v.capacity, durationMin: v.durationMin, schedule: dias.map((weekday) => ({ weekday, time: v.time })) }); setNova(false); await turmas.reload(); await post('/m/academia/turmas/gerar-sessoes?dias=14'); await agenda.reload(); });
   return <div className="grid">
     <div className="row between"><h1 style={{ margin: 0 }}>Turmas</h1>{gerir && <button className="btn primary" onClick={() => setNova(true)}>Nova turma</button>}</div>
     <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', alignItems: 'start' }}>
@@ -24,7 +28,8 @@ export function Turmas() {
     <Modal title={`Chamada · ${chamada?.class.name ?? ''} · ${chamada ? dt(chamada.startsAt) : ''}`} open={!!chamada} onClose={() => setChamada(null)}>{chamada && <Chamada sessao={chamada} onDone={async () => { setChamada(null); await agenda.reload(); }} />}</Modal>
     <Modal title="Nova turma" open={nova} onClose={() => setNova(false)}><ErrorBox error={criar.error} /><Form onSubmit={(v) => void criar.run(v)} busy={criar.busy}>
       <Field label="Nome"><input className="input" name="name" required /></Field><div className="row"><Field label="Capacidade"><input className="input" name="capacity" type="number" defaultValue={20} /></Field><Field label="Duração (min)"><input className="input" name="durationMin" type="number" defaultValue={60} /></Field></div>
-      <div className="row"><Field label="Dia da semana"><select className="input" name="weekday">{DIAS.map((d, i) => <option key={d} value={i}>{d}</option>)}</select></Field><Field label="Horário"><input className="input" name="time" type="time" defaultValue="18:00" required /></Field></div></Form></Modal>
+      <div className="field"><span>Dias da semana</span><div className="row">{DIAS.map((d, i) => <label key={d} className="row" style={{ gap: 4 }}><input type="checkbox" name={`dia_${i}`} />{d}</label>)}</div></div>
+      <div className="row"><Field label="Horário"><input className="input" name="time" type="time" defaultValue="18:00" required /></Field></div></Form></Modal>
   </div>;
 }
 

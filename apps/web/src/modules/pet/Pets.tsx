@@ -56,7 +56,7 @@ export function FichaPet() {
     <Card title="Compras"><Table<any> rows={p.compras} empty="Nenhuma." cols={[{ h: '#', c: (o) => o.number }, { h: 'Quando', c: (o) => dt(o.createdAt) }, { h: 'Total', c: (o) => <Money v={o.total} />, right: true }, { h: 'Status', c: (o) => <Badge s={o.status} /> }]} /></Card>
     <Modal title="Registrar vacina" open={vac} onClose={() => setVac(false)}><ErrorBox error={vacina.error} /><Form onSubmit={(v) => void vacina.run(v)} busy={vacina.busy}>
       <Field label="Vacina"><input className="input" name="name" required placeholder="V10, Antirrábica…" /></Field>
-      <div className="row"><Field label="Aplicada em"><input className="input" name="appliedAt" type="date" required /></Field><Field label="Próxima dose"><input className="input" name="nextDueAt" type="date" /></Field></div>
+      <div className="row"><Field label="Aplicada em"><input className="input" name="appliedAt" type="date" required defaultValue={new Date().toLocaleDateString('sv-SE')} /></Field><Field label="Próxima dose"><input className="input" name="nextDueAt" type="date" /></Field></div>
       <div className="row"><Field label="Lote"><input className="input" name="lot" /></Field><Field label="Veterinário"><input className="input" name="vetName" /></Field></div></Form></Modal>
     <Modal title="Novo atendimento" open={at} onClose={() => setAt(false)}><ErrorBox error={atend.error} /><Form onSubmit={(v) => void atend.run(v)} busy={atend.busy}>
       <Field label="Tipo"><select className="input" name="kind" defaultValue="CONSULTA"><option>CONSULTA</option><option>RETORNO</option><option>EXAME</option><option>CIRURGIA</option></select></Field>

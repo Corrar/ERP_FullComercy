@@ -37,7 +37,8 @@
 - [x] Promessas da loja cumpridas: Relatórios da loja por forma de pagamento + resumo com ticket médio e peças por venda (período na tela); Relatórios do restaurante por garçom e tempo de cozinha por estação; conta da comanda dividida por pessoa (partes antes de fechar, taxa já na 1ª parte)
 - [x] Testes de navegador do dia a dia em empresa recém-criada: salão → KDS → conta dividida → relatórios; recepção da academia (libera, barra, saída); OS → kanban → orçamento → aprovação
 - [x] Primeiro dia de cada comércio SÓ PELA TELA, em empresa vazia (8 módulos), e o que travava foi corrigido: prato do cardápio criado sem produto prévio (o produto nasce junto; endereço do cardápio sai do nome), SKU gerado do nome, cliente buscado/cadastrado na hora na Agenda e na OS da oficina e na matrícula (antes, lista de todos os clientes), matrícula já com o valor do plano, PDV com venda rápida (meio escolhido leva o total), F12 de verdade e cliente por nome (antes, "id"), agenda sem profissional e reserva sem quarto dizem onde cadastrar
-- [x] Testes: 46 unit, 52 e2e API, 35 Playwright
+- [x] Funções opcionais pelo primeiro uso na tela: turma em vários dias + reserva + chamada, catraca e credencial, pacote vendido, convênio na consulta, vacina nos lembretes, compra recebida no estoque, conta a pagar baixada, convite com perfil pronto, etiquetas em PDF, evolução no prontuário, webhook. Corrigido no caminho: turma só aceitava um dia da semana; vacina sem data padrão não salvava; compra sem fornecedor não dizia onde cadastrar
+- [x] Testes: 46 unit, 52 e2e API, 44 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
