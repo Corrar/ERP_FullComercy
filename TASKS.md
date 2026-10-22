@@ -70,7 +70,7 @@
 - [ ] Identidade visual (nome, logo, cor) — trocar `app/brand.ts`, `--brand` e o ícone
 - [ ] Proporcional (pro rata) ao adicionar função no meio do ciclo; hoje o valor novo vale na próxima fatura
 - [x] E-mails de aviso da cobrança: fim do teste em 2 dias, fatura disponível (boleto/Pix), recusa (1ª e última tentativa), suspensão e comprovante — uma vez cada (`core_billing_notices`)
-- [ ] Painel do dia esconder KPI de módulo cuja função não está no plano (ex.: comissões pendentes)
+- [x] Painel do dia por permissão já cortada pelo plano: cada número só para quem pode vê-lo (o Caixa não vê "a receber"; sem Comissões no plano, sem "comissões pendentes"); chaves na conferência de boot
 
 - [ ] Emissão fiscal por adaptador (NFC-e no PDV, NF-e na compra) ouvindo `order.status` COMPLETED
 - [ ] Socket.IO entre instâncias (adapter Redis) e fila para o outbox quando houver várias réplicas

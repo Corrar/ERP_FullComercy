@@ -123,6 +123,17 @@ if (!E2E) {
     const c = await api().post('/auth/login', { tenant: slug, email: conv.email, password: 'Senha-do-caixa-123' });
     assert.ok(c.permissions.includes('varejo.pdv:operate') && c.permissions.includes('core.orders:create'));
     assert.ok(!c.permissions.includes('core.finance:view') && !c.permissions.includes('varejo.etiquetas:print'));
+
+    // Painel do dia: cada número só para quem pode vê-lo, com a permissão JÁ cortada pelo plano.
+    // Esta loja não comprou Financeiro nem Comissões: nem o dono (admin) recebe esses números.
+    const dd = await api(dono.accessToken).get('/dashboard');
+    assert.ok('faturamento' in dd.hoje && 'itensAbaixoDoMinimo' in dd.estoque && 'caixasAbertos' in dd.modulos.VAREJO);
+    assert.ok(!('financeiro' in dd), 'sem Financeiro no plano, sem "a receber"');
+    assert.ok(!('comissoesPendentes' in dd.modulos.VAREJO), 'sem Comissões no plano, sem comissões pendentes');
+    // O Caixa vê o que o perfil dele cobre (vendas, caixas) e nada do financeiro.
+    const dc = await api(c.accessToken).get('/dashboard');
+    assert.ok('vendas' in dc.hoje && 'caixasAbertos' in dc.modulos.VAREJO);
+    assert.ok(!('financeiro' in dc));
   });
 
   test('módulo ligado depois ganha os perfis dele; o Gerente recebe as chaves do módulo novo', async () => {

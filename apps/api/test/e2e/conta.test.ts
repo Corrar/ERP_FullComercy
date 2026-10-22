@@ -57,6 +57,8 @@ if (!E2E) {
     assert.ok('faturamento' in d.hoje && 'aReceber' in d.financeiro);
     assert.deepEqual(Object.keys(d.modulos).sort(), ['FOOD', 'VAREJO']);
     assert.ok('mesasOcupadas' in d.modulos.FOOD && 'caixasAbertos' in d.modulos.VAREJO);
+    // Empresa do seed não tem assinatura (sem corte de plano): o admin vê tudo dos módulos ativos.
+    assert.ok('comissoesPendentes' in d.modulos.VAREJO && 'entregasEmCurso' in d.modulos.FOOD);
   });
 
   test('Etiquetas em PDF com código de barras', async () => {
