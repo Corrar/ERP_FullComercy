@@ -106,9 +106,12 @@ export async function createOrder(draft: OrderDraft) {
     //     extensão já gravada (a comissão lê `ret_sales`). Achado pelo e2e.
     await strategy.afterCreate?.(tx, order, items, draft);
 
-    // 4e. Pagamentos informados na criação (PDV) → título + baixa no financeiro do core.
-    if (draft.payments?.length) {
-      const paid = await registerPayments(tx, order, draft.payments);
+    // 4e. Pagamentos informados na criação (PDV) → título + baixa no financeiro do core. Conta
+    //     também o que a estratégia já registrou no afterCreate (vale da troca): com o vale
+    //     cobrindo a venda inteira não vem pagamento no rascunho, e o pedido ficava aberto.
+    const pagoNoAfterCreate = draft.payments?.length ? false : (await tx.orderPayment.count({ where: { orderId: order.id } })) > 0;
+    if (draft.payments?.length || pagoNoAfterCreate) {
+      const paid = await registerPayments(tx, order, draft.payments ?? []);
       if (paid.gte(total) && strategy.completeOnFullPayment(draft)) {
         await transitionWithin(tx, order, OrderStatus.COMPLETED, strategy, policy, 'Pago integralmente na criação.');
       }

@@ -52,6 +52,10 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | CI vermelho em TODAS as rodadas (até 21/10/2026), sempre no `typecheck` | `npm ci` na raiz não gera o Prisma Client: o postinstall do `@prisma/client` procura `prisma/schema.prisma` na raiz e o schema mora em `apps/api/prisma`; sem client, todo tipo do Prisma some (`ModuleKey`, `Decimal`…) | passo `npm run prisma:generate -w apps/api` logo após o `npm ci` (`ci.yml`); local, o mesmo depois de `npm install` |
 | Unitários passavam aqui e falhavam no CI: `Could not find '…/test/*.test.ts'` | glob entre aspas em `node --test 'test/*.test.ts'` só é expandido pelo Node 21+; o CI (e o `engines`) é Node 20 | glob sem aspas: quem expande é o shell (`apps/api/package.json`); conferido com Node 20 de verdade |
 | Playwright no CI: todos com `ERR_CONNECTION_REFUSED` em `127.0.0.1:5180`; aqui verdes | Vite sem `--host` escuta no endereço de `localhost`, que no runner resolve para `::1`; o `webServer` com `port:` dá por pronto ao achar a porta em `127.0.0.1` OU `::1`, e o navegador vai em `127.0.0.1` | `--host 127.0.0.1` e prontidão por `url:` (o mesmo endereço do navegador) nos dois `playwright*.config.ts`; simulado aqui trocando o `localhost` do `/etc/hosts` |
+| Regra de comissão geral por categoria (sem vendedor) nunca se aplicava | `calcularComissao` lia `sale.salesperson.rules`, que só traz as regras DO vendedor | busca as do vendedor + as gerais (`salespersonId: null`), mais recente primeiro; regra sem vendedor e sem categoria é recusada (`comissao.service.ts`) |
+| Troca com vale deixava o a receber da venda nova em aberto pelo valor do vale | o afterCreate gravava `orderPayment` direto, sem baixar o título | vale entra por `registerPayments` do core (`retail-sales.strategy.ts`) |
+| Venda paga só com vale ficava OPEN | o core só concluía se o rascunho trouxesse `payments` | conta também o que a estratégia pagou no afterCreate (`order.service.ts` 4e) |
+| PDV aceitava "STORE_CREDIT" digitado | não abatia vale nenhum: dinheiro sumia | vale só por "Usar vale" (`moduleData.valeFinanceEntryId`) |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 

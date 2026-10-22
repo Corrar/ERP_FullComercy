@@ -5,6 +5,7 @@ import { OrderChannel, OrderStatus, ModuleKey } from '@prisma/client';
 import type { SalesStrategy } from '../../../core/orders/sales-strategy';
 import { ctx, moduleConfig } from '../../../core/tenancy/tenant-context';
 import { AppError } from '../../../shared/errors';
+import { registerPayments } from '../../../core/orders/order.service';
 import { calcularComissao } from './comissao.service';
 
 interface RetailModuleData { posSessionId?: string; salespersonId?: string; exchangeOfSaleId?: string; valeFinanceEntryId?: string }
@@ -44,7 +45,9 @@ export const retailSalesStrategy: SalesStrategy = {
       const saldo = D(vale.amount).minus(vale.paidAmount);
       const usa = saldo.lt(order.total) ? saldo : D(order.total);
       await settle(tx, order.tenantId, { entryId: vale.id, amount: usa, method: 'STORE_CREDIT', reference: `troca:${order.id}` });
-      await tx.orderPayment.create({ data: { tenantId: order.tenantId, orderId: order.id, method: 'STORE_CREDIT', amount: usa, reference: `vale:${vale.id}` } });
+      // O vale também paga a venda nova: entra pelo caminho do core (pagamento + baixa do título a
+      // receber). Gravar só o pagamento deixava o a receber da venda em aberto pelo valor do vale.
+      await registerPayments(tx, order, [{ method: 'STORE_CREDIT', amount: Number(usa), reference: `vale:${vale.id}` }]);
     }
     await tx.retailSale.create({
       data: {

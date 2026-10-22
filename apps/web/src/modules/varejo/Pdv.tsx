@@ -2,12 +2,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { get, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
-import { Card, ErrorBox, Money, Toast } from '@/components/ui';
+import { Card, ErrorBox, Modal, Money, Table, Toast } from '@/components/ui';
 import { brl } from '@/lib/format';
 import { useSession } from '@/lib/session';
 
 interface Linha { variantId: string; sku: string; nome: string; preco: number; qtd: number }
-const MEIOS = ['PIX', 'CASH', 'DEBIT', 'CREDIT', 'VOUCHER', 'STORE_CREDIT'];
+// Vale-troca não é um meio digitado: entra por "Usar vale", que abate o vale da devolução certo
+// (`moduleData.valeFinanceEntryId`). Um STORE_CREDIT digitado à mão não abatia vale nenhum.
+const MEIOS = ['PIX', 'CASH', 'DEBIT', 'CREDIT', 'VOUCHER'];
+interface Vale { id: string; saldo: number; cliente: { id: string; name: string } }
 
 export function Pdv() {
   const caixa = useGet<any>('/m/varejo/caixa/atual', { terminal: localStorage.getItem('fc.terminal') ?? 'CAIXA-1' });
@@ -19,10 +22,11 @@ export function Pdv() {
   const [linhas, setLinhas] = useState<Linha[]>([]); const [codigo, setCodigo] = useState(''); const [desconto, setDesconto] = useState(0);
   const [pag, setPag] = useState<{ method: string; amount: number }[]>([]); const [meio, setMeio] = useState('PIX'); const [valor, setValor] = useState('');
   const [vendedor, setVendedor] = useState(''); const [cliente, setCliente] = useState(''); const [msg, setMsg] = useState<string | null>(null);
+  const [vale, setVale] = useState<Vale | null>(null); const [buscaVale, setBuscaVale] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => { input.current?.focus(); }, [linhas.length]);
 
-  const subtotal = linhas.reduce((s, l) => s + l.preco * l.qtd, 0); const total = Math.max(0, subtotal - desconto); const pago = pag.reduce((s, p) => s + p.amount, 0); const falta = Math.round((total - pago) * 100) / 100;
+  const subtotal = linhas.reduce((s, l) => s + l.preco * l.qtd, 0); const total = Math.max(0, subtotal - desconto); const doVale = vale ? Math.min(vale.saldo, total) : 0; const pago = pag.reduce((s, p) => s + p.amount, 0); const falta = Math.round((total - doVale - pago) * 100) / 100;
 
   const bipar = useAction(async () => {
     if (!codigo.trim()) return;
@@ -36,8 +40,8 @@ export function Pdv() {
   const finalizar = useAction(async () => {
     if (!caixa.data) throw new Error('Abra o caixa antes de vender.');
     if (falta > 0.009) throw new Error(`Faltam ${brl(falta)}.`);
-    const o = await post('/orders', { channel: 'POS', items: linhas.map((l) => ({ variantId: l.variantId, quantity: l.qtd, unitPrice: l.preco })), discount: desconto, payments: pag, customerId: cliente || null, moduleData: { posSessionId: caixa.data.id, salespersonId: vendedor || undefined } });
-    setMsg(`Venda #${o.number} concluída.`); setLinhas([]); setPag([]); setDesconto(0);
+    const o = await post('/orders', { channel: 'POS', items: linhas.map((l) => ({ variantId: l.variantId, quantity: l.qtd, unitPrice: l.preco })), discount: desconto, payments: pag, customerId: (vale?.cliente.id ?? cliente) || null, moduleData: { posSessionId: caixa.data.id, salespersonId: vendedor || undefined, valeFinanceEntryId: vale?.id } });
+    setMsg(`Venda #${o.number} concluída.`); setLinhas([]); setPag([]); setDesconto(0); setVale(null);
   });
 
   return <div className="pdv">
@@ -51,7 +55,9 @@ export function Pdv() {
     <div className="grid">
       <Card title="Total"><div className="total mono">{brl(total)}</div><div className="row"><label className="field">Desconto<input className="input" type="number" step="0.01" value={desconto} onChange={(e) => setDesconto(Number(e.target.value))} /></label>
         {comVendedor && <label className="field">Vendedor<select className="input" value={vendedor} onChange={(e) => setVendedor(e.target.value)}><option value="">—</option>{vendedores.data?.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}</div>
-        <label className="field">Cliente (id, opcional)<input className="input" value={cliente} onChange={(e) => setCliente(e.target.value)} /></label></Card>
+        <label className="field">Cliente (id, opcional)<input className="input" value={vale?.cliente.id ?? cliente} disabled={!!vale} onChange={(e) => setCliente(e.target.value)} /></label>
+        {vale ? <div className="row between" style={{ marginTop: 8 }}><span>Vale de {vale.cliente.name} <span className="muted">(saldo {brl(vale.saldo)})</span></span><span className="row"><span className="mono">− {brl(doVale)}</span><button className="btn" aria-label="Tirar o vale" onClick={() => setVale(null)}>✕</button></span></div>
+          : <button className="btn" style={{ marginTop: 8 }} onClick={() => setBuscaVale(true)}>Usar vale</button>}</Card>
       <Card title="Pagamento"><div className="row"><select className="input" value={meio} onChange={(e) => setMeio(e.target.value)} style={{ width: 130 }}>{MEIOS.map((m) => <option key={m}>{m}</option>)}</select>
         <input className="input" type="number" step="0.01" placeholder={falta.toFixed(2)} value={valor} onChange={(e) => setValor(e.target.value)} />
         <button className="btn" onClick={() => { const a = Number(valor || falta); if (a > 0) { setPag((p) => [...p, { method: meio, amount: a }]); setValor(''); } }}>+</button></div>
@@ -61,5 +67,26 @@ export function Pdv() {
         <button className="btn primary" style={{ width: '100%', marginTop: 8, padding: 14 }} disabled={!linhas.length || finalizar.busy} onClick={() => void finalizar.run()}>Finalizar venda (F12)</button></Card>
     </div>
     <Toast msg={msg} />
+    <Modal title="Usar vale-troca" open={buscaVale} onClose={() => setBuscaVale(false)}><EscolherVale onEscolher={(v) => { setVale(v); setBuscaVale(false); }} /></Modal>
+  </div>;
+}
+
+/** Acha o cliente e lista os vales em aberto dele (devoluções pagas em vale-compra). */
+function EscolherVale({ onEscolher }: { onEscolher: (v: Vale) => void }) {
+  const [q, setQ] = useState(''); const [cliente, setCliente] = useState<{ id: string; name: string } | null>(null);
+  const clientes = useGet<any[]>(q.trim().length >= 2 && !cliente ? '/customers' : null, { q: q.trim() });
+  const vales = useGet<any[]>(cliente ? `/m/varejo/devolucoes/vales/${cliente.id}` : null);
+  if (!cliente) return <div className="grid" style={{ gap: 10 }}>
+    <input className="input" autoFocus placeholder="Nome, telefone ou documento do cliente" value={q} onChange={(e) => setQ(e.target.value)} />
+    <ErrorBox error={clientes.error} />
+    {q.trim().length >= 2 && <Table rows={clientes.data} empty="Nenhum cliente encontrado." onRow={(c) => setCliente({ id: c.id, name: c.name })} cols={[{ h: 'Cliente', c: (c) => c.name }, { h: 'Telefone', c: (c) => c.phone ?? '—' }]} />}
+  </div>;
+  return <div className="grid" style={{ gap: 10 }}>
+    <div className="row between"><strong>{cliente.name}</strong><button className="btn" onClick={() => setCliente(null)}>Trocar cliente</button></div>
+    <ErrorBox error={vales.error} />
+    <Table rows={vales.data} empty="Este cliente não tem vale em aberto." cols={[
+      { h: 'Vale', c: (v) => v.description }, { h: 'Saldo', c: (v) => <Money v={Number(v.amount) - Number(v.paidAmount)} />, right: true },
+      { h: '', c: (v) => <button className="btn primary" onClick={() => onEscolher({ id: v.id, saldo: Number(v.amount) - Number(v.paidAmount), cliente })}>Usar</button> },
+    ]} />
   </div>;
 }

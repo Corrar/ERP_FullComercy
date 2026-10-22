@@ -24,6 +24,7 @@
 - [x] Front no visual do Fluxo 5.0 (tema claro/escuro, sidebar com troca de módulo, gaveta no celular)
 - [x] Testes: 26 unit, 26 e2e API, 5 Playwright
 - [x] CI verde de verdade: gera o Prisma Client antes do typecheck (antes falhava sempre ali); 40 unit, 26 e2e API, 6 Playwright
+- [x] Telas que a loja vendia sem existir: Trocas e devoluções (vale abatido no PDV por "Usar vale"), regras de comissão, zonas de entrega por CEP, cadastro de entregador e acerto
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
@@ -62,7 +63,7 @@
 
 - [ ] Emissão fiscal por adaptador (NFC-e no PDV, NF-e na compra) ouvindo `order.status` COMPLETED
 - [ ] Socket.IO entre instâncias (adapter Redis) e fila para o outbox quando houver várias réplicas
-- [ ] Front: edição de itens de compra em rascunho, cancelamento de comanda, regras de comissão, zonas de entrega, catálogo de serviços, turmas (instrutor), checklist marcável
+- [ ] Front: edição de itens de compra em rascunho, cancelamento de comanda, catálogo de serviços, turmas (instrutor), checklist marcável
 - [ ] Front: página pública de acompanhamento com atualização em tempo real (socket anônimo por pedido)
 - [ ] Relatório DRE simples (receitas × despesas por categoria) e exportação PDF
 - [ ] Templates de e-mail em HTML com marca da empresa

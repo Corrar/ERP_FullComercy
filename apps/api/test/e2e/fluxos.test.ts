@@ -66,6 +66,66 @@ if (!E2E) {
     assert.ok((await A.get('/m/varejo/relatorios/vendedores')).some((r: any) => r.vendedor === vendedor.name));
   });
 
+  test('Varejo: regra geral por categoria vale na comissão; troca com vale (parcial + PIX e integral) quita vale e venda', async () => {
+    const { api: A } = await login('loja-demo');
+    const { prisma } = await import('../../src/infra/prisma');
+    const cat = await A.post('/products/categories', { name: `Calçados ${run}` });
+    const prod = await A.post('/products', { name: `Tênis ${run}`, sku: `TEN-${run}`, salePrice: 100, costPrice: 40, categoryId: cat.id });
+    const variante = prod.variants[0];
+    await A.post('/stock/movements', { variantId: variante.id, kind: 'RECEIVE', quantity: 10 });
+    const ana = await A.post('/m/varejo/vendedores', { name: `Bia ${run}`, defaultCommissionRate: 5 });
+    const caixa = await A.post('/m/varejo/caixa/abrir', { terminal: `TR-${run}`, openingAmount: 0 });
+    const vender = (body: Record<string, unknown>) => A.post('/orders', { channel: 'POS', ...body, moduleData: { posSessionId: caixa.id, salespersonId: ana.id, ...(body.moduleData as object ?? {}) } });
+
+    // Regra sem vendedor e sem categoria não casaria com nada: a API recusa.
+    const vazia = await A.raw('POST', '/m/varejo/comissoes/regras', { rate: 9, validFrom: new Date().toISOString() });
+    assert.equal(vazia.status, 400);
+    // Regra GERAL da categoria (sem vendedor): 10% vence a taxa padrão de 5%. Antes da correção,
+    // `salesperson.rules` só trazia as regras do vendedor e esta nunca se aplicava.
+    const geral = await A.post('/m/varejo/comissoes/regras', { categoryId: cat.id, rate: 10, validFrom: new Date(Date.now() - 86400000).toISOString() });
+    const v1 = await vender({ items: [{ variantId: variante.id, quantity: 2 }], payments: [{ method: 'PIX', amount: 200 }] });
+    assert.equal(v1.status, 'COMPLETED');
+    let com = await A.get(`/m/varejo/comissoes?salespersonId=${ana.id}`);
+    assert.equal(com[0].amount, '20'); // 10% de 200, não 5%
+    // A do vendedor para a categoria é mais específica que a geral.
+    const doVendedor = await A.post('/m/varejo/comissoes/regras', { salespersonId: ana.id, categoryId: cat.id, rate: 12, validFrom: new Date(Date.now() - 86400000).toISOString() });
+    await vender({ items: [{ variantId: variante.id, quantity: 1 }], payments: [{ method: 'PIX', amount: 100 }] });
+    com = await A.get(`/m/varejo/comissoes?salespersonId=${ana.id}`);
+    assert.equal(com.find((c: any) => c.baseAmount === '100').amount, '12');
+    await A.raw('DELETE', `/m/varejo/comissoes/regras/${doVendedor.id}`);
+    await A.raw('DELETE', `/m/varejo/comissoes/regras/${geral.id}`);
+    assert.ok(!(await A.get('/m/varejo/comissoes/regras')).some((r: any) => r.id === geral.id));
+
+    // Cliente devolve 1 par da v1 como vale (100).
+    const cliente = await A.post('/customers', { name: `Cliente Troca ${run}` });
+    const v2 = await vender({ customerId: cliente.id, items: [{ variantId: variante.id, quantity: 2 }], payments: [{ method: 'PIX', amount: 200 }] });
+    await A.post('/m/varejo/devolucoes', { saleId: v2.retailSale.id, refundMethod: 'STORE_CREDIT', items: [{ orderItemId: v2.items[0].id, quantity: 1 }] });
+    let vales = await A.get(`/m/varejo/devolucoes/vales/${cliente.id}`);
+    assert.equal(vales.length, 1);
+    assert.equal(vales[0].amount, '100');
+
+    // Troca PARCIAL: leva 2 (200) com o vale (100) + PIX 100 → concluída, vale quitado, a receber quitado.
+    const t1 = await vender({ customerId: cliente.id, items: [{ variantId: variante.id, quantity: 2 }], payments: [{ method: 'PIX', amount: 100 }], moduleData: { valeFinanceEntryId: vales[0].id } });
+    assert.equal(t1.status, 'COMPLETED');
+    assert.deepEqual(t1.payments.map((p: any) => `${p.method}:${p.amount}`).sort(), ['PIX:100', 'STORE_CREDIT:100']);
+    assert.equal((await A.get(`/m/varejo/devolucoes/vales/${cliente.id}`)).length, 0);
+    const receberT1 = await prisma.financeEntry.findFirstOrThrow({ where: { orderId: t1.id, origin: 'ORDER' } });
+    assert.equal(receberT1.status, 'PAID', 'o vale também baixa o título a receber da venda nova');
+    assert.equal(receberT1.paidAmount.toString(), '200');
+    const reusar = await A.raw('POST', '/orders', { channel: 'POS', items: [{ variantId: variante.id, quantity: 1 }], payments: [{ method: 'PIX', amount: 100 }], moduleData: { posSessionId: caixa.id, valeFinanceEntryId: vales[0].id } });
+    assert.equal(reusar.status, 409, 'vale usado não vale de novo');
+
+    // Troca INTEGRAL: vale de 100 cobre um par de 100 sem outro pagamento → a venda conclui.
+    await A.post('/m/varejo/devolucoes', { saleId: v2.retailSale.id, refundMethod: 'STORE_CREDIT', items: [{ orderItemId: v2.items[0].id, quantity: 1 }] });
+    vales = await A.get(`/m/varejo/devolucoes/vales/${cliente.id}`);
+    const t2 = await vender({ customerId: cliente.id, items: [{ variantId: variante.id, quantity: 1 }], moduleData: { valeFinanceEntryId: vales[0].id } });
+    assert.equal(t2.status, 'COMPLETED', 'vale cobrindo tudo conclui a venda');
+    assert.equal((await prisma.financeEntry.findFirstOrThrow({ where: { orderId: t2.id, origin: 'ORDER' } })).status, 'PAID');
+    assert.equal((await prisma.financeEntry.findUniqueOrThrow({ where: { id: vales[0].id } })).status, 'PAID');
+    const devs = await A.get(`/m/varejo/devolucoes?saleId=${v2.retailSale.id}`);
+    assert.equal(devs.length, 2);
+  });
+
   // ───────────────────────────── FOOD ─────────────────────────────
   test('Food: cardápio → comanda → rodadas → cozinha → conta com taxa → pedido online público', async () => {
     const { api: A } = await login('burger-demo');
