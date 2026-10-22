@@ -4,6 +4,7 @@
 import { ProductKind } from '@prisma/client';
 import { ctx } from '../tenancy/tenant-context';
 import { AppError } from '../../shared/errors';
+import { paginar, type Paginacao } from '../../shared/paginacao';
 
 export interface CreateProductInput {
   name: string;
@@ -43,13 +44,9 @@ export async function createProduct(input: CreateProductInput) {
   });
 }
 
-export async function listProducts(q?: string) {
-  return ctx().db.product.findMany({
-    where: q ? { OR: [{ name: { contains: q, mode: 'insensitive' } }, { variants: { some: { OR: [{ sku: { contains: q, mode: 'insensitive' } }, { barcode: q }] } } }] } : undefined,
-    include: { variants: { where: { isActive: true } }, category: true },
-    orderBy: { name: 'asc' },
-    take: 200,
-  });
+export async function listProducts(q?: string, p?: Paginacao) {
+  const where = q ? { OR: [{ name: { contains: q, mode: 'insensitive' as const } }, { variants: { some: { OR: [{ sku: { contains: q, mode: 'insensitive' as const } }, { barcode: q }] } } }] } : undefined;
+  return paginar(p, 200, (skip, take) => ctx().db.product.findMany({ where, include: { variants: { where: { isActive: true } }, category: true }, orderBy: { name: 'asc' }, skip, take }), () => ctx().db.product.count({ where }));
 }
 
 /** Resolve o que o PDV digitou/bipou: SKU, código de barras ou id de variante. */

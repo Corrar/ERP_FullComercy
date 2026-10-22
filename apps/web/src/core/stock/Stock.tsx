@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { patch, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
-import { Badge, Card, ErrorBox, Field, Form, Modal, Switch, Table, Tabs, Toast } from '@/components/ui';
+import { Badge, Card, ErrorBox, Field, Form, Modal, Paginador, Switch, Table, Tabs, Toast } from '@/components/ui';
 import { EscolherProduto, type VarianteMin } from '@/components/EscolherProduto';
 import { dt, num } from '@/lib/format';
 import { useSession } from '@/lib/session';
@@ -12,7 +12,8 @@ export function Stock() {
   const [contagem, setContagem] = useState<string | null>(null); const [novaContagem, setNovaContagem] = useState(false);
   const saldos = useGet<any[]>(tab === 'saldos' ? '/stock/balances' : null);
   const baixo = useGet<any[]>(tab === 'baixo' ? '/stock/low' : null);
-  const razao = useGet<any[]>(tab === 'razao' ? '/stock/ledger' : null, { take: 200 });
+  const [pagRazao, setPagRazao] = useState(1);
+  const razao = useGet<{ rows: any[]; page: number; pageSize: number; total: number }>(tab === 'razao' ? '/stock/ledger' : null, { page: pagRazao, pageSize: 100 });
   const contagens = useGet<any[]>(tab === 'inventario' ? '/stock/counts' : null);
   const armazens = useGet<any[]>('/stock/warehouses');
   if (contagem) return <Contagem id={contagem} voltar={() => { setContagem(null); void contagens.reload(); }} />;
@@ -21,7 +22,8 @@ export function Stock() {
     <Tabs tabs={[{ k: 'saldos', label: 'Saldos' }, { k: 'baixo', label: 'Abaixo do mínimo' }, { k: 'razao', label: 'Razão' }, { k: 'inventario', label: 'Inventário' }, { k: 'armazens', label: 'Armazéns' }]} active={tab} onChange={setTab} />
     {tab === 'saldos' && <Table rows={saldos.data} cols={[{ h: 'Produto', c: (r) => r.variant.product.name }, { h: 'SKU', c: (r) => r.variant.sku }, { h: 'Armazém', c: (r) => r.warehouse.code }, { h: 'Saldo', c: (r) => num(r.onHand, 0), right: true }, { h: 'Reservado', c: (r) => num(r.reserved, 0), right: true }, { h: 'Mínimo', c: (r) => r.minLevel ?? '—', right: true }]} />}
     {tab === 'baixo' && <Table rows={baixo.data} empty="Nenhum item abaixo do mínimo." cols={[{ h: 'Produto', c: (r) => r.product }, { h: 'SKU', c: (r) => r.sku }, { h: 'Armazém', c: (r) => r.warehouse }, { h: 'Saldo', c: (r) => r.on_hand, right: true }, { h: 'Mínimo', c: (r) => r.min_level, right: true }]} />}
-    {tab === 'razao' && <Table rows={razao.data} cols={[{ h: 'Quando', c: (r) => dt(r.createdAt) }, { h: 'SKU', c: (r) => r.variant.sku }, { h: 'Tipo', c: (r) => r.kind }, { h: 'Δ saldo', c: (r) => r.deltaOnHand, right: true }, { h: 'Δ reserva', c: (r) => r.deltaReserved, right: true }, { h: 'Ref', c: (r) => r.refType ?? '—' }, { h: 'Quem', c: (r) => r.user?.name ?? 'sistema' }]} />}
+    {tab === 'razao' && razao.data && <Paginador page={razao.data.page} pageSize={razao.data.pageSize} total={razao.data.total} onPage={setPagRazao} />}
+    {tab === 'razao' && <Table rows={razao.data?.rows} cols={[{ h: 'Quando', c: (r) => dt(r.createdAt) }, { h: 'SKU', c: (r) => r.variant.sku }, { h: 'Tipo', c: (r) => r.kind }, { h: 'Δ saldo', c: (r) => r.deltaOnHand, right: true }, { h: 'Δ reserva', c: (r) => r.deltaReserved, right: true }, { h: 'Ref', c: (r) => r.refType ?? '—' }, { h: 'Quem', c: (r) => r.user?.name ?? 'sistema' }]} />}
     {tab === 'inventario' && <div>{mover && <div className="row" style={{ marginBottom: 12 }}><button className="btn primary" onClick={() => setNovaContagem(true)}>Abrir contagem</button></div>}
       <Table rows={contagens.data} empty="Nenhuma contagem." onRow={(r) => setContagem(r.id)} cols={[{ h: 'Aberta em', c: (r) => dt(r.openedAt) }, { h: 'Armazém', c: (r) => r.warehouse.code }, { h: 'Itens', c: (r) => r._count.items, right: true }, { h: 'Status', c: (r) => <Badge s={r.status} /> }]} /></div>}
     {tab === 'armazens' && <Armazens lista={armazens} podeMover={mover} />}

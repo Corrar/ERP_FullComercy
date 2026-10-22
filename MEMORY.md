@@ -63,6 +63,9 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Editar título com valor abaixo do já baixado era aceito; status ficava PARTIAL/OPEN errado | `updateEntry` gravava o valor sem olhar `paidAmount`, fora de `tenantTransaction` | valor ≥ pago, status recalculado, cancelado não se edita; baixa/edição/cancelamento manuais vão para a auditoria (`finance.entry.*`) |
 | Mesa desativada com comanda aberta sumia do mapa com a conta dentro | `atualizarMesa` não olhava comanda | 409 se houver comanda `OPEN` na mesa |
 | Equipe inteira deslogada numa loja com muitos funcionários no mesmo IP | UM limitador (20/IP/15 min) servia login, refresh e reset; o token de acesso vence a cada 15 min, então só as renovações esgotavam o contador. A suíte de navegador bateu nele ao passar de 13 para 16 cenários | `auth.routes.ts`: login por IP+empresa+e-mail (10) e teto por IP (100); refresh (600/IP) e reset com contador próprio (`test/e2e/auth-limites.test.ts`) |
+| Botões "CSV" (pedidos, relatórios do varejo) baixavam o 401 | eram `<a href="/api/...">`: a API autentica por Bearer, não por cookie | `baixarArquivo` de `lib/api.ts` (regra 10: nada de link/fetch direto para a API) |
+| CSV com nome de cliente `=HYPERLINK(...)` virava fórmula no Excel | célula começando com `= + - @` saía crua; nome vem até de pedido público | `shared/csv.ts` prefixa apóstrofo (teste em `unidades.test.ts`) |
+| Teste de webhooks falhava às vezes ("recebeu order.created") | esperava 300 ms fixos pelo outbox (`setImmediate`) | despacha em laço até a entrega aparecer, com teto |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 

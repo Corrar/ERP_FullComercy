@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { events } from '../shared/events';
+import { lerAcompanhamento } from '../shared/track-token';
 
 let io: Server | null = null;
 
@@ -14,6 +15,14 @@ export function initRealtime(http: HttpServer, allowed: (origin: string) => bool
   io = new Server(http, { cors: { origin: (o, cb) => cb(null, !o || allowed(o)), credentials: true } });
 
   io.use((socket, next) => {
+    // Cliente final acompanhando UM pedido (sem login): só a sala daquele pedido, nada do tenant.
+    const track = socket.handshake.auth?.track as string | undefined;
+    if (track) {
+      const t = lerAcompanhamento(track);
+      if (!t) return next(new Error('token inválido'));
+      socket.data.trackOrderId = t.orderId;
+      return next();
+    }
     const token = (socket.handshake.auth?.token as string | undefined) ?? socket.handshake.headers.authorization?.replace(/^Bearer /, '');
     if (!token) return next(new Error('sem token'));
     try {
@@ -24,6 +33,7 @@ export function initRealtime(http: HttpServer, allowed: (origin: string) => bool
   });
 
   io.on('connection', (socket) => {
+    if (socket.data.trackOrderId) { socket.join(`track:${socket.data.trackOrderId}`); return; }
     socket.join(`tenant:${socket.data.tenantId}`);
     socket.join(`user:${socket.data.userId}`);
     // Sub-salas opcionais por tela (KDS por estação, painel de entregas). Sempre prefixadas pelo tenant.
@@ -41,6 +51,12 @@ export function initRealtime(http: HttpServer, allowed: (origin: string) => bool
   events.on('delivery.status', (p) => emitToTenant(p.tenantId, 'delivery.status', p));
   events.on('gym.access',      (p) => emitToTenant(p.tenantId, 'gym.access', p));
   events.on('os.status',       (p) => emitToTenant(p.tenantId, 'os.status', p));
+  // Acompanhamento público: só o aviso "mudou" (a página relê pelo GET que exige o telefone).
+  const avisar = (orderId?: string | null) => { if (orderId) io?.to(`track:${orderId}`).emit('track.update', { orderId }); };
+  events.on('order.status', (p) => avisar(p.orderId));
+  events.on('order.paid', (p) => avisar(p.orderId));
+  events.on('kitchen.ticket', (p) => avisar(p.orderId));
+  events.on('delivery.status', (p) => avisar(p.orderId));
   console.log('[realtime] Socket.IO ligado');
   return io;
 }

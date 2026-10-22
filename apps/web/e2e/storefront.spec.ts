@@ -18,10 +18,20 @@ test('vitrine pública: cardápio → carrinho → pedido como convidado → aco
   await page.locator('input[name=nome]').fill('Cliente Vitrine');
   await page.locator('input[name=telefone]').fill(`11 97${run.slice(0, 3)}-0000`);
   await page.getByRole('button', { name: 'Confirmar pedido' }).click();
-  await expect(page.getByRole('heading', { name: /Pedido #\d+/ })).toBeVisible();
+  const titulo = page.getByRole('heading', { name: /Pedido #\d+/ });
+  await expect(titulo).toBeVisible();
+  const numero = Number((await titulo.textContent())!.replace(/\D/g, ''));
   await expect(page.getByText('R$ 69,80')).toBeVisible();
 
   // A loja vê o pedido na cozinha.
   const fila = await (await request.get(`${API}/m/food/cozinha/fila`, { headers: h })).json();
-  expect(fila.some((t: any) => t.items.some((i: any) => i.display.nome === 'Combo da casa'))).toBeTruthy();
+  const ticket = fila.find((t: any) => t.foodOrder.order.number === numero);
+  expect(ticket.items.some((i: any) => i.display.nome === 'Combo da casa')).toBeTruthy();
+
+  // Tempo real: a cozinha começa e a página do cliente muda SEM clicar em "Atualizar".
+  await expect(page.locator('.badge', { hasText: 'Preparando' })).not.toHaveClass(/\bok\b/);
+  await request.post(`${API}/m/food/cozinha/tickets/${ticket.id}/mover`, { headers: h, data: { to: 'PREPARING' } });
+  await expect(page.locator('.badge', { hasText: 'Preparando' })).toHaveClass(/\bok\b/);
+  await request.post(`${API}/m/food/cozinha/tickets/${ticket.id}/mover`, { headers: h, data: { to: 'READY' } });
+  await expect(page.locator('.badge', { hasText: 'Pronto' })).toHaveClass(/\bok\b/);
 });

@@ -48,7 +48,12 @@ const settingsSchema = z.object({
   name: z.string().min(2).max(160).optional(),
   document: z.string().max(20).optional(),
   timezone: z.string().max(40).optional(),
-  /** Qualquer outra chave livre da empresa (impressora, logo, mensagens). */
+  /** Marca nos e-mails da empresa: cor #RRGGBB e logo em https (vazio apaga). */
+  marca: z.object({
+    cor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Cor no formato #RRGGBB.').optional(),
+    logoUrl: z.union([z.literal(''), z.string().url().refine((u) => u.startsWith('https://'), 'O logo precisa estar num endereço https.')]).optional(),
+  }).optional(),
+  /** Qualquer outra chave livre da empresa (impressora, mensagens). */
   extra: z.record(z.unknown()).optional(),
 });
 
@@ -70,6 +75,11 @@ export async function putSettings(req: Request, res: Response) {
     if (b.defaultSalesModule) settings.defaultSalesModule = b.defaultSalesModule; else delete settings.defaultSalesModule;
   }
   if (b.currency) settings.currency = b.currency;
+  if (b.marca) {
+    const m = { ...((settings.marca ?? {}) as Record<string, unknown>), ...b.marca };
+    if (m.logoUrl === '') delete m.logoUrl;
+    settings.marca = m;
+  }
   const t = await prisma.tenant.update({ where: { id: atual.id }, data: { name: b.name, document: b.document, timezone: b.timezone, settings: settings as never } });
   invalidateTenantCache(t.id);
   await ctx().db.auditLog.create({ data: { tenantId: t.id, userId: ctx().userId, action: 'tenant.settings', entity: 'Tenant', entityId: t.id, details: b as never } });

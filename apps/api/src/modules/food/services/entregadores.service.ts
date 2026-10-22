@@ -50,7 +50,7 @@ export async function moverEntrega(deliveryId: string, to: DeliveryStatus, extra
         await tx.order.update({ where: { id: o.id }, data: { status: OrderStatus.COMPLETED, completedAt: new Date() } });
       }
     }
-    events.emit('delivery.status', { tenantId, deliveryId, status: to });
+    events.emit('delivery.status', { tenantId, deliveryId, status: to, orderId: d.foodOrder.orderId });
     return upd;
   });
 }

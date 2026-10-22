@@ -8,6 +8,8 @@ import { D, round2, sum } from '../src/shared/money';
 import { AppError } from '../src/shared/errors';
 import { KEYS_REQUIRED_BY_ROUTES, assertAllRequiredKeysAreDeclared } from '../src/core/rbac/rbac.middleware';
 import { allPermissions } from '../src/core/rbac/permissions';
+import { emailDaEmpresa } from '../src/infra/mail-templates';
+import { toCsv } from '../src/shared/csv';
 
 test('placa: antiga, Mercosul, sujeira e inválidas', () => {
   assert.equal(normalizarPlaca('abc-1234'), 'ABC1234');
@@ -67,4 +69,18 @@ test('busca de cliente: telefone/documento só com número de verdade (≥ 4 dí
   assert.equal(digitsQuery('Segredo MVJ2K3A1'), undefined);
   assert.equal(digitsQuery('Mesa 12'), undefined);
   assert.equal(digitsQuery('123'), undefined);
+});
+
+test('e-mail da empresa: escapa conteúdo, cor e logo inválidos caem no padrão, texto leva o link', () => {
+  const r = emailDaEmpresa({ marca: { nome: 'Loja "A" & <B>', cor: 'red;background:url(x)', logoUrl: 'javascript:alert(1)' }, titulo: 'Olá, <script>', paragrafos: ['1 < 2'], botao: { texto: 'Entrar', url: 'https://app.local/x?a=1&b=2' } });
+  assert.ok(r.html.includes('Loja &quot;A&quot; &amp; &lt;B&gt;')); assert.ok(!r.html.includes('<script>'));
+  assert.ok(r.html.includes('background:#2563eb') && !r.html.includes('url(x)'), 'cor fora de #RRGGBB vira a padrão');
+  assert.ok(!r.html.includes('javascript:'), 'logo só https');
+  assert.ok(r.html.includes('href="https://app.local/x?a=1&amp;b=2"'));
+  assert.ok(r.text.includes('Entrar: https://app.local/x?a=1&b=2') && r.text.startsWith('Olá, <script>'));
+});
+
+test('CSV: fórmula vira texto (injeção), número negativo segue número, aspas e ; escapados', () => {
+  const linhas = toCsv([{ nome: '=HYPERLINK("http://x","clique")', saldo: -5, obs: '@SUM(A1)', ok: 'Ana; "Bia"' }]).replace('﻿', '').split('\r\n');
+  assert.equal(linhas[1], `"'=HYPERLINK(""http://x"",""clique"")";-5;'@SUM(A1);"Ana; ""Bia"""`);
 });

@@ -34,8 +34,15 @@ if (!E2E) {
     const { api: A } = await login('fit-demo');
     const roles = await A.get('/roles');
     const operador = roles.roles.find((r: any) => r.key === 'operador');
-    const u = await A.post('/users/invite', { name: `Recepção ${run}`, email: `rec-${run.toLowerCase()}@fit-demo.local`, roleIds: [operador.id] });
-    const token = outbox.at(-1)!.text.match(/token=([A-Za-z0-9_-]+)/)![1];
+    // Marca da empresa no e-mail: cor e logo validados na rota (http é recusado).
+    assert.equal((await A.raw('PUT', '/tenant/settings', { marca: { logoUrl: 'http://inseguro.local/l.png' } })).status, 400);
+    await A.put('/tenant/settings', { marca: { cor: '#0f766e', logoUrl: 'https://cdn.exemplo.com/fit.png' } });
+    const u = await A.post('/users/invite', { name: `Recepção <b>${run}</b>`, email: `rec-${run.toLowerCase()}@fit-demo.local`, roleIds: [operador.id] });
+    const mail = outbox.at(-1)!;
+    assert.match(mail.subject, /convite para a equipe/);
+    assert.ok(mail.html?.includes('background:#0f766e') && mail.html.includes('src="https://cdn.exemplo.com/fit.png"'), 'cor e logo da empresa');
+    assert.ok(mail.html!.includes('Recepção &lt;b&gt;') && !mail.html!.includes('<b>'), 'nome escapado no HTML');
+    const token = mail.text.match(/token=([A-Za-z0-9_-]+)/)![1];
     const r = await api().post('/auth/reset', { token, password: 'Minha-senha-123' });
     assert.equal(r.purpose, 'INVITE'); assert.equal(r.userId, u.id);
     const l = await api().post('/auth/login', { tenant: 'fit-demo', email: u.email, password: 'Minha-senha-123' });

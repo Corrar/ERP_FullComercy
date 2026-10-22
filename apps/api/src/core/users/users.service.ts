@@ -81,6 +81,13 @@ export async function inviteUser(input: { name: string; email: string; roleIds: 
   const { sendMail, appUrl } = await import('../../infra/mailer');
   const token = await issuePasswordToken(tenantId, user.id, 'INVITE');
   const link = appUrl(`/definir-senha?tenant=${encodeURIComponent(tenantSlug)}&token=${token}`);
-  await sendMail({ to: user.email, subject: 'Você foi convidado(a) para o FullComercy', text: `Olá, ${user.name}.\n\nSua conta foi criada. Defina sua senha pelo link (vale por 72 horas):\n${link}` });
+  const { marcaDaEmpresa, emailDaEmpresa } = await import('../../infra/mail-templates');
+  const marca = await marcaDaEmpresa(tenantId);
+  await sendMail({ to: user.email, subject: `${marca.nome} · convite para a equipe`, ...emailDaEmpresa({
+    marca, titulo: `Olá, ${user.name}`,
+    paragrafos: [`Você foi convidado(a) para a equipe de ${marca.nome}. Defina sua senha para entrar (o link vale por 72 horas).`, `Para entrar depois, use o identificador da empresa: ${tenantSlug}.`],
+    botao: { texto: 'Definir minha senha', url: link },
+    nota: 'Se você não esperava este convite, ignore este e-mail.',
+  }) });
   return user;
 }

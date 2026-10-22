@@ -50,5 +50,17 @@ if (!E2E) {
     // Baixa, edição e cancelamento feitos à mão ficam na auditoria.
     const acoes = (await A.get('/audit?action=finance.')).map((x: any) => x.action);
     for (const a of ['finance.entry.settle', 'finance.entry.update', 'finance.entry.cancel']) assert.ok(acoes.includes(a), `auditoria sem ${a}`);
+
+    // Paginação: com `page` vem { rows, total }; sem, a lista de sempre (seletores dos módulos).
+    const p1 = await A.get('/finance/entries?page=1&pageSize=3');
+    assert.equal(p1.total, 4); assert.equal(p1.rows.length, 3);
+    const p2 = await A.get('/finance/entries?page=2&pageSize=3');
+    assert.equal(p2.rows.length, 1); assert.ok(!p1.rows.some((r: any) => r.id === p2.rows[0].id));
+    const abertos = await A.get('/finance/entries?abertos=1&page=1');
+    assert.equal(abertos.total, 1); assert.equal(abertos.rows[0].description, 'Em aberto');
+    assert.equal((await A.get('/finance/entries')).length, 4);
+    const cli = await A.get('/customers?page=1&pageSize=1');
+    assert.ok(Array.isArray(cli.rows) && typeof cli.total === 'number');
+    assert.equal((await A.raw('GET', '/customers?page=1&pageSize=500')).status, 400, 'pageSize tem teto');
   });
 }

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { parse } from '../../shared/http';
+import { paginacaoSchema } from '../../shared/paginacao';
 import * as customers from './customers.service';
 
 const schema = z.object({
@@ -19,7 +20,7 @@ const addressSchema = z.object({
   state: z.string().length(2), zipCode: z.string().max(10).optional(), isDefault: z.boolean().optional(),
 });
 
-export const getCustomers = async (req: Request, res: Response) => res.json(await customers.list(typeof req.query.q === 'string' ? req.query.q : undefined));
+export const getCustomers = async (req: Request, res: Response) => res.json(await customers.list(typeof req.query.q === 'string' ? req.query.q : undefined, parse(paginacaoSchema, req.query)));
 export const getCustomer = async (req: Request, res: Response) => res.json(await customers.getById(String(req.params.id)));
 export const postCustomer = async (req: Request, res: Response) => res.status(201).json(await customers.create(parse(schema, req.body)));
 export const putCustomer = async (req: Request, res: Response) => res.json(await customers.update(String(req.params.id), parse(schema.partial(), req.body)));

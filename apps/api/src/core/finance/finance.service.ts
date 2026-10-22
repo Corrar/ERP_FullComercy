@@ -6,6 +6,7 @@ import { tenantTransaction, type TenantTx } from '../../infra/prisma';
 import { ctx } from '../tenancy/tenant-context';
 import { AppError } from '../../shared/errors';
 import { D, round2 } from '../../shared/money';
+import { paginar, type Paginacao } from '../../shared/paginacao';
 
 export interface CreateEntryInput {
   kind: FinanceEntryKind;
@@ -61,12 +62,10 @@ async function defaultAccountId(tx: TenantTx): Promise<string> {
   return a.id;
 }
 
-export async function listEntries(filter: { kind?: FinanceEntryKind; status?: FinanceEntryStatus; from?: Date; to?: Date }) {
-  return ctx().db.financeEntry.findMany({
-    where: { kind: filter.kind, status: filter.status, dueDate: { gte: filter.from, lte: filter.to } },
-    include: { customer: { select: { name: true } }, category: { select: { name: true } }, payments: true },
-    orderBy: { dueDate: 'asc' }, take: 500,
-  });
+export async function listEntries(filter: { kind?: FinanceEntryKind; status?: FinanceEntryStatus; abertos?: '0' | '1'; from?: Date; to?: Date } & Paginacao) {
+  const status = filter.abertos === '1' ? { in: [FinanceEntryStatus.OPEN, FinanceEntryStatus.PARTIAL] } : filter.status;
+  const where = { kind: filter.kind, status, dueDate: { gte: filter.from, lte: filter.to } };
+  return paginar(filter, 500, (skip, take) => ctx().db.financeEntry.findMany({ where, include: { customer: { select: { name: true } }, category: { select: { name: true } }, payments: true }, orderBy: { dueDate: 'asc' }, skip, take }), () => ctx().db.financeEntry.count({ where }));
 }
 
 // ── Contas e categorias ──

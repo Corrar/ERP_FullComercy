@@ -13,7 +13,9 @@ const cell = (v: unknown): string => {
     return JSON.stringify(v);
   }
   if (typeof v === 'number') return String(v).replace('.', ',');
-  const s = String(v);
+  // Injeção de fórmula: texto que começa com = + - @ (ou tab/CR) o Excel executa. Nome de cliente
+  // vem até de pedido público; o apóstrofo faz a planilha mostrar o texto como texto.
+  const s = /^[=+\-@\t\r]/.test(String(v)) ? `'${String(v)}` : String(v);
   return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 

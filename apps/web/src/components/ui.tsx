@@ -73,3 +73,13 @@ export function Steps({ current }: { current: number }) {
 export function Avatar({ name, src }: { name?: string | null; src?: string | null }) {
   return <span className="avatar">{src ? <img src={src} alt="" referrerPolicy="no-referrer" /> : (name ?? '?').trim().charAt(0).toUpperCase() || '?'}</span>;
 }
+
+/** Paginador das listagens paginadas (`{ rows, page, pageSize, total }` da API). */
+export function Paginador({ page, pageSize, total, onPage }: { page: number; pageSize: number; total: number; onPage: (p: number) => void }) {
+  const paginas = Math.max(1, Math.ceil(total / pageSize));
+  if (paginas === 1) return <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>{total} registro(s)</div>;
+  return <nav className="row between" aria-label="Paginação" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+    <span className="muted" style={{ fontSize: 13 }}>{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} de {total}</span>
+    <div className="row"><button className="btn" disabled={page <= 1} onClick={() => onPage(page - 1)}>Anterior</button><span className="muted" style={{ fontSize: 13 }}>Página {page} de {paginas}</span><button className="btn" disabled={page >= paginas} onClick={() => onPage(page + 1)}>Próxima</button></div>
+  </nav>;
+}

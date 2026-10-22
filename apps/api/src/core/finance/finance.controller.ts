@@ -2,15 +2,18 @@ import { Request, Response } from 'express';
 import { FinanceEntryKind, FinanceEntryStatus, PaymentMethod } from '@prisma/client';
 import { z } from 'zod';
 import { parse } from '../../shared/http';
+import { paginacaoSchema } from '../../shared/paginacao';
 import { ctx } from '../tenancy/tenant-context';
 import { tenantTransaction } from '../../infra/prisma';
 import { D } from '../../shared/money';
 import * as finance from './finance.service';
 import * as dre from './dre.service';
 
-const listSchema = z.object({
+const listSchema = paginacaoSchema.extend({
   kind: z.nativeEnum(FinanceEntryKind).optional(),
   status: z.nativeEnum(FinanceEntryStatus).optional(),
+  /** 1 = só em aberto (OPEN ou PARTIAL): o filtro da tela, feito no banco para valer com paginação. */
+  abertos: z.enum(['0', '1']).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
 });

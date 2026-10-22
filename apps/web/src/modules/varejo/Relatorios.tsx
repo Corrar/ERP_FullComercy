@@ -1,13 +1,18 @@
 import { useState } from 'react';
-import { useGet } from '@/lib/use-api';
-import { Card, Money, Table, Tabs } from '@/components/ui';
+import { baixarArquivo } from '@/lib/api';
+import { useAction, useGet } from '@/lib/use-api';
+import { Card, ErrorBox, Money, Table, Tabs } from '@/components/ui';
 import { num } from '@/lib/format';
 
 export function Relatorios() {
   const [tab, setTab] = useState('vendedores');
-  const r = useGet<any[]>(`/m/varejo/relatorios/${tab === 'semgiro' ? 'sem-giro' : tab}`);
+  const rota = `/m/varejo/relatorios/${tab === 'semgiro' ? 'sem-giro' : tab}`;
+  const r = useGet<any[]>(rota);
+  // CSV pelo cliente da API (Bearer): o link direto para /api ia sem token e voltava 401.
+  const csv = useAction(() => baixarArquivo(rota, { format: 'csv' }, `relatorio-${tab}.csv`));
   return <div className="grid">
-    <div className="row between"><h1 style={{ margin: 0 }}>Relatórios da loja</h1><a className="btn" href={`/api/m/varejo/relatorios/${tab === 'semgiro' ? 'sem-giro' : tab}?format=csv`} target="_blank" rel="noreferrer">CSV</a></div>
+    <div className="row between"><h1 style={{ margin: 0 }}>Relatórios da loja</h1><button className="btn" onClick={() => void csv.run()} disabled={csv.busy}>CSV</button></div>
+    <ErrorBox error={csv.error} />
     <Tabs tabs={[{ k: 'vendedores', label: 'Por vendedor' }, { k: 'horas', label: 'Por hora' }, { k: 'abc', label: 'Curva ABC' }, { k: 'semgiro', label: 'Sem giro' }]} active={tab} onChange={setTab} />
     <Card>
       {tab === 'vendedores' && <Table rows={r.data} cols={[{ h: 'Vendedor', c: (x) => x.vendedor }, { h: 'Vendas', c: (x) => x.vendas, right: true }, { h: 'Total', c: (x) => <Money v={x.total} />, right: true }, { h: 'Comissão', c: (x) => <Money v={x.comissao} />, right: true }]} />}

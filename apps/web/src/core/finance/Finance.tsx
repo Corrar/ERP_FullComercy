@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { baixarArquivo, patch, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
 import { useSession } from '@/lib/session';
-import { Badge, Card, ErrorBox, Field, Form, Kpi, Modal, Money, Table, Tabs } from '@/components/ui';
+import { Badge, Card, ErrorBox, Field, Form, Kpi, Modal, Money, Paginador, Table, Tabs } from '@/components/ui';
 import { EscolherCliente, type ClienteMin } from '@/components/EscolherCliente';
 import { d } from '@/lib/format';
 
@@ -15,22 +15,23 @@ export function Finance() {
   const [novo, setNovo] = useState(false); const [baixa, setBaixa] = useState<any | null>(null); const [editar, setEditar] = useState<any | null>(null); const [cancelar, setCancelar] = useState<any | null>(null);
   const titulos = tab === 'RECEIVABLE' || tab === 'PAYABLE';
   const resumo = useGet<any>('/finance/summary');
-  const entries = useGet<any[]>(titulos ? '/finance/entries' : null, { kind: tab });
+  const [page, setPage] = useState(1);
+  const entries = useGet<{ rows: any[]; page: number; pageSize: number; total: number }>(titulos ? '/finance/entries' : null, { kind: tab, abertos: abertos ? '1' : undefined, page, pageSize: 50 });
   const contas = useGet<any[]>('/finance/accounts'); const cats = useGet<any[]>('/finance/categories');
   const recarregar = async () => { await entries.reload(); await resumo.reload(); };
   const baixar = useAction(async (v: Record<string, any>) => { await post(`/finance/entries/${baixa.id}/settle`, { amount: v.amount, method: v.method, accountId: v.accountId || undefined, reference: v.reference }); setBaixa(null); await recarregar(); });
   const salvarEdicao = useAction(async (v: Record<string, any>) => { await patch(`/finance/entries/${editar.id}`, { description: v.description, dueDate: v.dueDate, categoryId: v.categoryId || null, amount: v.amount, notes: v.notes }); setEditar(null); await recarregar(); });
   const cancelarTitulo = useAction(async (v: Record<string, any>) => { await post(`/finance/entries/${cancelar.id}/cancel`, { reason: v.reason }); setCancelar(null); await recarregar(); });
-  const linhas = (entries.data ?? []).filter((r) => !abertos || ['OPEN', 'PARTIAL'].includes(r.status));
   const catsDoTipo = (cats.data ?? []).filter((c) => c.kind === tab);
   return <div className="grid">
     <h1>Financeiro</h1>
     {resumo.data && <div className="grid kpis"><Kpi label="Recebido no mês" value={resumo.data.recebido} money /><Kpi label="Pago no mês" value={resumo.data.pago} money /><Kpi label="Saldo do mês" value={resumo.data.saldo} money /><Kpi label="Títulos vencidos" value={resumo.data.vencidos.length} /></div>}
-    <Tabs tabs={[{ k: 'RECEIVABLE', label: 'A receber' }, { k: 'PAYABLE', label: 'A pagar' }, { k: 'dre', label: 'DRE' }, { k: 'cadastros', label: 'Contas e categorias' }]} active={tab} onChange={setTab} />
-    {titulos && <Card actions={<><label className="row muted"><input type="checkbox" checked={abertos} onChange={(e) => setAbertos(e.target.checked)} /> Só em aberto</label>{gerir && <button className="btn primary" onClick={() => setNovo(true)}>Novo título</button>}</>}>
+    <Tabs tabs={[{ k: 'RECEIVABLE', label: 'A receber' }, { k: 'PAYABLE', label: 'A pagar' }, { k: 'dre', label: 'DRE' }, { k: 'cadastros', label: 'Contas e categorias' }]} active={tab} onChange={(k) => { setTab(k); setPage(1); }} />
+    {titulos && <Card actions={<><label className="row muted"><input type="checkbox" checked={abertos} onChange={(e) => { setAbertos(e.target.checked); setPage(1); }} /> Só em aberto</label>{gerir && <button className="btn primary" onClick={() => setNovo(true)}>Novo título</button>}</>}>
       <ErrorBox error={entries.error} />
-      <Table rows={entries.data ? linhas : null} empty="Nenhum título." cols={[{ h: 'Vencimento', c: (r) => d(r.dueDate) }, { h: 'Descrição', c: (r) => <>{r.description}{r.category && <div className="muted">{r.category.name}</div>}</> }, { h: 'Cliente', c: (r) => r.customer?.name ?? '—' }, { h: 'Valor', c: (r) => <Money v={r.amount} />, right: true }, { h: 'Pago', c: (r) => <Money v={r.paidAmount} />, right: true }, { h: 'Status', c: (r) => <Badge s={r.status} /> },
-        { h: '', c: (r) => gerir && ['OPEN', 'PARTIAL'].includes(r.status) ? <div className="row"><button className="btn" onClick={() => setBaixa(r)}>Baixar</button><button className="btn" onClick={() => setEditar(r)}>Editar</button>{r.status === 'OPEN' && <button className="btn danger" onClick={() => setCancelar(r)}>Cancelar</button>}</div> : null }]} /></Card>}
+      <Table rows={entries.data?.rows} empty="Nenhum título." cols={[{ h: 'Vencimento', c: (r) => d(r.dueDate) }, { h: 'Descrição', c: (r) => <>{r.description}{r.category && <div className="muted">{r.category.name}</div>}</> }, { h: 'Cliente', c: (r) => r.customer?.name ?? '—' }, { h: 'Valor', c: (r) => <Money v={r.amount} />, right: true }, { h: 'Pago', c: (r) => <Money v={r.paidAmount} />, right: true }, { h: 'Status', c: (r) => <Badge s={r.status} /> },
+        { h: '', c: (r) => gerir && ['OPEN', 'PARTIAL'].includes(r.status) ? <div className="row"><button className="btn" onClick={() => setBaixa(r)}>Baixar</button><button className="btn" onClick={() => setEditar(r)}>Editar</button>{r.status === 'OPEN' && <button className="btn danger" onClick={() => setCancelar(r)}>Cancelar</button>}</div> : null }]} />
+      {entries.data && <Paginador page={entries.data.page} pageSize={entries.data.pageSize} total={entries.data.total} onPage={setPage} />}</Card>}
     {tab === 'dre' && <Dre />}
     {tab === 'cadastros' && <Cadastros contas={contas} cats={cats} gerir={gerir} />}
     <Modal title={tab === 'PAYABLE' ? 'Nova conta a pagar' : 'Nova conta a receber'} open={novo} onClose={() => setNovo(false)}>{novo && <NovoTitulo kind={tab} cats={catsDoTipo} onDone={async () => { setNovo(false); await recarregar(); }} />}</Modal>

@@ -89,7 +89,9 @@ O app abre na **loja** (`/comecar`): a pessoa escolhe o comércio (módulo), lig
 ## 4. Eventos e integrações
 
 Barramento tipado em memória (`shared/events.ts`) → três consumidores: Socket.IO (sala por
-empresa derivada do JWT), notificações in-app, e **outbox durável** (`core_outbox_events`) que o
+empresa derivada do JWT; o cliente final que acompanha um pedido entra com um token de
+acompanhamento — chave derivada, `shared/track-token.ts` — só na sala daquele pedido e recebe só
+"mudou"), notificações in-app, e **outbox durável** (`core_outbox_events`) que o
 job despacha aos webhooks da empresa com HMAC-SHA256 e backoff. Pagamento online é uma abstração
 de provedor (`core/payments/providers/`), com `manual` e `mock` na caixa; o gateway real é um
 adaptador.
@@ -100,7 +102,9 @@ Espelha a modularidade: `app/modules.ts` registra, por módulo, menu (com permis
 rotas; o `Shell` só desenha módulos ativos e itens permitidos (`/auth/me` dá `modules` e
 `permissions`); `RequireModule` explica quando a empresa não tem o módulo. `lib/api.ts` é o único
 cliente HTTP (Bearer, refresh em 401, `ApiError`); `lib/socket.ts` o único socket. Telas de venda
-chamam o mesmo `POST /orders` com `moduleData`. Vitrine pública (`/cardapio/:tenant/:menu`) e
+chamam o mesmo `POST /orders` com `moduleData`. Listagens do núcleo paginam por `page`/`pageSize`
+(`shared/paginacao.ts`: com `page` a resposta é `{ rows, page, pageSize, total }`, sem ela a lista
+simples dos seletores) e o front usa `Paginador`. Vitrine pública (`/cardapio/:tenant/:menu`) e
 acompanhamento ficam fora do shell autenticado.
 
 ## 6. Operação

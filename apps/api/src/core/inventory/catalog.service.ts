@@ -1,6 +1,7 @@
 // src/core/inventory/catalog.service.ts — armazéns, categorias, variantes e edição de produto.
 import { ctx } from '../tenancy/tenant-context';
 import { AppError } from '../../shared/errors';
+import { paginar, type Paginacao } from '../../shared/paginacao';
 
 // ── Armazéns ──
 export const listWarehouses = () => ctx().db.warehouse.findMany({ orderBy: [{ isDefault: 'desc' }, { code: 'asc' }] });
@@ -60,11 +61,10 @@ export async function lowStock() {
      ORDER BY (b.on_hand / NULLIF(b.min_level, 0)) ASC`;
 }
 
-export async function ledger(filter: { variantId?: string; warehouseId?: string; refType?: string; from?: Date; to?: Date; take?: number }) {
-  const rows = await ctx().db.stockMovement.findMany({
-    where: { variantId: filter.variantId, warehouseId: filter.warehouseId, refType: filter.refType, createdAt: { gte: filter.from, lte: filter.to } },
-    include: { variant: { select: { sku: true, product: { select: { name: true } } } }, warehouse: { select: { code: true } }, user: { select: { name: true } } },
-    orderBy: { createdAt: 'desc' }, take: Math.min(filter.take ?? 200, 1000),
-  });
-  return rows.map((r) => ({ ...r, id: r.id.toString() }));
+export async function ledger(filter: { variantId?: string; warehouseId?: string; refType?: string; from?: Date; to?: Date; take?: number } & Paginacao) {
+  const where = { variantId: filter.variantId, warehouseId: filter.warehouseId, refType: filter.refType, createdAt: { gte: filter.from, lte: filter.to } };
+  return paginar(filter, Math.min(filter.take ?? 200, 1000), async (skip, take) => (await ctx().db.stockMovement.findMany({
+    where, include: { variant: { select: { sku: true, product: { select: { name: true } } } }, warehouse: { select: { code: true } }, user: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' }, skip, take,
+  })).map((r) => ({ ...r, id: r.id.toString() })), () => ctx().db.stockMovement.count({ where }));
 }

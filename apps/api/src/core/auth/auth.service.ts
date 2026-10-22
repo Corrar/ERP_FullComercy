@@ -93,6 +93,7 @@ export const hashPassword = (plain: string) => bcrypt.hash(plain, 12);
 
 // ── Esqueci a senha / convite ─────────────────────────────────────────────────────────────
 import { sendMail, appUrl } from '../../infra/mailer';
+import { marcaDaEmpresa, emailDaEmpresa } from '../../infra/mail-templates';
 
 /** Gera o token de uso único (1 h) e devolve o CRU para ir no link. Invalida os anteriores. */
 export async function issuePasswordToken(tenantId: string, userId: string, purpose: 'RESET' | 'INVITE') {
@@ -109,12 +110,13 @@ export async function forgotPassword(tenantSlug: string, email: string) {
   if (!tenant || !user || !user.isActive) return;
   const token = await issuePasswordToken(tenant.id, user.id, 'RESET');
   const link = appUrl(`/redefinir-senha?tenant=${encodeURIComponent(tenant.slug)}&token=${token}`);
-  await sendMail({ to: user.email, subject: `${tenant.name} · redefinição de senha`, text: `Olá, ${user.name}.
-
-Para redefinir sua senha, abra o link (vale por 1 hora):
-${link}
-
-Se não foi você, ignore este e-mail.` });
+  const marca = await marcaDaEmpresa(tenant.id);
+  await sendMail({ to: user.email, subject: `${tenant.name} · redefinição de senha`, ...emailDaEmpresa({
+    marca, titulo: `Olá, ${user.name}`,
+    paragrafos: ['Recebemos um pedido para redefinir a sua senha. O link vale por 1 hora e só pode ser usado uma vez.'],
+    botao: { texto: 'Redefinir senha', url: link },
+    nota: 'Se não foi você, ignore este e-mail: sua senha continua a mesma.',
+  }) });
 }
 
 export async function resetPassword(rawToken: string, newPassword: string) {

@@ -79,7 +79,7 @@ relatórios (vendedor, hora, curva ABC, sem giro).
 Mesas e comandas (abrir, rodadas, transferir, conta com taxa de serviço, fechar); fluxo de
 cozinha por estação (QUEUED → PREPARING → READY → SERVED) em tempo real; ficha técnica com baixa
 de insumos e CMV; cardápio online publicável com adicionais; pedido público do cliente final
-(retirada/entrega, pagamento na entrega ou PIX online) e acompanhamento; entregadores, zonas por
+(retirada/entrega, pagamento na entrega ou PIX online) e acompanhamento em tempo real; entregadores, zonas por
 CEP, acerto do entregador; relatórios.
 
 ### 5.4 Módulo Academia
