@@ -84,3 +84,16 @@ test('CSV: fórmula vira texto (injeção), número negativo segue número, aspa
   const linhas = toCsv([{ nome: '=HYPERLINK("http://x","clique")', saldo: -5, obs: '@SUM(A1)', ok: 'Ana; "Bia"' }]).replace('﻿', '').split('\r\n');
   assert.equal(linhas[1], `"'=HYPERLINK(""http://x"",""clique"")";-5;'@SUM(A1);"Ana; ""Bia"""`);
 });
+
+test('perfis-modelo: chave no formato da tela, sem prontuário no Gerente, sem administrar a empresa', async () => {
+  const { MODELOS } = await import('../src/core/rbac/role-templates');
+  const proibidas = ['core.tenant:manage', 'core.users:manage', 'core.roles:manage', 'core.billing:manage'];
+  for (const [m, perfis] of Object.entries(MODELOS)) {
+    assert.equal(new Set(perfis.map((p) => p.key)).size, perfis.length, `perfil repetido em ${m}`);
+    for (const p of perfis) {
+      assert.match(p.key, /^[a-z0-9_]{2,40}$/, `${m}/${p.key}`);
+      assert.ok(!p.permissions.some((k) => proibidas.includes(k)), `${m}/${p.key} administra a empresa`);
+      if (p.key === 'gerente') assert.ok(!p.permissions.some((k) => /prontuario|vet:/.test(k)), `${m}: sigilo de saúde fora do Gerente`);
+    }
+  }
+});

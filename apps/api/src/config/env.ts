@@ -106,6 +106,8 @@ export function configProblems(c: z.infer<typeof envSchema>, st: 'local' | 'stag
   }
   if (!!c.TURNSTILE_SITE_KEY !== !!c.TURNSTILE_SECRET_KEY) out.push('TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY vão juntas.');
   if (st === 'production' && !c.TURNSTILE_SECRET_KEY) out.push('Produção exige Cloudflare Turnstile (TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY).');
+  // Sem SMTP o cliente compra e nunca recebe os dados de acesso nem o "esqueci a senha".
+  if (st === 'production' && !c.SMTP_HOST) out.push('Produção exige e-mail de verdade (SMTP_HOST, e SMTP_USER/SMTP_PASS se o servidor pedir).');
   return out;
 }
 

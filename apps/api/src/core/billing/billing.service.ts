@@ -24,7 +24,8 @@ import { onboardTenant } from '../platform/onboarding.service';
 import { issueTenantSession } from '../auth/auth.service';
 import { invalidateTenantCache, enableModule, disableModule } from '../tenancy/tenant-modules.service';
 import { ctx } from '../tenancy/tenant-context';
-import { moduleRegistry } from '../../modules/module.registry';
+import { semearModulo } from '../rbac/role-templates';
+import { enviarBoasVindas } from './boas-vindas';
 import { googleMode } from '../account/google';
 import { FEATURES, MODULE_OFFERS, resolveSelection, type Resolved } from './catalog';
 import { addDays, addMonths, normalizeDocument } from './periods';
@@ -163,6 +164,8 @@ export async function checkout(accountId: string, input: CheckoutInput, meta: { 
     firstInvoice = await collectInvoice(inv.id);
   }
   invalidateTenantCache(tenant.id);
+  // Dados de acesso por e-mail (com link para definir a senha; senha nunca vai no e-mail).
+  await enviarBoasVindas({ tenantId: tenant.id, slug: tenant.slug, adminUserId, nome: account.name, email: account.email, temSenha: !!account.passwordHash, resolved, total, trialAte: trial ? periodEnd : null });
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: adminUserId } });
   return {
@@ -392,7 +395,7 @@ export async function changeFeatures(input: { modules: ModuleKey[]; features: st
 
   // Módulos seguem o plano: módulo com função contratada liga (com a semente), sem função desliga.
   const active = await prisma.tenantModule.findMany({ where: { tenantId, enabled: true }, select: { moduleKey: true } });
-  for (const m of resolved.modules) if (!active.some((a) => a.moduleKey === m)) { await enableModule(tenantId, m); await moduleRegistry.get(m)?.onEnable?.(tenantId); }
+  for (const m of resolved.modules) if (!active.some((a) => a.moduleKey === m)) { await enableModule(tenantId, m); await semearModulo(tenantId, m); }
   for (const a of active) if (!resolved.modules.includes(a.moduleKey)) await disableModule(tenantId, a.moduleKey);
   invalidateTenantCache(tenantId);
   return { ...(await getSubscription()), amount: amount.toFixed(2) };

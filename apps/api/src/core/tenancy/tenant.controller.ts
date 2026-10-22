@@ -5,6 +5,7 @@ import { parse } from '../../shared/http';
 import { ctx } from './tenant-context';
 import * as svc from './tenant-modules.service';
 import { moduleRegistry } from '../../modules/module.registry';
+import { semearModulo } from '../rbac/role-templates';
 import { AppError } from '../../shared/errors';
 
 export async function getModules(_req: Request, res: Response) {
@@ -38,7 +39,7 @@ export async function putModule(req: Request, res: Response) {
   const row = body.enabled
     ? await svc.enableModule(ctx().tenantId, key, body.config as never)
     : await svc.disableModule(ctx().tenantId, key);
-  if (body.enabled) await moduleRegistry.get(key)?.onEnable?.(ctx().tenantId);
+  if (body.enabled) await semearModulo(ctx().tenantId, key);
   res.json(row);
 }
 

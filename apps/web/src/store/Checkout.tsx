@@ -126,6 +126,12 @@ function Done({ r, onOpen }: { r: any; onOpen: () => void }) {
           </div>
         )}
         {inv?.pixCode && inv.status === 'OPEN' && !inv.boletoLine && <div style={{ textAlign: 'left' }}><CopyBox label="Pague a primeira mensalidade por Pix" value={inv.pixCode} /></div>}
+        <div className="card stack" data-testid="dados-acesso" style={{ textAlign: 'left', gap: 6, padding: 16 }}>
+          <strong>Seus dados de acesso</strong>
+          <div className="row between"><span className="muted">Empresa</span><span className="mono">{r.session.tenant.slug}</span></div>
+          <div className="row between"><span className="muted">E-mail</span><span>{r.session.user.email}</span></div>
+          <div className="muted small">Enviamos esses dados para <b>{r.session.user.email}</b>, com um link para definir a senha do sistema. Se você criou senha no cadastro, ela já funciona.</div>
+        </div>
         <button className="btn primary lg block" onClick={onOpen}>Abrir meu ERP <Icon name="arrowRight" /></button>
       </div>
     </StoreLayout>

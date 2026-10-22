@@ -69,6 +69,9 @@ test('loja: comércio → funções → prévia → carrinho → login → cart�
   await page.locator('input[autocomplete=cc-number]').fill('4242424242424242');
   await page.getByRole('button', { name: 'Começar teste grátis' }).click();
   await expect(page.getByRole('heading', { name: 'Seu ERP está pronto!' })).toBeVisible();
+  // Dados de acesso na tela e no e-mail (o e-mail é conferido no e2e da API).
+  await expect(page.getByTestId('dados-acesso')).toContainText('Seus dados de acesso');
+  await expect(page.getByTestId('dados-acesso')).toContainText('@');
   await page.getByRole('button', { name: 'Abrir meu ERP' }).click();
 
   await expect(page.getByRole('heading', { name: 'Hoje' })).toBeVisible();

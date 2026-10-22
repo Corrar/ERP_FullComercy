@@ -90,6 +90,56 @@ if (!E2E) {
     assert.equal((await api(empresaA.token).raw('GET', '/account/me')).status, 401, 'token de empresa não abre a conta');
   });
 
+  test('pós-compra: e-mail com dados de acesso (sem senha), link de senha e perfis prontos do módulo', async () => {
+    const { outbox } = await import('../../src/infra/mailer');
+    const A = api(empresaA.token);
+    const { slug } = await A.get('/tenant/settings');
+    const mail = [...outbox].reverse().find((m) => m.to === email && /seu sistema está pronto/.test(m.subject));
+    assert.ok(mail, 'e-mail de boas-vindas enviado');
+    assert.ok(mail!.text.includes(`empresa: ${slug}`) && mail!.text.includes(`e-mail: ${email}`), 'dados de acesso');
+    assert.ok(mail!.text.includes('Etiquetas') && mail!.text.includes('Teste grátis até'), 'o que foi contratado');
+    assert.ok(mail!.text.includes('Caixa') && mail!.text.includes('Gerente'), 'perfis prontos listados');
+    assert.ok(!mail!.text.includes('Senha-forte-123') && !mail!.html!.includes('Senha-forte-123'), 'senha nunca vai no e-mail');
+    assert.ok(mail!.html!.includes('Definir minha senha'));
+
+    // A senha da conta já entra no acesso da equipe; o link define uma só do sistema (uso único).
+    assert.ok((await api().post('/auth/login', { tenant: slug, email, password: 'Senha-forte-123' })).accessToken);
+    const token = mail!.text.match(/token=([A-Za-z0-9_-]+)/)![1];
+    // (Define pelo link a mesma senha: os testes seguintes entram com ela.)
+    assert.equal((await api().post('/auth/reset', { token, password: 'Senha-forte-123' })).purpose, 'INVITE');
+    assert.equal((await api().raw('POST', '/auth/reset', { token, password: 'Outra-senha-1234' })).status, 401, 'link de uso único');
+    const dono = await api().post('/auth/login', { tenant: slug, email, password: 'Senha-forte-123' });
+    assert.ok(dono.permissions.includes('varejo.etiquetas:print') && !dono.permissions.includes('varejo.grade:manage'), 'admin vê só o comprado');
+
+    // Perfis do modelo: Caixa com PDV; a pessoa convidada como Caixa vende, mas não mexe no financeiro.
+    const { roles } = await A.get('/roles');
+    const caixa = roles.find((r: any) => r.key === 'caixa');
+    assert.ok(caixa.permissions.some((p: any) => p.permissionKey === 'varejo.pdv:operate'));
+    for (const k of ['gerente', 'financeiro', 'operador']) assert.ok(roles.some((r: any) => r.key === k), `perfil ${k}`);
+    assert.ok(!roles.some((r: any) => r.key === 'garcom'), 'perfil de módulo não comprado não nasce');
+    const conv = await A.post('/users/invite', { name: 'Caixa Um', email: `caixa-${run.toLowerCase()}@exemplo.com`, roleIds: [caixa.id] });
+    const tk = outbox.at(-1)!.text.match(/token=([A-Za-z0-9_-]+)/)![1];
+    await api().post('/auth/reset', { token: tk, password: 'Senha-do-caixa-123' });
+    const c = await api().post('/auth/login', { tenant: slug, email: conv.email, password: 'Senha-do-caixa-123' });
+    assert.ok(c.permissions.includes('varejo.pdv:operate') && c.permissions.includes('core.orders:create'));
+    assert.ok(!c.permissions.includes('core.finance:view') && !c.permissions.includes('varejo.etiquetas:print'));
+  });
+
+  test('módulo ligado depois ganha os perfis dele; o Gerente recebe as chaves do módulo novo', async () => {
+    const slug = `perfis-${run.toLowerCase()}`;
+    await api().post('/platform/tenants', { slug, name: 'Perfis Ltda', adminEmail: `admin@${slug}.local`, adminPassword: 'Senha-12345678', modules: ['SERVICOS'] }, { 'x-platform-key': process.env.PLATFORM_API_KEY! });
+    const A = api((await api().post('/auth/login', { tenant: slug, email: `admin@${slug}.local`, password: 'Senha-12345678' })).accessToken);
+    const chaves = (rs: any[], k: string) => (rs.find((r) => r.key === k)?.permissions ?? []).map((p: any) => p.permissionKey);
+    let { roles } = await A.get('/roles');
+    assert.ok(chaves(roles, 'tecnico').includes('svc.os:update'));
+    assert.ok(!roles.some((r: any) => r.key === 'governanca'));
+    await A.put('/tenant/modules/HOTEL', { enabled: true });
+    ({ roles } = await A.get('/roles'));
+    assert.ok(chaves(roles, 'governanca').includes('hot.governanca:operate'));
+    assert.ok(chaves(roles, 'recepcao').includes('hot.reservas:operate'));
+    assert.ok(chaves(roles, 'gerente').includes('hot.quartos:manage') && chaves(roles, 'gerente').includes('svc.os:view'), 'gerente soma os dois módulos');
+  });
+
   test('trocar funções vale na hora para o acesso e o valor vai para a próxima fatura', async () => {
     const A = api(empresaA.token);
     const r = await A.put('/billing/subscription/features', { modules: ['VAREJO'], features: ['varejo.grade'] });

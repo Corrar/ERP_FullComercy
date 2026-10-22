@@ -16,6 +16,7 @@ import { prisma } from './infra/prisma';
 import { authenticate } from './core/auth/auth.middleware';
 import { tenantContext, tenantContextAllowSuspended } from './core/tenancy/tenant.middleware';
 import { assertAllRequiredKeysAreDeclared } from './core/rbac/rbac.middleware';
+import { assertModelosUsamChavesDeclaradas } from './core/rbac/role-templates';
 import { salesStrategies } from './core/orders/sales-strategy';
 import { coreSalesStrategy } from './core/orders/core-sales.strategy';
 import { moduleRegistry } from './modules/module.registry';
@@ -129,6 +130,7 @@ export function buildApp() {
 
   // 4. Toda chave cobrada por rota tem de existir no catálogo. Falha no boot, não em produção.
   assertAllRequiredKeysAreDeclared();
+  assertModelosUsamChavesDeclaradas();
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -110,7 +110,8 @@ export function Login() {
   const [q] = useSearchParams();
   const next = q.get('next') ?? loc.state?.from ?? null;
   const [mode, setMode] = useState<'entrar' | 'cadastro' | 'funcionario'>(q.get('modo') === 'cadastro' ? 'cadastro' : q.get('modo') === 'funcionario' ? 'funcionario' : 'entrar');
-  const [tenant, setTenant] = useState(localStorage.getItem('fc.tenant') ?? '');
+  // O e-mail de boas-vindas abre esta tela já com a empresa e o e-mail de quem comprou.
+  const [tenant, setTenant] = useState(q.get('empresa') ?? localStorage.getItem('fc.tenant') ?? '');
   const go = (to: string) => nav(to, { replace: true });
   // Anti-robô da Cloudflare nos formulários de senha (força bruta, contas falsas). O Google já faz
   // a dele; o botão do Google não passa por aqui.
@@ -149,7 +150,7 @@ export function Login() {
           <div className="muted" style={{ marginTop: -6 }}>Para quem foi convidado para uma empresa.</div>
           <ErrorBox error={employee.error} />
           <input className="pill" name="tenant" value={tenant} onChange={(e) => setTenant(e.target.value)} placeholder="Identificador da empresa (ex.: minha-loja)" required autoFocus />
-          <input className="pill" name="email" type="email" placeholder="E-mail" autoComplete="username" required />
+          <input className="pill" name="email" type="email" placeholder="E-mail" autoComplete="username" required defaultValue={q.get('email') ?? ''} />
           <PasswordInput name="password" placeholder="Senha" autoComplete="current-password" />
           <Link to="/esqueci-senha" className="linkish">Esqueceu a senha?</Link>
           <div className="ts-slot" ref={human.slot} /><ErrorBox error={human.error} />

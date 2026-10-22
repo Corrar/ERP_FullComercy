@@ -125,7 +125,10 @@ test('travas de configuração: o que derruba o boot', () => {
   const stripeLive = { ...base, BILLING_PROVIDER: 'stripe' as const, STRIPE_SECRET_KEY: 'sk_live_a', STRIPE_PUBLISHABLE_KEY: 'pk_live_a' };
   const turn = { TURNSTILE_SITE_KEY: '0x4AAAAAAAAA', TURNSTILE_SECRET_KEY: '0x4AAAAAAAAAsecret' };
   assert.deepEqual(configProblems(stripeTest, 'staging'), []);
-  assert.deepEqual(configProblems({ ...stripeLive, ...turn }, 'production'), []);
+  const smtp = { SMTP_HOST: 'smtp.exemplo.com' };
+  assert.deepEqual(configProblems({ ...stripeLive, ...turn, ...smtp }, 'production'), []);
+  assert.match(configProblems({ ...stripeLive, ...turn }, 'production').join(), /SMTP_HOST/, 'produção sem e-mail não sobe');
+  assert.deepEqual(configProblems(stripeTest, 'staging'), [], 'homologação segue sem SMTP (provedor console)');
   assert.match(configProblems(stripeLive, 'staging').join(), /REAL do Stripe fora de produção/);
   assert.match(configProblems({ ...stripeTest, ...turn }, 'production').join(), /Produção exige chaves REAIS/);
   assert.match(configProblems({ ...stripeLive }, 'production').join(), /Turnstile/);

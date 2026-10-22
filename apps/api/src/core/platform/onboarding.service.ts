@@ -1,11 +1,12 @@
 // src/core/platform/onboarding.service.ts — NASCE UMA EMPRESA. Tudo que ela precisa para o
 // primeiro login funcionar: tenant, perfil admin (isSystem), usuário admin, armazém padrão,
-// conta caixa, módulos escolhidos (com o `onEnable` de cada um). Idempotente por slug.
+// conta caixa, perfis da equipe prontos e módulos escolhidos (`onEnable` + perfis de cada um).
+// Idempotente por slug.
 // Usa o client BASE: ainda não há tenant quando isto roda.
 import { ModuleKey, Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../infra/prisma';
-import { moduleRegistry } from '../../modules/module.registry';
+import { aplicarModelo, semearModulo } from '../rbac/role-templates';
 import { invalidateTenantCache } from '../tenancy/tenant-modules.service';
 import { AppError } from '../../shared/errors';
 
@@ -26,10 +27,8 @@ export async function onboardTenant(input: OnboardInput) {
   const tenantId = tenant.id;
 
   const admin = await prisma.role.upsert({ where: { tenantId_key: { tenantId, key: 'admin' } }, create: { tenantId, key: 'admin', name: 'Administrador', isSystem: true }, update: {} });
-  // Perfis genéricos de partida (sem permissão: o admin preenche pela tela).
-  for (const [key, name] of [['gerente', 'Gerente'], ['operador', 'Operador'], ['caixa', 'Caixa'], ['financeiro', 'Financeiro']] as const) {
-    await prisma.role.upsert({ where: { tenantId_key: { tenantId, key } }, create: { tenantId, key, name }, update: {} });
-  }
+  // Perfis da equipe já com permissões (modelo pronto): os do core aqui, os de cada módulo ao ligá-lo.
+  await aplicarModelo(tenantId, 'CORE');
   const user = await prisma.user.upsert({
     where: { tenantId_email: { tenantId, email: input.adminEmail.toLowerCase() } },
     create: { tenantId, email: input.adminEmail.toLowerCase(), name: input.adminName ?? 'Administrador', passwordHash: await bcrypt.hash(input.adminPassword, 12) },
@@ -45,7 +44,7 @@ export async function onboardTenant(input: OnboardInput) {
 
   for (const moduleKey of input.modules) {
     await prisma.tenantModule.upsert({ where: { tenantId_moduleKey: { tenantId, moduleKey } }, create: { tenantId, moduleKey, enabled: true }, update: { enabled: true } });
-    await moduleRegistry.get(moduleKey)?.onEnable?.(tenantId);
+    await semearModulo(tenantId, moduleKey);
   }
   invalidateTenantCache(tenantId);
   return { tenant, adminUserId: user.id };

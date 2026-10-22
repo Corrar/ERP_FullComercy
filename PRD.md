@@ -50,8 +50,13 @@ acesso só ao que o perfil permite.
 
 - **Autenticação**: login por empresa + e-mail, refresh com rotação, esqueci/redefinir senha,
   convite de usuário por e-mail, troca de senha derruba outras sessões.
-- **Usuários e perfis (RBAC)**: perfis genéricos por empresa, matriz perfil × permissão com
-  catálogo vindo do código, exceções individuais (ALLOW/DENY), `admin` com acesso total.
+- **Usuários e perfis (RBAC)**: perfis prontos por módulo (modelo em `core/rbac/role-templates.ts`:
+  Gerente, Financeiro, Operador e, por ramo, Caixa, Garçom, Cozinha, Recepção, Instrutor, Técnico,
+  Profissional…), matriz perfil × permissão com catálogo vindo do código, exceções individuais
+  (ALLOW/DENY), `admin` com acesso total — tudo cortado pelo plano contratado.
+- **Pós-compra**: ao concluir o checkout a empresa nasce com os módulos e perfis do pacote, o dono
+  entra como administrador e recebe por e-mail os dados de acesso (endereço, identificador da
+  empresa, e-mail) com link de uso único para definir a senha — senha nunca vai por e-mail.
 - **Clientes**: cadastro, endereços, resumo comercial (compras, ticket médio, em aberto).
 - **Produtos e estoque central**: produto → variantes (SKU/código de barras), categorias,
   armazéns, razão imutável, reserva/consumo/entrada/ajuste/transferência, mínimo com alerta,

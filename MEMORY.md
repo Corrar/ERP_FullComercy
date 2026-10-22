@@ -66,6 +66,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Botões "CSV" (pedidos, relatórios do varejo) baixavam o 401 | eram `<a href="/api/...">`: a API autentica por Bearer, não por cookie | `baixarArquivo` de `lib/api.ts` (regra 10: nada de link/fetch direto para a API) |
 | CSV com nome de cliente `=HYPERLINK(...)` virava fórmula no Excel | célula começando com `= + - @` saía crua; nome vem até de pedido público | `shared/csv.ts` prefixa apóstrofo (teste em `unidades.test.ts`) |
 | Teste de webhooks falhava às vezes ("recebeu order.created") | esperava 300 ms fixos pelo outbox (`setImmediate`) | despacha em laço até a entrega aparecer, com teto |
+| Provedor de e-mail "console" imprimia o corpo (link de senha de uso único) no log da homologação | o log do Render é compartilhado e guardado | corpo só com `APP_STAGE=local`; fora disso só o aviso "NÃO ENVIADO"; produção sem `SMTP_HOST` não sobe (`configProblems`) |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 
