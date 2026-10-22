@@ -18,6 +18,9 @@ export const envSchema = z.object({
   /// Cloudflare do Render → proxy interno do Render (10.x) → Express = 4. Com 1 o log mostrava
   /// 10.26.240.130 para todo mundo; com 2, IPs da Cloudflare — e todos dividiam a cota do rate limit.
   TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(1),
+  /// Teto GLOBAL de requisições por minuto por IP (as rotas sensíveis têm limites próprios, menores).
+  /// Só o teste de navegador sobe isso: a suíte inteira sai de um IP só em ~1 min e passava dos 600.
+  RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(600),
   /// Conexão do TENANT: papel comum, sujeito ao RLS. É a que o código de negócio usa.
   DATABASE_URL: z.string().min(1, 'DATABASE_URL ausente'),
   /// Conexão da PLATAFORMA: papel com BYPASSRLS (login, onboarding, jobs). Ausente = mesma URL

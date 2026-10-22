@@ -69,6 +69,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Provedor de e-mail "console" imprimia o corpo (link de senha de uso único) no log da homologação | o log do Render é compartilhado e guardado | corpo só com `APP_STAGE=local`; fora disso só o aviso "NÃO ENVIADO"; produção sem `SMTP_HOST` não sobe (`configProblems`) |
 | Job das empresas antigas não achava nenhuma empresa sem a marca `perfisModelo` | filtro JSON do Prisma (`NOT: { settings: { path, equals } }`): caminho ausente vira NULL e a linha some | filtra a marca em código (`aplicarModeloNasEmpresasAntigas`); teste simula empresa antiga |
 | e2e da cobrança "tentou duas vezes" no mesmo dia | o ciclo viaja no tempo com `now`, mas o `updatedAt` da fatura é o relógio real: a nova tentativa (`updatedAt <= now-1d`) entra na mesma passada | no teste, seguir o NÚMERO de tentativas, não o dia; em produção `updatedAt` = agora e a regra de 24 h vale |
+| Playwright no CI: último teste caiu com `"Too many r"... is not valid JSON` | a suíte inteira sai de UM IP em ~1 min e passou do teto global de 600 req/min (cada tela chama a API várias vezes, mais o polling do tempo real); um teste a mais virou a conta | `RATE_LIMIT_PER_MIN` (padrão 600, produção igual) e o Playwright sobe a API com 20000. Reproduzido com 150 (mesmo erro) antes de corrigir |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 
