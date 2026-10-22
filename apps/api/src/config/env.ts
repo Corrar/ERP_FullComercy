@@ -41,6 +41,9 @@ export const envSchema = z.object({
   PLATFORM_API_KEY: z.string().min(32).optional(),
   /// Chave da cifra de segredos guardados em JSON (token de catraca, chaves de gateway).
   APP_ENCRYPTION_KEY: z.string().min(16).optional(),
+  /// Chave ANTERIOR, só durante a rotação: abre o que foi selado com ela, nunca sela. O job
+  /// `core.recifrar-segredos` regrava tudo na atual; zerada a antiga (`GET /platform/segredos`), sai.
+  APP_ENCRYPTION_KEY_PREVIOUS: z.string().min(16).optional(),
   /// URL pública do FRONT (links de e-mail: redefinir senha, convite).
   APP_URL: z.string().url().default('http://localhost:5173'),
   /// E-mail transacional. Sem SMTP_HOST, provedor `console` (loga o link; nada sai).
@@ -109,6 +112,9 @@ export function configProblems(c: z.infer<typeof envSchema>, st: 'local' | 'stag
   }
   if (!!c.TURNSTILE_SITE_KEY !== !!c.TURNSTILE_SECRET_KEY) out.push('TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY vão juntas.');
   if (st === 'production' && !c.TURNSTILE_SECRET_KEY) out.push('Produção exige Cloudflare Turnstile (TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY).');
+  if (c.APP_ENCRYPTION_KEY_PREVIOUS && !c.APP_ENCRYPTION_KEY) out.push('APP_ENCRYPTION_KEY_PREVIOUS sem APP_ENCRYPTION_KEY: a chave nova vai na atual, a antiga na PREVIOUS.');
+  if (c.APP_ENCRYPTION_KEY_PREVIOUS && c.APP_ENCRYPTION_KEY_PREVIOUS === c.APP_ENCRYPTION_KEY) out.push('APP_ENCRYPTION_KEY_PREVIOUS igual à atual: a rotação não troca nada.');
+  if (st === 'production' && !c.APP_ENCRYPTION_KEY) out.push('Produção exige APP_ENCRYPTION_KEY (sem ela os segredos dos webhooks e das catracas ficam em claro no banco).');
   // Sem SMTP o cliente compra e nunca recebe os dados de acesso nem o "esqueci a senha".
   if (st === 'production' && !c.SMTP_HOST) out.push('Produção exige e-mail de verdade (SMTP_HOST, e SMTP_USER/SMTP_PASS se o servidor pedir).');
   return out;

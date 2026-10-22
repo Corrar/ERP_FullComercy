@@ -32,7 +32,7 @@
 - [x] Modelo de perfis aplicado nas empresas antigas (job `core.perfis-modelo`, uma vez por empresa, só perfil vazio)
 - [x] Primeiros passos no painel: roteiro por módulo comprado, marcado pelos dados da empresa, "Fazer agora" leva à tela, dispensável (volta em Empresa)
 - [x] Conta do comprador: esqueci a senha da conta (leva junto a senha das empresas que usam a da conta), reenviar dados de acesso, assinatura e faturas de cada empresa na Minha conta
-- [x] Testes: 43 unit, 45 e2e API, 21 Playwright
+- [x] Testes: 44 unit, 46 e2e API, 21 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
@@ -60,7 +60,9 @@
 - [ ] Nota fiscal de serviço da mensalidade do SaaS
 
 - [ ] Gateway de pagamento real (PIX dinâmico de um banco/PSP) como provedor em `core/payments/providers/`
-- [ ] Rotação de `APP_ENCRYPTION_KEY` (recifrar segredos) e política de backup/restore do banco
+- [x] Rotação de `APP_ENCRYPTION_KEY`: selo com id da chave, chave anterior só para abrir, job `core.recifrar-segredos`, status em `/platform/segredos`; produção não sobe sem a chave; segredo ilegível falha só o item (webhook/catraca), não o lote — procedimento em `docs/OPERACAO.md`
+- [x] Política de backup/restore escrita (`docs/OPERACAO.md` §2)
+- [ ] Executar a política: `pg_dump` semanal fora do Neon, conferir a janela de restauração do plano, primeiro ensaio de restauração — passo do responsável
 - [ ] Papéis de banco em produção criados à mão (plataforma `BYPASSRLS`, tenant comum) e `db:rls` no deploy
 - [ ] Limites por plano da plataforma (usuários, pedidos/mês) e bloqueio por inadimplência do SaaS
 - [x] LGPD do cliente final: exportar (JSON com núcleo + módulos) e anonimizar (pedidos ficam; vínculo vivo e prontuário bloqueiam), permissão própria, auditoria, botões na ficha do cliente

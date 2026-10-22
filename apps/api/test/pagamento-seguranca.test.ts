@@ -125,8 +125,12 @@ test('travas de configuração: o que derruba o boot', () => {
   const stripeLive = { ...base, BILLING_PROVIDER: 'stripe' as const, STRIPE_SECRET_KEY: 'sk_live_a', STRIPE_PUBLISHABLE_KEY: 'pk_live_a' };
   const turn = { TURNSTILE_SITE_KEY: '0x4AAAAAAAAA', TURNSTILE_SECRET_KEY: '0x4AAAAAAAAAsecret' };
   assert.deepEqual(configProblems(stripeTest, 'staging'), []);
-  const smtp = { SMTP_HOST: 'smtp.exemplo.com' };
+  const smtp = { SMTP_HOST: 'smtp.exemplo.com', APP_ENCRYPTION_KEY: 'chave-nova-0123456789' };
   assert.deepEqual(configProblems({ ...stripeLive, ...turn, ...smtp }, 'production'), []);
+  assert.match(configProblems({ ...stripeLive, ...turn, ...smtp, APP_ENCRYPTION_KEY: undefined }, 'production').join(), /exige APP_ENCRYPTION_KEY/, 'produção sem cifra não sobe');
+  assert.deepEqual(configProblems({ ...stripeTest, APP_ENCRYPTION_KEY: 'chave-nova-0123456789', APP_ENCRYPTION_KEY_PREVIOUS: 'chave-velha-0123456789' }, 'staging'), [], 'rotação em curso');
+  assert.match(configProblems({ ...stripeTest, APP_ENCRYPTION_KEY_PREVIOUS: 'chave-velha-0123456789' }, 'staging').join(), /PREVIOUS sem APP_ENCRYPTION_KEY/);
+  assert.match(configProblems({ ...stripeTest, APP_ENCRYPTION_KEY: 'chave-nova-0123456789', APP_ENCRYPTION_KEY_PREVIOUS: 'chave-nova-0123456789' }, 'staging').join(), /igual à atual/);
   assert.match(configProblems({ ...stripeLive, ...turn }, 'production').join(), /SMTP_HOST/, 'produção sem e-mail não sobe');
   assert.deepEqual(configProblems(stripeTest, 'staging'), [], 'homologação segue sem SMTP (provedor console)');
   assert.match(configProblems(stripeLive, 'staging').join(), /REAL do Stripe fora de produção/);

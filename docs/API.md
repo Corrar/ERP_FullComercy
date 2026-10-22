@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-22. 335 rotas.
+> Gerado por `npm run docs:api` em 2026-10-22. 337 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
 
@@ -46,6 +46,8 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/platform/tenants` |  |
 | `PATCH` | `/platform/tenants/:id/status` |  |
 | `PUT` | `/platform/tenants/:id/modules/:key` |  |
+| `GET` | `/platform/segredos` |  |
+| `POST` | `/platform/segredos/recifrar` |  |
 | `GET` | `/platform/modules` |  |
 
 ## Core · audit
@@ -558,6 +560,7 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | core.outbox-dispatch | 1 min |
 | core.payments-expire | 5 min |
 | core.billing-cycle | 15 min |
+| core.recifrar-segredos | 60 min |
 | core.perfis-modelo | 1440 min |
 | gym.cobranca-recorrente | 360 min |
 | gym.gerar-sessoes | 720 min |
