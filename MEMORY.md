@@ -94,6 +94,12 @@ estratégia; outbox em tabela; front sem framework; monorepo.
   ⚠ Quem bater DIRETO no Render pode forjar o primeiro `X-Forwarded-For` (o rate limit por IP perde
   força para esse atalho; o Turnstile continua barrando robô nas rotas de credencial).
 - CORS: `CORS_ORIGINS` aceita curinga de um rótulo (`https://erp-modular-*-corrars-projects.vercel.app`).
+- Publicar (22/10/2026): push neste branch gera só PRÉVIA na Vercel, e o Render NÃO fez autodeploy dos
+  pushes de 21/10 (ficou em `12bc11b` com 12 commits à frente), apesar de `autoDeploy: yes`. Conferir
+  `list_deploys` depois do push; se não andou, `trigger_deploy` (pega o topo do branch).
+  Na Vercel, `request_promote` de uma prévia dá 422: o caminho é `create_deployment` com
+  `deploymentId` da prévia + `target: production` (rebuild com o env de produção; `VITE_API_URL` e
+  `VITE_SOCKET_POLLING` valem para os dois alvos). Prova: `/api/health/ready` e o commit do deploy.
 
 - Stripe: conta `acct_1USaDNRuCVjTlS47` ("Área restrita de Teste"), BR/BRL, modo teste. Cartão
   ativo; boleto e Pix "available: false" (ativar no painel). Chaves `sk_`/`pk_` só pelo painel.
