@@ -32,7 +32,7 @@
 - [x] Modelo de perfis aplicado nas empresas antigas (job `core.perfis-modelo`, uma vez por empresa, só perfil vazio)
 - [x] Primeiros passos no painel: roteiro por módulo comprado, marcado pelos dados da empresa, "Fazer agora" leva à tela, dispensável (volta em Empresa)
 - [x] Conta do comprador: esqueci a senha da conta (leva junto a senha das empresas que usam a da conta), reenviar dados de acesso, assinatura e faturas de cada empresa na Minha conta
-- [x] Testes: 43 unit, 41 e2e API, 20 Playwright
+- [x] Testes: 43 unit, 45 e2e API, 21 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
@@ -63,7 +63,8 @@
 - [ ] Rotação de `APP_ENCRYPTION_KEY` (recifrar segredos) e política de backup/restore do banco
 - [ ] Papéis de banco em produção criados à mão (plataforma `BYPASSRLS`, tenant comum) e `db:rls` no deploy
 - [ ] Limites por plano da plataforma (usuários, pedidos/mês) e bloqueio por inadimplência do SaaS
-- [ ] Termos de uso / LGPD: exportação e exclusão de dados do cliente final (pedidos públicos guardam telefone)
+- [x] LGPD do cliente final: exportar (JSON com núcleo + módulos) e anonimizar (pedidos ficam; vínculo vivo e prontuário bloqueiam), permissão própria, auditoria, botões na ficha do cliente
+- [ ] Termos de uso e política de privacidade publicados na loja e no cadastro (texto jurídico — passo do responsável)
 
 ## P1 — próxima rodada
 

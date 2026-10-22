@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-22. 332 rotas.
+> Gerado por `npm run docs:api` em 2026-10-22. 335 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
 
@@ -79,6 +79,9 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `PATCH` | `/customers/:id/active` | `core.customers:manage` |
 | `POST` | `/customers/:id/addresses` | `core.customers:manage` |
 | `DELETE` | `/customers/:id/addresses/:addressId` | `core.customers:manage` |
+| `GET` | `/customers/:id/lgpd/export` | `core.customers:lgpd` |
+| `GET` | `/customers/:id/lgpd/pendencias` | `core.customers:lgpd` |
+| `POST` | `/customers/:id/lgpd/anonimizar` | `core.customers:lgpd` |
 
 ## Core · dashboard
 
@@ -468,7 +471,7 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/m/varejo/relatorios/abc` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/sem-giro` | `varejo.relatorios:view` |
 
-## Catálogo de permissões (74)
+## Catálogo de permissões (75)
 
 | Chave | Descrição | Módulo |
 |---|---|---|
@@ -478,6 +481,7 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `core.roles:manage` | Gerir perfis e permissões | core |
 | `core.customers:view` | Ver clientes | core |
 | `core.customers:manage` | Criar/editar clientes | core |
+| `core.customers:lgpd` | Atender titular (LGPD): exportar e anonimizar dados de cliente | core |
 | `core.products:view` | Ver produtos | core |
 | `core.products:manage` | Criar/editar produtos | core |
 | `core.stock:view` | Ver estoque | core |

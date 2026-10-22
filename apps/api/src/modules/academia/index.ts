@@ -1,5 +1,6 @@
 import { ModuleKey } from '@prisma/client';
 import type { ModuleDefinition } from '../module.contract';
+import { academiaLgpd } from './services/lgpd';
 import router, { publicRouter } from './routes/academia.routes';
 import { gymSalesStrategy } from './services/gym-sales.strategy';
 import { gerarCobrancasVencidas } from './services/assinaturas.service';
@@ -14,6 +15,7 @@ export const academiaModule: ModuleDefinition = {
   router,
   publicRouter,
   salesStrategy: gymSalesStrategy,
+  lgpd: academiaLgpd,
   permissions: [
     { key: 'gym.planos:view',        label: 'Ver planos',                         module: ModuleKey.ACADEMIA },
     { key: 'gym.planos:manage',      label: 'Criar/editar planos',                module: ModuleKey.ACADEMIA },

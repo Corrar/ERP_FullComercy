@@ -12,4 +12,7 @@ router.put('/:id', requirePermission('core.customers:manage'), asyncHandler(c.pu
 router.patch('/:id/active', requirePermission('core.customers:manage'), asyncHandler(c.patchActive));
 router.post('/:id/addresses', requirePermission('core.customers:manage'), asyncHandler(c.postAddress));
 router.delete('/:id/addresses/:addressId', requirePermission('core.customers:manage'), asyncHandler(c.deleteAddress));
+router.get('/:id/lgpd/export', requirePermission('core.customers:lgpd'), asyncHandler(c.getLgpdExport));
+router.get('/:id/lgpd/pendencias', requirePermission('core.customers:lgpd'), asyncHandler(c.getLgpdPendencias));
+router.post('/:id/lgpd/anonimizar', requirePermission('core.customers:lgpd'), asyncHandler(c.postLgpdAnonimizar));
 export default router;

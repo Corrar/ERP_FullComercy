@@ -70,6 +70,9 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Job das empresas antigas não achava nenhuma empresa sem a marca `perfisModelo` | filtro JSON do Prisma (`NOT: { settings: { path, equals } }`): caminho ausente vira NULL e a linha some | filtra a marca em código (`aplicarModeloNasEmpresasAntigas`); teste simula empresa antiga |
 | e2e da cobrança "tentou duas vezes" no mesmo dia | o ciclo viaja no tempo com `now`, mas o `updatedAt` da fatura é o relógio real: a nova tentativa (`updatedAt <= now-1d`) entra na mesma passada | no teste, seguir o NÚMERO de tentativas, não o dia; em produção `updatedAt` = agora e a regra de 24 h vale |
 | Playwright no CI: último teste caiu com `"Too many r"... is not valid JSON` | a suíte inteira sai de UM IP em ~1 min e passou do teto global de 600 req/min (cada tela chama a API várias vezes, mais o polling do tempo real); um teste a mais virou a conta | `RATE_LIMIT_PER_MIN` (padrão 600, produção igual) e o Playwright sobe a API com 20000. Reproduzido com 150 (mesmo erro) antes de corrigir |
+| Duas specs antigas caíram no login ("Hoje" não aparece) ao entrar a spec da LGPD | limite de 10 logins por conta+IP em 15 min (`auth.routes.ts`); `admin@loja-demo` já tinha 10 entradas na suíte e a spec nova somou 2 | spec nova usa empresa do seed menos usada (`posto-demo`); conte `uiLogin/apiLogin` por empresa antes de escolher |
+| Depois de anonimizar, a ficha seguia mostrando o telefone apagado (e o "Salvar" o regravaria) | campos não controlados (`defaultValue`) não releem o recarregado | `Form key={cl.updatedAt}` remonta o formulário (`CustomerDetail.tsx`); pego pelo Playwright |
+| "Depois de anonimizar a busca não acha" passava no vazio | a busca não olha e-mail, e o telefone de teste montado de `run` (letras) nem era único | asserção do ANTES (acha 1) com documento e telefone únicos; só então o DEPOIS (acha 0) vale |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 
@@ -167,6 +170,7 @@ npm run docs:api                                 # regenera docs/API.md (265 rot
 | menu do front | `apps/web/src/app/modules.ts` |
 | preço, funções e o que cada uma libera | `apps/api/src/core/billing/catalog.ts` |
 | checkout, ciclo de cobrança, webhook | `apps/api/src/core/billing/billing.service.ts` |
+| LGPD do titular (exportar/anonimizar) | `apps/api/src/core/customers/lgpd.service.ts` + `lgpd` em cada `modules/<m>/services/lgpd.ts` |
 | conta do comprador e Google | `apps/api/src/core/account/` |
 | loja (telas) | `apps/web/src/store/` |
 | identidade (nome/marca) | `apps/web/src/app/brand.ts` + `--brand` em `styles.css` |
