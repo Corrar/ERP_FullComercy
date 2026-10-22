@@ -33,6 +33,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm ci
+      # O schema mora em apps/api/prisma: o postinstall do @prisma/client não o acha da raiz.
+      - run: npm run prisma:generate -w apps/api
       - run: npx prisma validate --schema apps/api/prisma/schema.prisma
       - run: npm run typecheck
       - run: npm test

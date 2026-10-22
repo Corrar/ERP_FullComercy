@@ -49,6 +49,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Jornada sob CSP "falhou" com 500 no cadastro | o Postgres local tinha caído (container reinicia entre mensagens), não a CSP | `pg_isready` antes de culpar o código |
 | Postgres local caía "sozinho" | `pkill -f` com padrão que casava o próprio shell (exit 144) matou a sessão que iniciou o banco | iniciar com `setsid`; matar por `pgrep -f "[p]adrao"` |
 | Pagamento com Stripe caía com `removeChild` ("Unexpected Application Error") | o Stripe.js troca o conteúdo de onde monta; o aviso "Carregando…" (filho React ali) sumiu por baixo do React, que tentou removê-lo no `ready`. As specs usam o simulador e nunca montavam o campo | alvo de script de terceiro (Stripe, Turnstile, Google) fica SEM filhos React; `e2e/stripe-campo.spec.ts` com dublê do Stripe.js |
+| CI vermelho em TODAS as rodadas (até 21/10/2026), sempre no `typecheck` | `npm ci` na raiz não gera o Prisma Client: o postinstall do `@prisma/client` procura `prisma/schema.prisma` na raiz e o schema mora em `apps/api/prisma`; sem client, todo tipo do Prisma some (`ModuleKey`, `Decimal`…) | passo `npm run prisma:generate -w apps/api` logo após o `npm ci` (`ci.yml`); local, o mesmo depois de `npm install` |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 
@@ -116,7 +117,7 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 ## 5. Como rodar e verificar (atalho)
 
 ```bash
-npm install
+npm install && npm run prisma:generate -w apps/api   # sem isso o typecheck quebra
 npm run prisma:deploy && npm run db:rls && npm run db:seed
 npm run typecheck && npm test                    # sem banco: 26 unit
 npm run test:e2e                                 # com banco: 26 e2e API

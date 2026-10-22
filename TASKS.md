@@ -23,6 +23,7 @@
 - [x] Plano corta permissão (403 `NOT_IN_PLAN`), ciclo de cobrança, atraso → suspensão → volta ao pagar
 - [x] Front no visual do Fluxo 5.0 (tema claro/escuro, sidebar com troca de módulo, gaveta no celular)
 - [x] Testes: 26 unit, 26 e2e API, 5 Playwright
+- [x] CI verde de verdade: gera o Prisma Client antes do typecheck (antes falhava sempre ali); 40 unit, 26 e2e API, 6 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
