@@ -7,7 +7,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { env } from '../../config/env';
 import { prisma } from '../../infra/prisma';
 import { AppError } from '../../shared/errors';
-import { effectivePermissions } from '../rbac/rbac.service';
+import { effectivePermissions, visiblePermissions } from '../rbac/rbac.service';
 import { loadTenantSnapshot } from '../tenancy/tenant-modules.service';
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -45,16 +45,26 @@ export async function login(input: LoginInput) {
   if (!user || !user.isActive) throw invalid();
   if (!(await bcrypt.compare(input.password, user.passwordHash))) throw invalid();
 
+  return issueTenantSession(user, tenant, input);
+}
+
+/** A sessão de UMA empresa (access + refresh + o que o front precisa para desenhar o menu).
+ *  Login por senha e "entrar com a conta do comprador" (`account.service`) terminam aqui. */
+export async function issueTenantSession(
+  user: { id: string; name: string; email: string },
+  tenant: { id: string; slug: string; name: string },
+  meta: { ip?: string; userAgent?: string },
+) {
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   const [perms, snap] = await Promise.all([effectivePermissions(tenant.id, user.id), loadTenantSnapshot(tenant.id)]);
 
   return {
     accessToken: signAccess(user.id, tenant.id),
-    refreshToken: await issueRefresh(user.id, tenant.id, input),
+    refreshToken: await issueRefresh(user.id, tenant.id, meta),
     user: { id: user.id, name: user.name, email: user.email },
     tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name },
     // O front desenha o menu com isto: permissões efetivas + módulos ligados.
-    permissions: perms.isAdmin ? ['*'] : [...perms.keys],
+    permissions: visiblePermissions(perms),
     modules: [...snap.modules.keys()],
   };
 }
@@ -83,6 +93,7 @@ export const hashPassword = (plain: string) => bcrypt.hash(plain, 12);
 
 // ── Esqueci a senha / convite ─────────────────────────────────────────────────────────────
 import { sendMail, appUrl } from '../../infra/mailer';
+import { marcaDaEmpresa, emailDaEmpresa } from '../../infra/mail-templates';
 
 /** Gera o token de uso único (1 h) e devolve o CRU para ir no link. Invalida os anteriores. */
 export async function issuePasswordToken(tenantId: string, userId: string, purpose: 'RESET' | 'INVITE') {
@@ -99,12 +110,13 @@ export async function forgotPassword(tenantSlug: string, email: string) {
   if (!tenant || !user || !user.isActive) return;
   const token = await issuePasswordToken(tenant.id, user.id, 'RESET');
   const link = appUrl(`/redefinir-senha?tenant=${encodeURIComponent(tenant.slug)}&token=${token}`);
-  await sendMail({ to: user.email, subject: `${tenant.name} · redefinição de senha`, text: `Olá, ${user.name}.
-
-Para redefinir sua senha, abra o link (vale por 1 hora):
-${link}
-
-Se não foi você, ignore este e-mail.` });
+  const marca = await marcaDaEmpresa(tenant.id);
+  await sendMail({ to: user.email, subject: `${tenant.name} · redefinição de senha`, ...emailDaEmpresa({
+    marca, titulo: `Olá, ${user.name}`,
+    paragrafos: ['Recebemos um pedido para redefinir a sua senha. O link vale por 1 hora e só pode ser usado uma vez.'],
+    botao: { texto: 'Redefinir senha', url: link },
+    nota: 'Se não foi você, ignore este e-mail: sua senha continua a mesma.',
+  }) });
 }
 
 export async function resetPassword(rawToken: string, newPassword: string) {

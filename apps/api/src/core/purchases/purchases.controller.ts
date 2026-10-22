@@ -2,14 +2,16 @@ import { Request, Response } from 'express';
 import { PurchaseStatus } from '@prisma/client';
 import { z } from 'zod';
 import { parse } from '../../shared/http';
+import { paginacaoSchema } from '../../shared/paginacao';
 import * as s from './purchases.service';
 
 const item = z.object({ variantId: z.string().uuid(), quantity: z.number().positive(), unitCost: z.number().nonnegative() });
-export const getSuppliers = async (req: Request, res: Response) => res.json(await s.listSuppliers(typeof req.query.q === 'string' ? req.query.q : undefined));
+// `?todos=1`: inclui os inativos (tela de cadastro, para poder reativar); o padrão serve os seletores.
+export const getSuppliers = async (req: Request, res: Response) => res.json(await s.listSuppliers(typeof req.query.q === 'string' ? req.query.q : undefined, req.query.todos === '1'));
 export const postSupplier = async (req: Request, res: Response) => res.status(201).json(await s.createSupplier(parse(z.object({ name: z.string().min(2).max(160), document: z.string().max(20).optional(), email: z.string().email().optional(), phone: z.string().max(30).optional(), notes: z.string().optional() }), req.body)));
 export const patchSupplier = async (req: Request, res: Response) => res.json(await s.updateSupplier(String(req.params.id), parse(z.object({ name: z.string().min(2).optional(), email: z.string().email().optional(), phone: z.string().optional(), notes: z.string().optional(), isActive: z.boolean().optional() }), req.body)));
 
-export const getPurchases = async (req: Request, res: Response) => res.json(await s.list(parse(z.object({ status: z.nativeEnum(PurchaseStatus).optional(), supplierId: z.string().uuid().optional() }), req.query)));
+export const getPurchases = async (req: Request, res: Response) => res.json(await s.list(parse(paginacaoSchema.extend({ status: z.nativeEnum(PurchaseStatus).optional(), supplierId: z.string().uuid().optional() }), req.query)));
 export const getPurchase = async (req: Request, res: Response) => res.json(await s.get(String(req.params.id)));
 export const postPurchase = async (req: Request, res: Response) => res.status(201).json(await s.createPurchase(parse(z.object({ supplierId: z.string().uuid(), warehouseId: z.string().uuid().optional(), expectedAt: z.coerce.date().optional(), notes: z.string().optional(), freight: z.number().nonnegative().optional(), items: z.array(item).min(1) }), req.body)));
 export const putItems = async (req: Request, res: Response) => res.json(await s.setItems(String(req.params.id), parse(z.object({ items: z.array(item).min(1) }), req.body).items));

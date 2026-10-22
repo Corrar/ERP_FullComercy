@@ -4,12 +4,18 @@ import { apiLogin, uiLogin, run, API } from './_helpers';
 test('login, painel com módulos ativos e menu gated', async ({ page }) => {
   await uiLogin(page, 'posto-demo');
   await expect(page.getByText('Faturamento')).toBeVisible();
-  // posto-demo tem VAREJO + FOOD: os dois grupos aparecem; ACADEMIA e SERVIÇOS não.
+  // posto-demo tem VAREJO + FOOD: o seletor de módulo (como no Fluxo) troca o menu entre os dois;
+  // ACADEMIA e SERVIÇOS nem aparecem para escolher.
   const side = page.locator('aside');
-  await expect(side.getByText('Varejo', { exact: true })).toBeVisible();
-  await expect(side.getByText('Food & Delivery')).toBeVisible();
-  await expect(side.getByText('Academia')).toHaveCount(0);
-  await expect(side.getByText('Serviços / Oficina')).toHaveCount(0);
+  await side.locator('.sb-switch').click();
+  const menu = side.getByRole('menu');
+  await expect(menu.getByRole('menuitem', { name: /Varejo/ })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /Food & Delivery/ })).toBeVisible();
+  await expect(menu.getByText('Academia')).toHaveCount(0);
+  await expect(menu.getByText('Serviços / Oficina')).toHaveCount(0);
+  await menu.getByRole('menuitem', { name: /Food & Delivery/ }).click();
+  await expect(side.getByRole('link', { name: 'Salão' })).toBeVisible();
+  await expect(side.getByRole('link', { name: 'PDV' })).toHaveCount(0);
   // Rota de módulo inativo explica em vez de quebrar.
   await page.goto('/academia');
   await expect(page.getByText('não está ativo para a sua empresa')).toBeVisible();

@@ -47,7 +47,10 @@ export async function dispatchPending(limit = 100) {
     const body = JSON.stringify({ id: ev.id.toString(), type: ev.eventType, occurredAt: ev.occurredAt, tenantId: ev.tenantId, data: ev.payload });
     let allOk = true;
     for (const h of hooks) {
-      const r = await deliver(h.url, open(h.secret), body, ev.eventType, ev.id);
+      // Segredo que nenhuma chave abre (rotação sem a chave antiga) falha SÓ este webhook, não o lote.
+      let segredo: string | null = null;
+      try { segredo = open(h.secret); } catch (e) { console.error(`[outbox] webhook ${h.id}: ${(e as Error).message}`); }
+      const r = segredo === null ? { ok: false, error: 'segredo do webhook ilegível (chave de cifra)' } : await deliver(h.url, segredo, body, ev.eventType, ev.id);
       deliveries++;
       await prisma.webhookDelivery.create({ data: { tenantId: ev.tenantId, webhookId: h.id, outboxEventId: ev.id, status: r.ok ? 'SENT' : 'FAILED', attempts: ev.attempts + 1, responseStatus: r.status ?? null, lastError: r.error ?? null, sentAt: r.ok ? new Date() : null } });
       if (!r.ok) allOk = false;

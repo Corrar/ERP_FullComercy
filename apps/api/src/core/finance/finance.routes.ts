@@ -5,6 +5,7 @@ import * as c from './finance.controller';
 
 const router = Router();
 router.get('/summary', requirePermission('core.finance:view'), asyncHandler(c.getSummary));
+router.get('/dre', requirePermission('core.finance:view'), asyncHandler(c.getDre));
 router.get('/entries', requirePermission('core.finance:view'), asyncHandler(c.getEntries));
 router.post('/entries', requirePermission('core.finance:manage'), asyncHandler(c.postEntry));
 router.patch('/entries/:id', requirePermission('core.finance:manage'), asyncHandler(c.patchEntry));

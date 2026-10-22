@@ -1,12 +1,13 @@
 // src/public/Storefront.tsx — a VITRINE do cliente final: /cardapio/:tenant/:menu
 // Sem login. Lê o cardápio público, monta o carrinho e faz o pedido como convidado
 // (POST /public/food/pedidos/:tenant). Se a loja aceita pagamento online, mostra o QR.
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
 import { ErrorBox, Field, Money } from '@/components/ui';
 import { brl } from '@/lib/format';
+import { useAcompanhamento } from '@/lib/socket';
 
 interface Linha { menuItemId: string; nome: string; preco: number; qtd: number; modifiers: { name: string; price: number }[] }
 
@@ -63,6 +64,10 @@ export function Storefront() {
 export function OrderTracking() {
   const { tenant, numero } = useParams(); const tel = new URLSearchParams(location.search).get('tel') ?? '';
   const t = useGet<any>(`/public/food/pedidos/${tenant}/${numero}`, { telefone: tel });
+  // Tempo real: a cozinha/entrega mexeu no pedido → relê (o GET segue exigindo o telefone).
+  // O token vem novo a cada leitura; fica o primeiro, senão cada atualização reabriria a conexão.
+  const [track, setTrack] = useState<string>(); useEffect(() => { if (t.data?.trackToken) setTrack((x) => x ?? t.data.trackToken); }, [t.data]);
+  const { reload } = t; useAcompanhamento(track, useCallback(() => { void reload(); }, [reload]));
   const guardado = (() => { try { return JSON.parse(sessionStorage.getItem(`fc.pedido.${numero}`) ?? 'null'); } catch { return null; } })();
   const passos = ['OPEN', 'IN_PROGRESS', 'READY', 'COMPLETED'];
   const idx = t.data ? Math.max(passos.indexOf(t.data.status), t.data.cozinha === 'PREPARING' ? 1 : t.data.cozinha === 'READY' ? 2 : 0) : 0;

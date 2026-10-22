@@ -15,6 +15,42 @@ O front espelha a modularidade da API: um registro de módulos (`apps/web/src/ap
 monta o menu e as rotas só do que a empresa tem **ativo** e o usuário **pode**. Cada módulo é
 uma pasta em `apps/web/src/modules/<módulo>` com suas telas; o núcleo fica em `apps/web/src/core`.
 
+## Loja de módulos (como o cliente compra)
+
+O app abre em `/comecar`: a pessoa escolhe o tipo de comércio (Varejo, Food & Delivery, Academia,
+Serviços), liga só as funções que quer — cada uma com preço mensal, total calculado pela API —,
+vê a **prévia** do menu do ERP, vai ao carrinho e, **logada** (e-mail/senha ou Google), finaliza com
+**cartão**, **boleto** ou **Pix Automático**. A primeira compra ganha **7 dias grátis**; a cobrança
+mensal começa depois. Dentro do ERP, o menu **Assinatura** troca funções, forma de pagamento,
+mostra faturas e cancela. Detalhes em `ARCHITECTURE.md` §3.2; preços em
+`apps/api/src/core/billing/catalog.ts`.
+
+Em desenvolvimento: `GOOGLE_AUTH_MOCK=1` (Google simulado) e `BILLING_PROVIDER=mock` (cartão
+`4242 4242 4242 4242` aprova; final `0002` recusa). Os dois são recusados em produção.
+
+## Ambiente de homologação (no ar)
+
+| Parte | Onde | Endereço |
+|---|---|---|
+| Front (loja + ERP) | Vercel, projeto `erp-modular` | https://erp-modular-eta.vercel.app (exige login na Vercel: proteção padrão do time) |
+| API | Render, serviço `erp-modular-api` (free) | o navegador chama `https://erp-modular-eta.vercel.app/api/…`; a Vercel repassa para https://erp-modular-api.onrender.com |
+| Banco | **Neon**, projeto `ERP-Modular` (`empty-haze-70902164`), branch `homologacao`, banco `erp_modular`, Ohio | conexão **direta** (sem `-pooler`) |
+
+`APP_STAGE=staging`: Google simulado e cobrança simulada **ou** Stripe em modo de teste
+(`BILLING_PROVIDER=stripe` + chaves `sk_test_`/`pk_test_`), faixa de aviso na loja. Anti-robô
+Cloudflare Turnstile liga com `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY`. Webhook do Stripe:
+`https://erp-modular-api.onrender.com/public/billing/webhooks/stripe` (`STRIPE_WEBHOOK_SECRET`). Migrations e RLS
+rodam no start (`prisma:deploy && db:rls && start`; o plano free do Render não tem pre-deploy).
+O `DATABASE_URL` da API é colado pelo responsável no painel do Render: a connection string do
+Neon (console → projeto ERP-Modular → Connect, **pooling desligado**) — o executor não lê
+connection string (regra permanente). A API completa sozinha `connect_timeout=20` (cold start do Neon). `apps/api/railway.json`
+fica pronto para o dia em que o Railway liberar deploys nesta conta.
+
+O navegador **não fala com o Render**: `apps/web/vercel.json` reescreve `/api/*` e `/socket.io/*` para
+a API (`VITE_API_URL=/api`, `VITE_SOCKET_POLLING=1`; a Vercel não repassa WebSocket). Com esse salto
+a mais, a API roda com `TRUST_PROXY_HOPS=4` (Vercel → Cloudflare do Render → proxy interno) para o rate
+limit e o Turnstile verem o IP do cliente.
+
 ## Rodar tudo
 
 ```bash
@@ -154,6 +190,10 @@ como convidado para retirada ou entrega, pagamento na entrega ou PIX online, e a
 | `fit-demo` | ACADEMIA | `admin@fit-demo.local` |
 | `oficina-demo` | SERVICOS | `admin@oficina-demo.local` |
 | `posto-demo` | VAREJO + FOOD (`defaultSalesModule: VAREJO`) | `admin@posto-demo.local` |
+| `salao-demo` | BELEZA | `admin@salao-demo.local` |
+| `pet-demo` | PET | `admin@pet-demo.local` |
+| `clinica-demo` | CLINICA | `admin@clinica-demo.local` |
+| `pousada-demo` | HOTEL | `admin@pousada-demo.local` |
 
 Senha: `SEED_ADMIN_PASSWORD` do `.env`.
 

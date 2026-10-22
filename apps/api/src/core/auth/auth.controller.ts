@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { parse } from '../../shared/http';
 import * as auth from './auth.service';
 import type { AuthRequest } from './auth.middleware';
-import { effectivePermissions } from '../rbac/rbac.service';
+import { effectivePermissions, visiblePermissions } from '../rbac/rbac.service';
 import { loadTenantSnapshot } from '../tenancy/tenant-modules.service';
 
 const loginSchema = z.object({
@@ -41,7 +41,7 @@ export async function getMe(req: Request, res: Response) {
   res.json({
     userId: a.userId,
     tenant: { id: snap.id, slug: snap.slug, name: snap.name, settings: snap.settings },
-    permissions: perms.isAdmin ? ['*'] : [...perms.keys],
+    permissions: visiblePermissions(perms),
     modules: [...snap.modules.keys()],
   });
 }

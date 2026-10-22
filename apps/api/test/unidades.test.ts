@@ -8,6 +8,8 @@ import { D, round2, sum } from '../src/shared/money';
 import { AppError } from '../src/shared/errors';
 import { KEYS_REQUIRED_BY_ROUTES, assertAllRequiredKeysAreDeclared } from '../src/core/rbac/rbac.middleware';
 import { allPermissions } from '../src/core/rbac/permissions';
+import { emailDaEmpresa } from '../src/infra/mail-templates';
+import { toCsv } from '../src/shared/csv';
 
 test('placa: antiga, Mercosul, sujeira e inválidas', () => {
   assert.equal(normalizarPlaca('abc-1234'), 'ABC1234');
@@ -56,4 +58,42 @@ test('toda chave cobrada por rota existe no catálogo (depois de montar o app)',
   // E o inverso: chave no catálogo que rota nenhuma cobra é gate só de navegação — pode existir, mas fica listada.
   const soNavegacao = [...catalogo].filter((k) => !KEYS_REQUIRED_BY_ROUTES.has(k));
   assert.ok(soNavegacao.length <= 2, `chaves sem rota: ${soNavegacao.join(', ')}`);
+});
+
+test('busca de cliente: telefone/documento só com número de verdade (≥ 4 dígitos)', async () => {
+  const { digitsQuery } = await import('../src/core/customers/customers.service');
+  assert.equal(digitsQuery('(11) 98888-7777'), '11988887777');
+  assert.equal(digitsQuery('529.982.247-25'), '52998224725');
+  assert.equal(digitsQuery('9888'), '9888');
+  // Contra-prova: texto com dígitos soltos não vira busca de telefone (casaria qualquer um).
+  assert.equal(digitsQuery('Segredo MVJ2K3A1'), undefined);
+  assert.equal(digitsQuery('Mesa 12'), undefined);
+  assert.equal(digitsQuery('123'), undefined);
+});
+
+test('e-mail da empresa: escapa conteúdo, cor e logo inválidos caem no padrão, texto leva o link', () => {
+  const r = emailDaEmpresa({ marca: { nome: 'Loja "A" & <B>', cor: 'red;background:url(x)', logoUrl: 'javascript:alert(1)' }, titulo: 'Olá, <script>', paragrafos: ['1 < 2'], botao: { texto: 'Entrar', url: 'https://app.local/x?a=1&b=2' } });
+  assert.ok(r.html.includes('Loja &quot;A&quot; &amp; &lt;B&gt;')); assert.ok(!r.html.includes('<script>'));
+  assert.ok(r.html.includes('background:#2563eb') && !r.html.includes('url(x)'), 'cor fora de #RRGGBB vira a padrão');
+  assert.ok(!r.html.includes('javascript:'), 'logo só https');
+  assert.ok(r.html.includes('href="https://app.local/x?a=1&amp;b=2"'));
+  assert.ok(r.text.includes('Entrar: https://app.local/x?a=1&b=2') && r.text.startsWith('Olá, <script>'));
+});
+
+test('CSV: fórmula vira texto (injeção), número negativo segue número, aspas e ; escapados', () => {
+  const linhas = toCsv([{ nome: '=HYPERLINK("http://x","clique")', saldo: -5, obs: '@SUM(A1)', ok: 'Ana; "Bia"' }]).replace('﻿', '').split('\r\n');
+  assert.equal(linhas[1], `"'=HYPERLINK(""http://x"",""clique"")";-5;'@SUM(A1);"Ana; ""Bia"""`);
+});
+
+test('perfis-modelo: chave no formato da tela, sem prontuário no Gerente, sem administrar a empresa', async () => {
+  const { MODELOS } = await import('../src/core/rbac/role-templates');
+  const proibidas = ['core.tenant:manage', 'core.users:manage', 'core.roles:manage', 'core.billing:manage'];
+  for (const [m, perfis] of Object.entries(MODELOS)) {
+    assert.equal(new Set(perfis.map((p) => p.key)).size, perfis.length, `perfil repetido em ${m}`);
+    for (const p of perfis) {
+      assert.match(p.key, /^[a-z0-9_]{2,40}$/, `${m}/${p.key}`);
+      assert.ok(!p.permissions.some((k) => proibidas.includes(k)), `${m}/${p.key} administra a empresa`);
+      if (p.key === 'gerente') assert.ok(!p.permissions.some((k) => /prontuario|vet:/.test(k)), `${m}: sigilo de saúde fora do Gerente`);
+    }
+  }
 });

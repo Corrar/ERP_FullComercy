@@ -55,10 +55,13 @@ if (!E2E) {
       assert.ok(wh.secret.length > 20);
       const cli = await A.post('/customers', { name: `Hook ${run}` });
       const os = await A.post('/orders', { customerId: cli.id, items: [{ kind: 'SERVICE', description: 'Lavagem', quantity: 1, unitPrice: 50 }], moduleData: { plate: `HOK${String(Date.now()).slice(-4)}` } });
-      await new Promise((r) => setTimeout(r, 300)); // o outbox grava via setImmediate
-      const d1 = await A.post('/webhooks/events/dispatch');
-      assert.ok(d1.enviados >= 1);
-      const ev = recebidos.find((r) => r.body.type === 'order.created' && r.body.data.orderId === os.id);
+      // O outbox grava via setImmediate: sob carga o evento chega depois de um tempo fixo qualquer
+      // (300 ms falhava às vezes). Despacha até a entrega aparecer, com teto.
+      const achar = () => recebidos.find((r) => r.body.type === 'order.created' && r.body.data.orderId === os.id);
+      let enviados = 0;
+      for (let i = 0; i < 25 && !achar(); i++) { await new Promise((r) => setTimeout(r, 200)); enviados += (await A.post('/webhooks/events/dispatch')).enviados; }
+      assert.ok(enviados >= 1);
+      const ev = achar();
       assert.ok(ev, 'webhook recebeu order.created');
       const esperado = 'sha256=' + createHmac('sha256', wh.secret).update(JSON.stringify(ev!.body)).digest('hex');
       assert.equal(ev!.headers['x-fc-signature'], esperado, 'assinatura HMAC confere');
@@ -67,9 +70,9 @@ if (!E2E) {
       // Endpoint fora do ar: evento fica PENDING com backoff; volta → retry entrega.
       falhar = true;
       await A.post(`/m/servicos/os/${os.serviceOrder.id}/mover`, { to: 'DIAGNOSING' });
-      await new Promise((r) => setTimeout(r, 300));
-      const d2 = await A.post('/webhooks/events/dispatch');
-      assert.ok(d2.comFalha >= 1);
+      let comFalha = 0;
+      for (let i = 0; i < 25 && !comFalha; i++) { await new Promise((r) => setTimeout(r, 200)); comFalha = (await A.post('/webhooks/events/dispatch')).comFalha; }
+      assert.ok(comFalha >= 1);
       const pend = (await A.get('/webhooks/events/list?status=PENDING')).find((e: any) => e.eventType === 'os.status');
       assert.ok(pend && pend.attempts === 1 && new Date(pend.nextAttemptAt) > new Date());
       falhar = false;

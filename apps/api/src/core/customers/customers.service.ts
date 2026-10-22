@@ -1,5 +1,6 @@
 import { ctx } from '../tenancy/tenant-context';
 import { AppError } from '../../shared/errors';
+import { paginar, type Paginacao } from '../../shared/paginacao';
 
 export interface CustomerInput {
   name: string; document?: string; email?: string; phone?: string; code?: string;
@@ -8,11 +9,20 @@ export interface CustomerInput {
 
 const onlyDigits = (s?: string) => (s ? s.replace(/\D/g, '') || undefined : undefined);
 
-export async function list(q?: string) {
-  return ctx().db.customer.findMany({
-    where: q ? { OR: [{ name: { contains: q, mode: 'insensitive' } }, { phone: { contains: onlyDigits(q) ?? q } }, { document: onlyDigits(q) }] } : undefined,
-    orderBy: { name: 'asc' }, take: 100,
-  });
+/** Dígitos para buscar em telefone/documento — só quando a busca É um número (com máscara ou
+ *  não) de pelo menos 4 dígitos. Antes, os dígitos soltos de um texto ("Segredo MVJ2K") viravam
+ *  "2" e casavam todo telefone com 2: a loja via clientes que não procurou. Achado por um e2e que
+ *  falhava conforme o sufixo aleatório da rodada tinha dígito. */
+export function digitsQuery(q?: string): string | undefined {
+  if (!q) return undefined;
+  const bare = q.replace(/[\s().\-/+]/g, '');
+  return /^\d{4,}$/.test(bare) ? bare : undefined;
+}
+
+export async function list(q?: string, p?: Paginacao) {
+  const digits = digitsQuery(q);
+  const where = q ? { OR: [{ name: { contains: q, mode: 'insensitive' as const } }, ...(digits ? [{ phone: { contains: digits } }, { document: digits }] : [])] } : undefined;
+  return paginar(p, 100, (skip, take) => ctx().db.customer.findMany({ where, orderBy: { name: 'asc' }, skip, take }), () => ctx().db.customer.count({ where }));
 }
 
 export async function getById(id: string) {

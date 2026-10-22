@@ -58,7 +58,7 @@ export async function moverTicket(ticketId: string, to: KitchenStatus) {
     if (coreStatus) {
       await tx.order.updateMany({ where: { id: t.foodOrder.orderId, status: { in: ['OPEN', 'CONFIRMED', 'IN_PROGRESS'] } }, data: { status: coreStatus } });
     }
-    events.emit('kitchen.ticket', { tenantId, ticketId, station: t.station, status: to });
+    events.emit('kitchen.ticket', { tenantId, ticketId, station: t.station, status: to, orderId: t.foodOrder.orderId });
     return { ticketId, status: to, kitchenStatus: pior };
   });
 }

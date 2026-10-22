@@ -26,7 +26,7 @@ export const postRetomar = async (req: Request, res: Response) => res.json(await
 export const postTrocarPlano = async (req: Request, res: Response) => res.json(await assin.trocarPlano(String(req.params.id), parse(z.object({ planId: z.string().uuid() }), req.body).planId));
 export const getInadimplentes = async (_req: Request, res: Response) => res.json(await assin.inadimplentes());
 export const getAVencer = async (req: Request, res: Response) => res.json(await assin.aVencer(Number(req.query.dias ?? 7)));
-export const postRodarCobranca = async (_req: Request, res: Response) => res.json(await assin.gerarCobrancasVencidas());
+export const postRodarCobranca = async (_req: Request, res: Response) => res.json(await assin.gerarCobrancasVencidas(new Date(), ctx().tenantId));
 
 // ── Acesso ──
 export const postCheckIn = async (req: Request, res: Response) => res.status(201).json(await acesso.checkInManual(parse(z.object({ customerId: z.string().uuid() }), req.body).customerId));

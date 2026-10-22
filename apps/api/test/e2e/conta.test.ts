@@ -32,14 +32,21 @@ if (!E2E) {
   test('Convite: usuário nasce sem senha utilizável e define a dele pelo link (72 h)', async () => {
     const { outbox } = await import('../../src/infra/mailer');
     const { api: A } = await login('fit-demo');
-    const roles = await A.get('/roles');
-    const operador = roles.roles.find((r: any) => r.key === 'operador');
-    const u = await A.post('/users/invite', { name: `Recepção ${run}`, email: `rec-${run.toLowerCase()}@fit-demo.local`, roleIds: [operador.id] });
-    const token = outbox.at(-1)!.text.match(/token=([A-Za-z0-9_-]+)/)![1];
+    // Os perfis do modelo já nascem com permissões; aqui vale um perfil novo, vazio.
+    const operador = await A.post('/roles', { key: `vazio_${run.toLowerCase()}`, name: `Sem acesso ${run}` });
+    // Marca da empresa no e-mail: cor e logo validados na rota (http é recusado).
+    assert.equal((await A.raw('PUT', '/tenant/settings', { marca: { logoUrl: 'http://inseguro.local/l.png' } })).status, 400);
+    await A.put('/tenant/settings', { marca: { cor: '#0f766e', logoUrl: 'https://cdn.exemplo.com/fit.png' } });
+    const u = await A.post('/users/invite', { name: `Recepção <b>${run}</b>`, email: `rec-${run.toLowerCase()}@fit-demo.local`, roleIds: [operador.id] });
+    const mail = outbox.at(-1)!;
+    assert.match(mail.subject, /convite para a equipe/);
+    assert.ok(mail.html?.includes('background:#0f766e') && mail.html.includes('src="https://cdn.exemplo.com/fit.png"'), 'cor e logo da empresa');
+    assert.ok(mail.html!.includes('Recepção &lt;b&gt;') && !mail.html!.includes('<b>'), 'nome escapado no HTML');
+    const token = mail.text.match(/token=([A-Za-z0-9_-]+)/)![1];
     const r = await api().post('/auth/reset', { token, password: 'Minha-senha-123' });
     assert.equal(r.purpose, 'INVITE'); assert.equal(r.userId, u.id);
     const l = await api().post('/auth/login', { tenant: 'fit-demo', email: u.email, password: 'Minha-senha-123' });
-    assert.deepEqual(l.permissions, [], 'perfil operador ainda sem permissões');
+    assert.deepEqual(l.permissions, [], 'perfil vazio: sem permissões');
     assert.equal((await api(l.accessToken).raw('GET', '/m/academia/planos')).status, 403);
     assert.equal((await api(l.accessToken).raw('GET', '/notifications')).status, 200, 'sino é de qualquer logado');
   });
@@ -50,6 +57,8 @@ if (!E2E) {
     assert.ok('faturamento' in d.hoje && 'aReceber' in d.financeiro);
     assert.deepEqual(Object.keys(d.modulos).sort(), ['FOOD', 'VAREJO']);
     assert.ok('mesasOcupadas' in d.modulos.FOOD && 'caixasAbertos' in d.modulos.VAREJO);
+    // Empresa do seed não tem assinatura (sem corte de plano): o admin vê tudo dos módulos ativos.
+    assert.ok('comissoesPendentes' in d.modulos.VAREJO && 'entregasEmCurso' in d.modulos.FOOD);
   });
 
   test('Etiquetas em PDF com código de barras', async () => {

@@ -10,8 +10,8 @@ export interface DomainEvents {
   'order.status':    { tenantId: string; orderId: string; from: string; to: string };
   'order.paid':      { tenantId: string; orderId: string; amount: string };
   'stock.low':       { tenantId: string; variantId: string; warehouseId: string; onHand: string; minLevel: string };
-  'kitchen.ticket':  { tenantId: string; ticketId: string; station: string; status: string };
-  'delivery.status': { tenantId: string; deliveryId: string; status: string };
+  'kitchen.ticket':  { tenantId: string; ticketId: string; station: string; status: string; orderId?: string };
+  'delivery.status': { tenantId: string; deliveryId: string; status: string; orderId?: string };
   'gym.access':      { tenantId: string; customerId: string | null; allowed: boolean; reason: string };
   'os.status':       { tenantId: string; serviceOrderId: string; status: string };
   'purchase.received': { tenantId: string; purchaseOrderId: string; number: number; total: string };

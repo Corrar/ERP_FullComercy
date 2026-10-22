@@ -31,6 +31,10 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   if (err instanceof AppError) {
     return res.status(err.status).json({ error: err.message, code: err.code, details: err.details });
   }
+  // Corpo recusado pelo leitor do Express (JSON quebrado, arquivo grande demais): erro do cliente, não 500.
+  const tipo = (err as { type?: string } | null)?.type;
+  if (tipo === 'entity.too.large') return res.status(413).json({ error: 'Arquivo ou corpo grande demais.', code: 'PAYLOAD_TOO_LARGE' });
+  if (tipo === 'entity.parse.failed') return res.status(400).json({ error: 'Corpo da requisição inválido (JSON).', code: 'VALIDATION' });
   // Erros conhecidos do Prisma viram respostas legíveis em vez de 500 opaco.
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') {

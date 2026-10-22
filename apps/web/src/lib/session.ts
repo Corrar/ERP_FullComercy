@@ -2,7 +2,7 @@
 // localStorage, exposta por contexto React, e com `can()` / `hasModule()` para a UI.
 import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-export type ModuleKey = 'VAREJO' | 'FOOD' | 'ACADEMIA' | 'SERVICOS';
+export type ModuleKey = 'VAREJO' | 'FOOD' | 'ACADEMIA' | 'SERVICOS' | 'BELEZA' | 'PET' | 'CLINICA' | 'HOTEL';
 export interface Session {
   accessToken: string; refreshToken: string;
   user: { id: string; name: string; email: string };

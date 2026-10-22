@@ -7,6 +7,7 @@ import { runAsTenantSlug } from '../../../core/tenancy/run-as-tenant';
 import { AppError } from '../../../shared/errors';
 import * as orders from '../../../core/orders/order.service';
 import { abertoAgora } from './cardapio.service';
+import { assinarAcompanhamento } from '../../../shared/track-token';
 
 export interface PedidoOnlineInput {
   menuSlug: string;
@@ -68,6 +69,6 @@ export function acompanharPedido(tenantSlug: string, numero: number, telefone: s
   return runAsTenantSlug(tenantSlug, async () => {
     const o = await ctx().db.order.findFirst({ where: { number: numero, customer: { phone: telefone.replace(/\D/g, '') } }, include: { foodOrder: { include: { delivery: { select: { status: true, courier: { select: { name: true } } } } } } } });
     if (!o) throw AppError.notFound('Pedido');
-    return { numero: o.number, status: o.status, cozinha: o.foodOrder?.kitchenStatus, entrega: o.foodOrder?.delivery ?? null, total: o.total, criadoEm: o.createdAt };
+    return { numero: o.number, status: o.status, cozinha: o.foodOrder?.kitchenStatus, entrega: o.foodOrder?.delivery ?? null, total: o.total, criadoEm: o.createdAt, trackToken: assinarAcompanhamento(ctx().tenantId, o.id) };
   });
 }

@@ -2,6 +2,7 @@
 // request HTTP: jobs de plataforma (cobrança recorrente), rotas públicas que descobrem o tenant
 // pelo slug (cardápio online, webhook da catraca) e scripts operacionais.
 // `userId` NULL marca que ninguém humano fez: auditoria e histórico gravam "sistema".
+import type { ModuleKey } from '@prisma/client';
 import { prismaForTenant } from '../../infra/prisma';
 import { loadTenantSnapshot } from './tenant-modules.service';
 import { runWithContext } from './tenant-context';
@@ -24,7 +25,7 @@ export async function runAsTenantSlug<T>(slug: string, fn: () => Promise<T>): Pr
 }
 
 /** Itera todos os tenants com um módulo ativo (para jobs). */
-export async function forEachTenantWithModule(moduleKey: 'VAREJO' | 'FOOD' | 'ACADEMIA' | 'SERVICOS', fn: (tenantId: string) => Promise<void>) {
+export async function forEachTenantWithModule(moduleKey: ModuleKey, fn: (tenantId: string) => Promise<void>) {
   const rows = await prisma.tenantModule.findMany({ where: { moduleKey, enabled: true, tenant: { status: 'ACTIVE' } }, select: { tenantId: true } });
   for (const { tenantId } of rows) {
     try { await runAsTenant(tenantId, () => fn(tenantId)); }

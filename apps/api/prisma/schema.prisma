@@ -55,6 +55,10 @@ enum ModuleKey {
   FOOD
   ACADEMIA
   SERVICOS
+  BELEZA
+  PET
+  CLINICA
+  HOTEL
 }
 
 enum TenantStatus {
@@ -140,6 +144,10 @@ model Tenant {
   stockCountItems     StockCountItem[]
   purchaseReturns     PurchaseReturn[]
   purchaseReturnItems PurchaseReturnItem[]
+  subscription        Subscription?
+  subscriptionItems   SubscriptionItem[]
+  invoices            Invoice[]
+  billingNotices      BillingNotice[]
   // módulos
   retailGradeAxes        RetailGradeAxis[]
   retailGradeValues      RetailGradeValue[]
@@ -186,8 +194,44 @@ model Tenant {
   svcChecklistItems      SvcChecklistItem[]
   svcAppointments        SvcAppointment[]
   svcAttachments         SvcAttachment[]
+  belProfessionals       BelProfessional[]
+  belServices            BelService[]
+  belAppointments        BelAppointment[]
+  belPackages            BelPackage[]
+  belCustomerPackages    BelCustomerPackage[]
+  belSales               BelSale[]
+  belCommissions         BelCommission[]
+  petAnimals             PetAnimal[]
+  petGrooming            PetGrooming[]
+  petVaccines            PetVaccine[]
+  petRecords             PetRecord[]
+  petSales               PetSale[]
+  cliProfessionals       CliProfessional[]
+  cliInsurances          CliInsurance[]
+  cliPatientProfiles     CliPatientProfile[]
+  cliAppointments        CliAppointment[]
+  cliRecords             CliRecord[]
+  cliCharges             CliCharge[]
+  hotRooms               HotRoom[]
+  hotReservations        HotReservation[]
+  hotStays               HotStay[]
+  logo                   TenantLogo?
 
   @@map("core_tenants")
+}
+
+/// Logo da empresa (tela Empresa): aparece no menu do sistema, na página de acesso da equipe
+/// (`/e/<slug>`) e nos e-mails. Os bytes ficam aqui (até 256 KB, PNG/JPEG/WebP conferidos pela
+/// assinatura do arquivo) e saem por `GET /public/marca/:slug/logo`. Uma por empresa.
+model TenantLogo {
+  tenantId  String   @id @map("tenant_id") @db.Uuid
+  mime      String   @db.VarChar(20)
+  data      Bytes
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("core_tenant_logos")
 }
 
 /// Quais módulos a empresa contratou/ativou. Ausência de linha = módulo desligado.
@@ -219,10 +263,14 @@ model User {
   name         String    @db.VarChar(120)
   isActive     Boolean   @default(true) @map("is_active")
   lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  /// Conta de comprador (plataforma) dona deste acesso. Preenchido só no admin que nasceu de uma
+  /// compra pela loja de módulos: é o que deixa "entrar com a conta" abrir esta empresa.
+  accountId    String?   @map("account_id") @db.Uuid
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account       Account?         @relation(fields: [accountId], references: [id], onDelete: Restrict)
   roles         UserRole[]
   permissions   UserPermission[]
   refreshTokens RefreshToken[]
@@ -244,6 +292,7 @@ model User {
 
   @@unique([tenantId, email])
   @@unique([tenantId, id])
+  @@index([accountId])
   @@map("core_users")
 }
 
@@ -408,6 +457,13 @@ model Customer {
   vehicles       SvcVehicle[]
   classBookings  GymClassBooking[]
   appointments   SvcAppointment[]
+  belAppointments     BelAppointment[]
+  belPackages         BelCustomerPackage[]
+  pets                PetAnimal[]
+  cliProfile          CliPatientProfile?
+  cliAppointments     CliAppointment[]
+  cliRecords          CliRecord[]
+  hotReservations     HotReservation[]
 
   @@unique([tenantId, document])
   @@unique([tenantId, code])
@@ -760,6 +816,10 @@ enum OrderChannel {
   DELIVERY
   SUBSCRIPTION
   WORKSHOP
+  SALON
+  PETSHOP
+  CLINIC
+  LODGING
 }
 
 enum OrderItemKind {
@@ -817,6 +877,10 @@ model Order {
   retailSale    RetailSale?
   foodOrder     FoodOrder?
   serviceOrder  SvcServiceOrder?
+  belSale       BelSale?
+  petSale       PetSale?
+  cliCharge     CliCharge?
+  hotStay       HotStay?
   gymMemberships GymMembership[]
   paymentIntents PaymentIntent[]
 
@@ -2335,4 +2399,730 @@ model SvcAttachment {
   @@unique([tenantId, id])
   @@index([tenantId, serviceOrderId])
   @@map("svc_attachments")
+}
+
+// =====================================================================================
+// 6. ASSINATURA DO SAAS — loja de módulos, conta do comprador, plano e cobrança
+// =====================================================================================
+//
+// `plat_*` é a SEGUNDA família sem `tenant_id` (a primeira é `core_tenants`): a conta do
+// comprador existe ANTES de existir empresa — ela é quem monta o ERP no carrinho e paga. Só o
+// client de PLATAFORMA toca nela; o papel do tenant perde todo privilégio sobre `plat_*` no
+// `001_rls_tenant.sql` (lá não há linha de tenant para a política filtrar).
+// A assinatura em si (`core_subscriptions` e filhas) é da empresa e segue as regras de sempre.
+
+/// CONTA DO COMPRADOR. Login por e-mail+senha ou Google; dona de uma ou mais empresas.
+model Account {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(160)
+  name         String    @db.VarChar(120)
+  /// NULL = conta só-Google (nunca definiu senha).
+  passwordHash String?   @map("password_hash")
+  /// `sub` do ID token do Google. Único: uma conta Google abre uma conta daqui.
+  googleSub    String?   @unique @map("google_sub") @db.VarChar(64)
+  avatarUrl    String?   @map("avatar_url")
+  /// Quando a conta consumiu o teste grátis. O teste é da PRIMEIRA compra: preenchido, não há outro.
+  trialUsedAt  DateTime? @map("trial_used_at") @db.Timestamptz(6)
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users          User[]
+  subscriptions  Subscription[]
+  passwordResets AccountPasswordReset[]
+
+  @@map("plat_accounts")
+}
+
+/// "Esqueci a senha" da CONTA do comprador: token de uso único (1 h), guardado só o hash.
+/// Plataforma (sem tenant): o papel do tenant não toca (REVOKE em 001_rls_tenant.sql).
+model AccountPasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  accountId String    @map("account_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("plat_account_password_resets")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+/// Como a mensalidade é cobrada. Cartão debita sozinho; boleto gera título a cada ciclo;
+/// PIX_AUTO é o Pix Automático (o pagador autoriza uma vez no banco e o débito recorre).
+enum BillingMethod {
+  CARD
+  BOLETO
+  PIX_AUTO
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  FAILED
+  VOID
+}
+
+/// O PLANO DA EMPRESA. Uma por tenant. `amount` é a soma dos itens, recalculada no servidor a
+/// cada mudança (o preço que o front mostra é só exibição). Os itens decidem o que a empresa
+/// PODE usar: `rbac.service` corta as permissões fora do plano.
+model Subscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  tenantId           String             @map("tenant_id") @db.Uuid
+  accountId          String             @map("account_id") @db.Uuid
+  status             SubscriptionStatus @default(TRIALING)
+  method             BillingMethod
+  amount             Decimal            @db.Decimal(14, 2)
+  trialEndsAt        DateTime?          @map("trial_ends_at") @db.Timestamptz(6)
+  currentPeriodStart DateTime           @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd   DateTime           @map("current_period_end") @db.Timestamptz(6)
+  /// Pedido de cancelamento: vale no fim do período já pago (ou do teste).
+  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
+  canceledAt         DateTime?          @map("canceled_at") @db.Timestamptz(6)
+  pastDueSince       DateTime?          @map("past_due_since") @db.Timestamptz(6)
+  /// A cobrança suspendeu a empresa (e só ela a reativa ao receber). Não mexe numa suspensão manual.
+  suspendedByBilling Boolean            @default(false) @map("suspended_by_billing")
+  provider           String             @db.VarChar(30)
+  providerCustomerId String?            @map("provider_customer_id") @db.VarChar(120)
+  /// Referência do meio de pagamento no provedor: cartão tokenizado ou autorização do Pix Automático.
+  /// O número do cartão NUNCA chega aqui (nem à API): o navegador tokeniza no provedor.
+  paymentRef         String?            @map("payment_ref") @db.VarChar(160)
+  /// Exibição: bandeira/final do cartão, estado da autorização do Pix Automático, QR de autorização.
+  paymentInfo        Json               @default("{}") @map("payment_info")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account  Account            @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  items    SubscriptionItem[]
+  invoices Invoice[]
+  notices  BillingNotice[]
+
+  @@unique([tenantId])
+  @@unique([tenantId, id])
+  @@index([status, currentPeriodEnd])
+  @@map("core_subscriptions")
+}
+
+/// Uma função contratada (chave do catálogo em `core/billing/catalog.ts`) e o preço do dia da contratação.
+model SubscriptionItem {
+  id             String     @id @default(uuid()) @db.Uuid
+  tenantId       String     @map("tenant_id") @db.Uuid
+  subscriptionId String     @map("subscription_id") @db.Uuid
+  featureKey     String     @map("feature_key") @db.VarChar(60)
+  moduleKey      ModuleKey? @map("module_key")
+  label          String     @db.VarChar(120)
+  price          Decimal    @db.Decimal(14, 2)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, subscriptionId, featureKey])
+  @@unique([tenantId, id])
+  @@map("core_subscription_items")
+}
+
+/// Uma mensalidade. Nasce no fim de cada período (o job `billing.cycle`) ou na compra sem teste.
+model Invoice {
+  id             String        @id @default(uuid()) @db.Uuid
+  tenantId       String        @map("tenant_id") @db.Uuid
+  subscriptionId String        @map("subscription_id") @db.Uuid
+  amount         Decimal       @db.Decimal(14, 2)
+  status         InvoiceStatus @default(OPEN)
+  method         BillingMethod
+  periodStart    DateTime      @map("period_start") @db.Timestamptz(6)
+  periodEnd      DateTime      @map("period_end") @db.Timestamptz(6)
+  dueAt          DateTime      @map("due_at") @db.Timestamptz(6)
+  paidAt         DateTime?     @map("paid_at") @db.Timestamptz(6)
+  attempts       Int           @default(0)
+  failureReason  String?       @map("failure_reason") @db.VarChar(200)
+  providerRef    String?       @map("provider_ref") @db.VarChar(120)
+  boletoUrl      String?       @map("boleto_url")
+  boletoLine     String?       @map("boleto_line") @db.VarChar(80)
+  pixCode        String?       @map("pix_code")
+  /// O que a fatura cobra quando não é a mensalidade cheia (ex.: "Proporcional: Etiquetas · 20 de 30 dias").
+  note           String?       @db.VarChar(200)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([status, dueAt])
+  @@index([providerRef])
+  @@map("core_invoices")
+}
+
+/// Aviso de cobrança já mandado ao comprador (teste acabando, pagamento recebido/recusado, fatura,
+/// suspensão). Um por tipo + referência: o ciclo e o webhook passam pelo mesmo fato mais de uma
+/// vez (e em mais de uma instância); o e-mail sai uma vez só.
+model BillingNotice {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  subscriptionId String   @map("subscription_id") @db.Uuid
+  kind           String   @db.VarChar(30)
+  /// O fato avisado: fim do teste (data), fatura (id) ou fatura + tentativa, suspensão (data).
+  ref            String   @db.VarChar(120)
+  sentTo         String   @map("sent_to") @db.VarChar(254)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, kind, ref])
+  @@map("core_billing_notices")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MÓDULO BELEZA E ESTÉTICA (bel_*) — salão, barbearia, estética
+// ═════════════════════════════════════════════════════════════════════════════
+
+enum BelAppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_SERVICE
+  DONE
+  NO_SHOW
+  CANCELLED
+}
+
+enum BelCommissionStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+/// Profissional que atende (cabeleireira, barbeiro, esteticista). Comissão padrão em %.
+model BelProfessional {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  name           String   @db.VarChar(80)
+  userId         String?  @map("user_id") @db.Uuid
+  commissionRate Decimal  @default(0) @map("commission_rate") @db.Decimal(5, 2)
+  color          String?  @db.VarChar(9)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments BelAppointment[]
+  sales        BelSale[]
+  commissions  BelCommission[]
+
+  @@unique([tenantId, id])
+  @@map("bel_professionals")
+}
+
+/// Serviço do salão: duração (ocupa a agenda) e preço. Comissão própria sobrepõe a do profissional.
+model BelService {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  name           String   @db.VarChar(120)
+  durationMin    Int      @default(30) @map("duration_min")
+  price          Decimal  @db.Decimal(14, 2)
+  commissionRate Decimal? @map("commission_rate") @db.Decimal(5, 2)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments BelAppointment[]
+  packages     BelPackage[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("bel_services")
+}
+
+/// Horário marcado: um profissional, um serviço, um cliente. Não sobrepõe outro do mesmo profissional.
+model BelAppointment {
+  id             String               @id @default(uuid()) @db.Uuid
+  tenantId       String               @map("tenant_id") @db.Uuid
+  customerId     String               @map("customer_id") @db.Uuid
+  professionalId String               @map("professional_id") @db.Uuid
+  serviceId      String               @map("service_id") @db.Uuid
+  startsAt       DateTime             @map("starts_at") @db.Timestamptz(6)
+  endsAt         DateTime             @map("ends_at") @db.Timestamptz(6)
+  status         BelAppointmentStatus @default(SCHEDULED)
+  notes          String?
+  orderId        String?              @map("order_id") @db.Uuid // a comanda do atendimento
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer     Customer        @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  professional BelProfessional @relation(fields: [tenantId, professionalId], references: [tenantId, id], onDelete: Restrict)
+  service      BelService      @relation(fields: [tenantId, serviceId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, professionalId, startsAt])
+  @@index([tenantId, startsAt])
+  @@map("bel_appointments")
+}
+
+/// Pacote vendável: N sessões de um serviço por um preço, com validade.
+model BelPackage {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String   @db.VarChar(120)
+  serviceId    String   @map("service_id") @db.Uuid
+  sessions     Int
+  price        Decimal  @db.Decimal(14, 2)
+  validityDays Int      @default(180) @map("validity_days")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  service          BelService           @relation(fields: [tenantId, serviceId], references: [tenantId, id], onDelete: Restrict)
+  customerPackages BelCustomerPackage[]
+
+  @@unique([tenantId, id])
+  @@map("bel_packages")
+}
+
+/// Pacote comprado por um cliente: saldo de sessões consumido nos atendimentos.
+model BelCustomerPackage {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  customerId    String   @map("customer_id") @db.Uuid
+  packageId     String   @map("package_id") @db.Uuid
+  sessionsTotal Int      @map("sessions_total")
+  sessionsUsed  Int      @default(0) @map("sessions_used")
+  expiresAt     DateTime @map("expires_at") @db.Timestamptz(6)
+  orderId       String   @map("order_id") @db.Uuid // venda do pacote
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer   @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  package  BelPackage @relation(fields: [tenantId, packageId], references: [tenantId, id], onDelete: Restrict)
+  uses     BelSale[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId])
+  @@map("bel_customer_packages")
+}
+
+/// Extensão 1:1 do pedido: quem atendeu, de qual horário e se usou sessão de pacote.
+model BelSale {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  orderId           String   @map("order_id") @db.Uuid
+  professionalId    String?  @map("professional_id") @db.Uuid
+  appointmentId     String?  @map("appointment_id") @db.Uuid
+  customerPackageId String?  @map("customer_package_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order           Order               @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  professional    BelProfessional?    @relation(fields: [tenantId, professionalId], references: [tenantId, id], onDelete: Restrict)
+  customerPackage BelCustomerPackage? @relation(fields: [tenantId, customerPackageId], references: [tenantId, id], onDelete: Restrict)
+  commissions     BelCommission[]
+
+  @@unique([tenantId, orderId])
+  @@unique([tenantId, id])
+  @@map("bel_sales")
+}
+
+model BelCommission {
+  id             String              @id @default(uuid()) @db.Uuid
+  tenantId       String              @map("tenant_id") @db.Uuid
+  saleId         String              @map("sale_id") @db.Uuid
+  professionalId String              @map("professional_id") @db.Uuid
+  baseAmount     Decimal             @map("base_amount") @db.Decimal(14, 2)
+  rate           Decimal             @db.Decimal(5, 2)
+  amount         Decimal             @db.Decimal(14, 2)
+  status         BelCommissionStatus @default(PENDING)
+  paidAt         DateTime?           @map("paid_at") @db.Timestamptz(6)
+  financeEntryId String?             @map("finance_entry_id") @db.Uuid
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sale         BelSale         @relation(fields: [tenantId, saleId], references: [tenantId, id], onDelete: Cascade)
+  professional BelProfessional @relation(fields: [tenantId, professionalId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, professionalId, status])
+  @@map("bel_commissions")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MÓDULO PET SHOP E VETERINÁRIA (pet_*)
+// ═════════════════════════════════════════════════════════════════════════════
+
+enum PetGroomingStatus {
+  SCHEDULED
+  IN_PROGRESS
+  READY
+  DELIVERED
+  NO_SHOW
+  CANCELLED
+}
+
+/// O animal; o tutor é um cliente do core.
+model PetAnimal {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  customerId String    @map("customer_id") @db.Uuid
+  name       String    @db.VarChar(60)
+  species    String    @db.VarChar(20) // CAO, GATO, OUTRO
+  breed      String?   @db.VarChar(60)
+  sex        String?   @db.VarChar(1) // M, F
+  birthDate  DateTime? @map("birth_date") @db.Date
+  weightKg   Decimal?  @map("weight_kg") @db.Decimal(6, 2)
+  size       String?   @db.VarChar(1) // P, M, G
+  allergies  String?
+  notes      String?
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer      @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  grooming PetGrooming[]
+  vaccines PetVaccine[]
+  records  PetRecord[]
+  sales    PetSale[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId])
+  @@index([tenantId, name])
+  @@map("pet_animals")
+}
+
+/// Banho e tosa: horário, o que fazer, e o andamento até o tutor buscar.
+model PetGrooming {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  petId       String            @map("pet_id") @db.Uuid
+  scheduledAt DateTime          @map("scheduled_at") @db.Timestamptz(6)
+  durationMin Int               @default(60) @map("duration_min")
+  services    String            @db.VarChar(200) // "Banho + tosa higiênica"
+  price       Decimal           @default(0) @db.Decimal(14, 2)
+  status      PetGroomingStatus @default(SCHEDULED)
+  taxiDog     Boolean           @default(false) @map("taxi_dog")
+  notes       String?
+  orderId     String?           @map("order_id") @db.Uuid
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pet    PetAnimal @relation(fields: [tenantId, petId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, scheduledAt])
+  @@map("pet_grooming")
+}
+
+/// Vacina aplicada e a próxima dose (lembrete).
+model PetVaccine {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  petId     String    @map("pet_id") @db.Uuid
+  name      String    @db.VarChar(80)
+  appliedAt DateTime  @map("applied_at") @db.Date
+  nextDueAt DateTime? @map("next_due_at") @db.Date
+  lot       String?   @db.VarChar(40)
+  vetName   String?   @map("vet_name") @db.VarChar(80)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pet    PetAnimal @relation(fields: [tenantId, petId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, nextDueAt])
+  @@map("pet_vaccines")
+}
+
+/// Prontuário: consulta, retorno, exame. Retorno marcado vira lembrete.
+model PetRecord {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  petId        String    @map("pet_id") @db.Uuid
+  kind         String    @db.VarChar(20) // CONSULTA, RETORNO, EXAME, CIRURGIA
+  date         DateTime  @db.Timestamptz(6)
+  complaint    String?
+  diagnosis    String?
+  prescription String?
+  weightKg     Decimal?  @map("weight_kg") @db.Decimal(6, 2)
+  vetName      String?   @map("vet_name") @db.VarChar(80)
+  returnAt     DateTime? @map("return_at") @db.Date
+  userId       String?   @map("user_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pet    PetAnimal @relation(fields: [tenantId, petId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, petId, date])
+  @@index([tenantId, returnAt])
+  @@map("pet_records")
+}
+
+/// Extensão 1:1 do pedido: para qual pet foi e de qual banho/tosa veio.
+model PetSale {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  orderId    String   @map("order_id") @db.Uuid
+  petId      String?  @map("pet_id") @db.Uuid
+  groomingId String?  @map("grooming_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order      @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  pet    PetAnimal? @relation(fields: [tenantId, petId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, orderId])
+  @@unique([tenantId, id])
+  @@map("pet_sales")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MÓDULO CLÍNICA E CONSULTÓRIO (cli_*)
+// ═════════════════════════════════════════════════════════════════════════════
+
+enum CliAppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  ARRIVED
+  DONE
+  NO_SHOW
+  CANCELLED
+}
+
+enum CliPayer {
+  PARTICULAR
+  CONVENIO
+}
+
+model CliProfessional {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  name               String   @db.VarChar(80)
+  specialty          String?  @db.VarChar(80)
+  registry           String?  @db.VarChar(30) // CRM, CRO, CRP…
+  userId             String?  @map("user_id") @db.Uuid
+  defaultDurationMin Int      @default(30) @map("default_duration_min")
+  defaultPrice       Decimal  @default(0) @map("default_price") @db.Decimal(14, 2)
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments CliAppointment[]
+  records      CliRecord[]
+
+  @@unique([tenantId, id])
+  @@map("cli_professionals")
+}
+
+/// Convênio: quem paga a consulta no lugar do paciente, pelo valor da tabela dele.
+model CliInsurance {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(80)
+  code      String?  @db.VarChar(30) // registro ANS
+  price     Decimal  @default(0) @db.Decimal(14, 2) // valor da consulta na tabela do convênio
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patients     CliPatientProfile[]
+  appointments CliAppointment[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("cli_insurances")
+}
+
+/// Ficha do paciente (o paciente é um cliente do core; aqui o que só a clínica precisa).
+model CliPatientProfile {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  customerId    String    @map("customer_id") @db.Uuid
+  birthDate     DateTime? @map("birth_date") @db.Date
+  insuranceId   String?   @map("insurance_id") @db.Uuid
+  insuranceCard String?   @map("insurance_card") @db.VarChar(40)
+  allergies     String?
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer  Customer      @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  insurance CliInsurance? @relation(fields: [tenantId, insuranceId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, customerId])
+  @@unique([tenantId, id])
+  @@map("cli_patient_profiles")
+}
+
+model CliAppointment {
+  id             String               @id @default(uuid()) @db.Uuid
+  tenantId       String               @map("tenant_id") @db.Uuid
+  customerId     String               @map("customer_id") @db.Uuid
+  professionalId String               @map("professional_id") @db.Uuid
+  startsAt       DateTime             @map("starts_at") @db.Timestamptz(6)
+  endsAt         DateTime             @map("ends_at") @db.Timestamptz(6)
+  kind           String               @default("CONSULTA") @db.VarChar(20) // CONSULTA, RETORNO, EXAME, PROCEDIMENTO
+  payer          CliPayer             @default(PARTICULAR)
+  insuranceId    String?              @map("insurance_id") @db.Uuid
+  price          Decimal              @default(0) @db.Decimal(14, 2)
+  status         CliAppointmentStatus @default(SCHEDULED)
+  notes          String?
+  orderId        String?              @map("order_id") @db.Uuid
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer     Customer        @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  professional CliProfessional @relation(fields: [tenantId, professionalId], references: [tenantId, id], onDelete: Restrict)
+  insurance    CliInsurance?   @relation(fields: [tenantId, insuranceId], references: [tenantId, id], onDelete: Restrict)
+  records      CliRecord[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, professionalId, startsAt])
+  @@index([tenantId, startsAt])
+  @@map("cli_appointments")
+}
+
+/// Prontuário (evolução). Só quem tem `cli.prontuario:*` lê ou escreve.
+model CliRecord {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  customerId     String    @map("customer_id") @db.Uuid
+  professionalId String    @map("professional_id") @db.Uuid
+  appointmentId  String?   @map("appointment_id") @db.Uuid
+  date           DateTime  @db.Timestamptz(6)
+  anamnesis      String?
+  evolution      String?
+  prescription   String?
+  returnAt       DateTime? @map("return_at") @db.Date
+  userId         String?   @map("user_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer     Customer        @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  professional CliProfessional @relation(fields: [tenantId, professionalId], references: [tenantId, id], onDelete: Restrict)
+  appointment  CliAppointment? @relation(fields: [tenantId, appointmentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId, date])
+  @@map("cli_records")
+}
+
+/// Extensão 1:1 do pedido: a consulta cobrada e quem paga.
+model CliCharge {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  orderId       String   @map("order_id") @db.Uuid
+  appointmentId String?  @map("appointment_id") @db.Uuid
+  payer         CliPayer @default(PARTICULAR)
+  insuranceId   String?  @map("insurance_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, orderId])
+  @@unique([tenantId, id])
+  @@map("cli_charges")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MÓDULO HOTELARIA E POUSADA (hot_*)
+// ═════════════════════════════════════════════════════════════════════════════
+
+enum HotRoomStatus {
+  AVAILABLE
+  OCCUPIED
+  CLEANING
+  MAINTENANCE
+}
+
+enum HotReservationStatus {
+  BOOKED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+}
+
+model HotRoom {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @map("tenant_id") @db.Uuid
+  number    String        @db.VarChar(10)
+  type      String        @db.VarChar(40) // Standard, Luxo, Suíte…
+  capacity  Int           @default(2)
+  dailyRate Decimal       @map("daily_rate") @db.Decimal(14, 2)
+  status    HotRoomStatus @default(AVAILABLE)
+  notes     String?
+  isActive  Boolean       @default(true) @map("is_active")
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reservations HotReservation[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, id])
+  @@map("hot_rooms")
+}
+
+/// Reserva: um quarto por período [checkIn, checkOut). Não sobrepõe outra do mesmo quarto.
+model HotReservation {
+  id           String               @id @default(uuid()) @db.Uuid
+  tenantId     String               @map("tenant_id") @db.Uuid
+  customerId   String               @map("customer_id") @db.Uuid
+  roomId       String               @map("room_id") @db.Uuid
+  checkIn      DateTime             @map("check_in") @db.Date
+  checkOut     DateTime             @map("check_out") @db.Date
+  guests       Int                  @default(1)
+  dailyRate    Decimal              @map("daily_rate") @db.Decimal(14, 2)
+  status       HotReservationStatus @default(BOOKED)
+  source       String?              @db.VarChar(30) // balcão, telefone, site, OTA
+  notes        String?
+  orderId      String?              @map("order_id") @db.Uuid // a conta do hóspede
+  checkedInAt  DateTime?            @map("checked_in_at") @db.Timestamptz(6)
+  checkedOutAt DateTime?            @map("checked_out_at") @db.Timestamptz(6)
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  room     HotRoom  @relation(fields: [tenantId, roomId], references: [tenantId, id], onDelete: Restrict)
+  stay     HotStay?
+
+  @@unique([tenantId, id])
+  @@index([tenantId, roomId, checkIn])
+  @@index([tenantId, checkIn])
+  @@map("hot_reservations")
+}
+
+/// Extensão 1:1 do pedido: a conta da hospedagem (diárias + consumo).
+model HotStay {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  orderId       String   @map("order_id") @db.Uuid
+  reservationId String   @map("reservation_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order       Order          @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  reservation HotReservation @relation(fields: [tenantId, reservationId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, orderId])
+  @@unique([tenantId, reservationId])
+  @@unique([tenantId, id])
+  @@map("hot_stays")
 }

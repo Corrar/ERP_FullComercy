@@ -20,7 +20,10 @@ export async function sendMail(mail: Mail): Promise<{ provider: 'smtp' | 'consol
     return { provider: 'smtp' };
   }
   outbox.push(mail); if (outbox.length > 50) outbox.shift();
-  console.log(`[mail:console] para ${mail.to} · ${mail.subject}\n${mail.text}`);
+  // Corpo (com link de senha de uso único) só no log da máquina local; em homologação o log é
+  // compartilhado e guardado — lá sai só o aviso de que nada foi enviado.
+  if (env.APP_STAGE === 'local') console.log(`[mail:console] para ${mail.to} · ${mail.subject}\n${mail.text}`);
+  else console.warn(`[mail:console] NÃO ENVIADO (sem SMTP_HOST): para ${mail.to} · ${mail.subject}`);
   return { provider: 'console' };
 }
 

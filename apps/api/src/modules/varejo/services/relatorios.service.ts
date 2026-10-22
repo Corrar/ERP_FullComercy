@@ -17,6 +17,26 @@ export async function vendasPorHora(from: Date, to: Date) {
      GROUP BY 1 ORDER BY 1`;
 }
 
+/** Resumo do período: vendas, faturamento, ticket médio e peças por venda. */
+export async function resumo(from: Date, to: Date) {
+  const [r] = await ctx().db.$queryRaw<{ vendas: number; total: string | null; ticket_medio: string | null; pecas_por_venda: string | null }[]>`
+    SELECT COUNT(*)::int AS vendas, SUM(o.total)::text AS total, AVG(o.total)::text AS ticket_medio,
+           (SELECT SUM(i.quantity) FROM core_order_items i JOIN core_orders o2 ON o2.id = i.order_id
+             WHERE o2.tenant_id = ${ctx().tenantId}::uuid AND o2.module_key = 'VAREJO' AND o2.status = 'COMPLETED' AND o2.completed_at BETWEEN ${from} AND ${to} AND i.kind = 'PRODUCT')::numeric
+             / NULLIF(COUNT(*), 0) AS pecas_por_venda
+      FROM core_orders o WHERE o.tenant_id = ${ctx().tenantId}::uuid AND o.module_key = 'VAREJO' AND o.status = 'COMPLETED' AND o.completed_at BETWEEN ${from} AND ${to}`;
+  return { vendas: r.vendas, total: r.total ?? '0', ticketMedio: r.ticket_medio ?? '0', pecasPorVenda: r.pecas_por_venda ? Number(r.pecas_por_venda).toFixed(1) : '0' };
+}
+
+/** Por forma de pagamento: quanto entrou em cada meio (pagamento misto conta em cada um). */
+export async function vendasPorPagamento(from: Date, to: Date) {
+  return ctx().db.$queryRaw<{ meio: string; vendas: number; total: string; ticket_medio: string }[]>`
+    SELECT p.method AS meio, COUNT(DISTINCT o.id)::int AS vendas, SUM(p.amount)::text AS total, (SUM(p.amount) / COUNT(DISTINCT o.id))::text AS ticket_medio
+      FROM core_order_payments p JOIN core_orders o ON o.id = p.order_id
+     WHERE p.tenant_id = ${ctx().tenantId}::uuid AND o.module_key = 'VAREJO' AND o.status = 'COMPLETED' AND o.completed_at BETWEEN ${from} AND ${to}
+     GROUP BY 1 ORDER BY SUM(p.amount) DESC`;
+}
+
 /** Curva ABC por produto (80/15/5 do faturamento). */
 export async function curvaAbc(from: Date, to: Date) {
   const rows = await ctx().db.$queryRaw<{ produto: string; sku: string; qtd: string; total: string }[]>`

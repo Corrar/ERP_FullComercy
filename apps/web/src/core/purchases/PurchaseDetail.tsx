@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { post } from '@/lib/api';
+import { post, put } from '@/lib/api';
+import { EscolherProduto, type VarianteMin } from '@/components/EscolherProduto';
 import { useAction, useGet } from '@/lib/use-api';
 import { Badge, Card, ErrorBox, Field, Form, Modal, Money, Table } from '@/components/ui';
 import { d, dt } from '@/lib/format';
 
 export function PurchaseDetail() {
-  const { id } = useParams(); const po = useGet<any>(`/purchases/${id}`); const [receber, setReceber] = useState(false); const [devolver, setDevolver] = useState(false);
+  const { id } = useParams(); const po = useGet<any>(`/purchases/${id}`); const [receber, setReceber] = useState(false); const [devolver, setDevolver] = useState(false); const [editarItens, setEditarItens] = useState(false);
   const enviar = useAction(async () => { await post(`/purchases/${id}/ordered`); await po.reload(); });
   const recebe = useAction(async (v: Record<string, any>) => {
     const items = po.data.items.map((i: any) => ({ itemId: i.id, quantity: Number(v[`q_${i.id}`] ?? 0) })).filter((x: any) => x.quantity > 0);
@@ -21,7 +22,7 @@ export function PurchaseDetail() {
   const c = po.data;
   return <div className="grid">
     <div className="row between"><h1 style={{ margin: 0 }}>Compra #{c.number} <Badge s={c.status} /></h1><div className="row">
-      {c.status === 'DRAFT' && <button className="btn primary" onClick={() => void enviar.run()}>Enviar ao fornecedor</button>}
+      {c.status === 'DRAFT' && <><button className="btn" onClick={() => setEditarItens(true)}>Editar itens</button><button className="btn primary" onClick={() => void enviar.run()}>Enviar ao fornecedor</button></>}
       {['ORDERED', 'PARTIAL'].includes(c.status) && <button className="btn primary" onClick={() => setReceber(true)}>Receber</button>}
       {['RECEIVED', 'PARTIAL'].includes(c.status) && <button className="btn" onClick={() => setDevolver(true)}>Devolver ao fornecedor</button>}
       {['DRAFT', 'ORDERED'].includes(c.status) && <button className="btn danger" onClick={() => void cancelar.run()}>Cancelar</button>}</div></div>
@@ -37,5 +38,28 @@ export function PurchaseDetail() {
     <Modal title="Devolver ao fornecedor" open={devolver} onClose={() => setDevolver(false)}><ErrorBox error={devolve.error} /><Form onSubmit={(v) => void devolve.run(v)} busy={devolve.busy} submitLabel="Registrar devolução">
       {c.items.map((i: any) => <Field key={i.id} label={`${i.variant.product.name} — recebido ${i.receivedQty}`}><input className="input" name={`q_${i.variantId}`} type="number" step="0.001" defaultValue={0} /></Field>)}
       <Field label="Motivo"><input className="input" name="reason" required /></Field></Form></Modal>
+    <Modal title="Itens do rascunho" open={editarItens} onClose={() => setEditarItens(false)} wide>{editarItens && <ItensRascunho compra={c} onDone={async () => { setEditarItens(false); await po.reload(); }} />}</Modal>
+  </div>;
+}
+
+interface Linha { variantId: string; nome: string; sku: string; quantity: number; unitCost: number }
+/** Enquanto é rascunho, a lista de itens é trocada inteira (PUT /purchases/:id/items). */
+function ItensRascunho({ compra, onDone }: { compra: any; onDone: () => void }) {
+  const [linhas, setLinhas] = useState<Linha[]>(compra.items.map((i: any) => ({ variantId: i.variantId, nome: i.variant.product.name, sku: i.variant.sku, quantity: Number(i.quantity), unitCost: Number(i.unitCost) })));
+  const [novo, setNovo] = useState<VarianteMin | null>(null);
+  const salvar = useAction(async () => { if (!linhas.length) throw new Error('A compra precisa de pelo menos um item.'); await put(`/purchases/${compra.id}/items`, { items: linhas.map((l) => ({ variantId: l.variantId, quantity: l.quantity, unitCost: l.unitCost })) }); onDone(); });
+  const muda = (i: number, k: 'quantity' | 'unitCost', v: number) => setLinhas((ls) => ls.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
+  const total = linhas.reduce((s, l) => s + l.quantity * l.unitCost, 0);
+  return <div className="grid" style={{ gap: 12 }}>
+    <table className="table"><thead><tr><th>Produto</th><th className="right">Qtd</th><th className="right">Custo unit.</th><th className="right">Total</th><th /></tr></thead><tbody>
+      {linhas.map((l, i) => <tr key={`${l.variantId}-${i}`}><td>{l.nome}<div className="muted">{l.sku}</div></td>
+        <td className="right"><input className="input" type="number" min={0.001} step="0.001" value={l.quantity} onChange={(e) => muda(i, 'quantity', Number(e.target.value))} style={{ width: 100 }} aria-label={`Quantidade ${l.sku}`} /></td>
+        <td className="right"><input className="input" type="number" min={0} step="0.0001" value={l.unitCost} onChange={(e) => muda(i, 'unitCost', Number(e.target.value))} style={{ width: 110 }} aria-label={`Custo ${l.sku}`} /></td>
+        <td className="right"><Money v={l.quantity * l.unitCost} /></td><td><button className="btn" onClick={() => setLinhas((ls) => ls.filter((_, j) => j !== i))}>✕</button></td></tr>)}</tbody></table>
+    <div className="row" style={{ alignItems: 'flex-end' }}><div className="grow"><EscolherProduto value={novo} onChange={setNovo} rotulo="Adicionar produto" /></div>
+      <button className="btn" disabled={!novo} onClick={() => { if (novo) { setLinhas((ls) => [...ls, { variantId: novo.id, nome: novo.nome, sku: novo.sku, quantity: 1, unitCost: 0 }]); setNovo(null); } }}>Adicionar</button></div>
+    <div className="row between"><span className="muted">Frete não muda aqui.</span><strong>Itens <Money v={total} /></strong></div>
+    <ErrorBox error={salvar.error} />
+    <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn primary" disabled={salvar.busy} onClick={() => void salvar.run()}>Salvar itens</button></div>
   </div>;
 }

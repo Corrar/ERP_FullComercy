@@ -1,8 +1,10 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-17. 250 rotas.
+> Gerado por `npm run docs:api` em 2026-10-22. 351 rotas.
 
-Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado.
+Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
+
+Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/companies/:id/session` e `/account/checkout` exigem o token da CONTA do comprador (o de `/account/login|register|google`), que não abre rota de empresa — e vice-versa. `/billing/*` segue aberto para empresa suspensa.
 
 ## Público
 
@@ -16,7 +18,24 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `POST` | `/auth/forgot` |  |
 | `POST` | `/auth/reset` |  |
 | `GET` | `/auth/me` |  |
+| `GET` | `/public/payments/link/:token` |  |
 | `POST` | `/public/payments/:provider/webhook` |  |
+| `GET` | `/public/billing/catalog` |  |
+| `POST` | `/public/billing/quote` |  |
+| `POST` | `/public/billing/webhooks/:provider` |  |
+| `GET` | `/public/marca/:slug` |  |
+| `GET` | `/public/marca/:slug/logo` |  |
+| `POST` | `/account/register` |  |
+| `POST` | `/account/login` |  |
+| `POST` | `/account/google` |  |
+| `POST` | `/account/forgot` |  |
+| `POST` | `/account/reset` |  |
+| `GET` | `/account/me` |  |
+| `POST` | `/account/companies/:tenantId/session` |  |
+| `POST` | `/account/companies/:tenantId/reenviar-acesso` |  |
+| `GET` | `/account/companies/:tenantId/assinatura` |  |
+| `POST` | `/account/billing/card-setup` |  |
+| `POST` | `/account/checkout` |  |
 | `GET` | `/public/food/cardapio/:tenant/:menu` |  |
 | `POST` | `/public/food/pedidos/:tenant` |  |
 | `GET` | `/public/food/pedidos/:tenant/:numero` |  |
@@ -30,6 +49,8 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `GET` | `/platform/tenants` |  |
 | `PATCH` | `/platform/tenants/:id/status` |  |
 | `PUT` | `/platform/tenants/:id/modules/:key` |  |
+| `GET` | `/platform/segredos` |  |
+| `POST` | `/platform/segredos/recifrar` |  |
 | `GET` | `/platform/modules` |  |
 
 ## Core · audit
@@ -37,6 +58,19 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | Método | Rota | Permissão |
 |---|---|---|
 | `GET` | `/audit/` | `core.tenant:manage` |
+
+## Core · billing
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/billing/subscription` | `core.billing:manage` |
+| `PUT` | `/billing/subscription/features` | `core.billing:manage` |
+| `POST` | `/billing/subscription/features/preview` | `core.billing:manage` |
+| `POST` | `/billing/card-setup` | `core.billing:manage` |
+| `PUT` | `/billing/payment-method` | `core.billing:manage` |
+| `POST` | `/billing/invoices/:id/pay` | `core.billing:manage` |
+| `POST` | `/billing/subscription/cancel` | `core.billing:manage` |
+| `POST` | `/billing/subscription/reactivate` | `core.billing:manage` |
 
 ## Core · customers
 
@@ -50,6 +84,9 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `PATCH` | `/customers/:id/active` | `core.customers:manage` |
 | `POST` | `/customers/:id/addresses` | `core.customers:manage` |
 | `DELETE` | `/customers/:id/addresses/:addressId` | `core.customers:manage` |
+| `GET` | `/customers/:id/lgpd/export` | `core.customers:lgpd` |
+| `GET` | `/customers/:id/lgpd/pendencias` | `core.customers:lgpd` |
+| `POST` | `/customers/:id/lgpd/anonimizar` | `core.customers:lgpd` |
 
 ## Core · dashboard
 
@@ -62,6 +99,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | Método | Rota | Permissão |
 |---|---|---|
 | `GET` | `/finance/summary` | `core.finance:view` |
+| `GET` | `/finance/dre` | `core.finance:view` |
 | `GET` | `/finance/entries` | `core.finance:view` |
 | `POST` | `/finance/entries` | `core.finance:manage` |
 | `PATCH` | `/finance/entries/:id` | `core.finance:manage` |
@@ -101,6 +139,9 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `GET` | `/payments/providers` | `core.payments:manage` |
 | `GET` | `/payments/intents` | `core.payments:manage` |
 | `POST` | `/payments/intents` | `core.payments:manage` |
+| `GET` | `/payments/intents/:id` | `core.payments:manage` |
+| `GET` | `/payments/config/pix` | `core.payments:manage` |
+| `PUT` | `/payments/config/pix` | `core.payments:manage` |
 | `POST` | `/payments/intents/:id/confirm` | `core.payments:manage` |
 | `POST` | `/payments/intents/:id/cancel` | `core.payments:manage` |
 
@@ -176,6 +217,11 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `PUT` | `/tenant/modules/:key` | `core.tenant:manage` |
 | `GET` | `/tenant/settings` | `core.tenant:manage` |
 | `PUT` | `/tenant/settings` | `core.tenant:manage` |
+| `GET` | `/tenant/primeiros-passos` | `core.tenant:manage` |
+| `POST` | `/tenant/primeiros-passos/dispensar` | `core.tenant:manage` |
+| `GET` | `/tenant/marca` |  |
+| `PUT` | `/tenant/marca/logo` | `core.tenant:manage` |
+| `DELETE` | `/tenant/marca/logo` | `core.tenant:manage` |
 
 ## Core · users
 
@@ -244,6 +290,51 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `GET` | `/m/academia/relatorios/pico` | `gym.matriculas:view` |
 | `GET` | `/m/academia/relatorios/sumidos` | `gym.matriculas:view` |
 
+## Módulo BELEZA
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/m/beleza/profissionais` | `bel.agenda:operate` |
+| `POST` | `/m/beleza/profissionais` | `bel.cadastro:manage` |
+| `PATCH` | `/m/beleza/profissionais/:id` | `bel.cadastro:manage` |
+| `GET` | `/m/beleza/servicos` | `bel.agenda:operate` |
+| `POST` | `/m/beleza/servicos` | `bel.cadastro:manage` |
+| `PATCH` | `/m/beleza/servicos/:id` | `bel.cadastro:manage` |
+| `GET` | `/m/beleza/agenda` | `bel.agenda:operate` |
+| `POST` | `/m/beleza/agenda` | `bel.agenda:operate` |
+| `PATCH` | `/m/beleza/agenda/:id` | `bel.agenda:operate` |
+| `GET` | `/m/beleza/pacotes` | `bel.agenda:operate` |
+| `POST` | `/m/beleza/pacotes` | `bel.pacotes:manage` |
+| `PATCH` | `/m/beleza/pacotes/:id` | `bel.pacotes:manage` |
+| `GET` | `/m/beleza/pacotes/cliente/:customerId` | `bel.agenda:operate` |
+| `GET` | `/m/beleza/comissoes` | `bel.comissoes:view` |
+| `POST` | `/m/beleza/comissoes/pagar` | `bel.comissoes:manage` |
+| `GET` | `/m/beleza/relatorios/profissionais` | `bel.relatorios:view` |
+| `GET` | `/m/beleza/relatorios/servicos` | `bel.relatorios:view` |
+| `GET` | `/m/beleza/relatorios/faltas` | `bel.relatorios:view` |
+
+## Módulo CLINICA
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/m/clinica/profissionais` | `cli.agenda:operate` |
+| `POST` | `/m/clinica/profissionais` | `cli.cadastro:manage` |
+| `PATCH` | `/m/clinica/profissionais/:id` | `cli.cadastro:manage` |
+| `GET` | `/m/clinica/convenios` | `cli.agenda:operate` |
+| `POST` | `/m/clinica/convenios` | `cli.convenios:manage` |
+| `PATCH` | `/m/clinica/convenios/:id` | `cli.convenios:manage` |
+| `GET` | `/m/clinica/convenios-a-receber` | `cli.convenios:manage` |
+| `GET` | `/m/clinica/pacientes/:customerId` | `cli.agenda:operate` |
+| `PUT` | `/m/clinica/pacientes/:customerId/ficha` | `cli.agenda:operate` |
+| `POST` | `/m/clinica/pacientes/:customerId/prontuario` | `cli.prontuario:manage` |
+| `GET` | `/m/clinica/agenda` | `cli.agenda:operate` |
+| `POST` | `/m/clinica/agenda` | `cli.agenda:operate` |
+| `PATCH` | `/m/clinica/agenda/:id` | `cli.agenda:operate` |
+| `GET` | `/m/clinica/recibos/:orderId` | `cli.agenda:operate` |
+| `GET` | `/m/clinica/relatorios/profissionais` | `cli.relatorios:view` |
+| `GET` | `/m/clinica/relatorios/convenios` | `cli.relatorios:view` |
+| `GET` | `/m/clinica/relatorios/faltas` | `cli.relatorios:view` |
+
 ## Módulo FOOD
 
 | Método | Rota | Permissão |
@@ -255,6 +346,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `POST` | `/m/food/comandas` | `food.salao:operate` |
 | `GET` | `/m/food/comandas/:id/conta` | `food.salao:operate` |
 | `POST` | `/m/food/comandas/:id/fechar` | `food.salao:close` |
+| `POST` | `/m/food/comandas/:id/partes` | `food.salao:close` |
 | `POST` | `/m/food/comandas/:id/transferir` | `food.salao:operate` |
 | `POST` | `/m/food/comandas/:id/cancelar` | `food.salao:close` |
 | `GET` | `/m/food/cozinha/fila` | `food.cozinha:view` |
@@ -286,7 +378,41 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `GET` | `/m/food/relatorios/itens` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/tipos` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/horas` | `food.relatorios:view` |
+| `GET` | `/m/food/relatorios/cozinha` | `food.relatorios:view` |
+| `GET` | `/m/food/relatorios/garcons` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/entregadores` | `food.relatorios:view` |
+
+## Módulo HOTEL
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/m/hotel/painel` | `hot.reservas:operate` |
+| `GET` | `/m/hotel/quartos` | `hot.reservas:operate` |
+| `POST` | `/m/hotel/quartos` | `hot.quartos:manage` |
+| `PATCH` | `/m/hotel/quartos/:id` | `hot.quartos:manage` |
+| `POST` | `/m/hotel/quartos/:id/status` | `hot.governanca:operate` |
+| `GET` | `/m/hotel/disponiveis` | `hot.reservas:operate` |
+| `GET` | `/m/hotel/reservas` | `hot.reservas:operate` |
+| `POST` | `/m/hotel/reservas` | `hot.reservas:operate` |
+| `PATCH` | `/m/hotel/reservas/:id` | `hot.reservas:operate` |
+| `POST` | `/m/hotel/reservas/:id/checkout` | `hot.reservas:operate` |
+| `GET` | `/m/hotel/relatorios/ocupacao` | `hot.relatorios:view` |
+
+## Módulo PET
+
+| Método | Rota | Permissão |
+|---|---|---|
+| `GET` | `/m/pet/pets` | `pet.pets:view` |
+| `GET` | `/m/pet/pets/:id` | `pet.pets:view` |
+| `POST` | `/m/pet/pets` | `pet.pets:manage` |
+| `PATCH` | `/m/pet/pets/:id` | `pet.pets:manage` |
+| `GET` | `/m/pet/banho-tosa` | `pet.banho:operate` |
+| `POST` | `/m/pet/banho-tosa` | `pet.banho:operate` |
+| `POST` | `/m/pet/banho-tosa/:id/mover` | `pet.banho:operate` |
+| `POST` | `/m/pet/pets/:id/vacinas` | `pet.vet:manage` |
+| `POST` | `/m/pet/pets/:id/atendimentos` | `pet.vet:manage` |
+| `GET` | `/m/pet/lembretes` | `pet.vet:view` |
+| `GET` | `/m/pet/relatorios/resumo` | `pet.relatorios:view` |
 
 ## Módulo SERVICOS
 
@@ -357,9 +483,11 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `GET` | `/m/varejo/relatorios/vendedores` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/horas` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/abc` | `varejo.relatorios:view` |
+| `GET` | `/m/varejo/relatorios/resumo` | `varejo.relatorios:view` |
+| `GET` | `/m/varejo/relatorios/pagamentos` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/sem-giro` | `varejo.relatorios:view` |
 
-## Catálogo de permissões (51)
+## Catálogo de permissões (75)
 
 | Chave | Descrição | Módulo |
 |---|---|---|
@@ -369,6 +497,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `core.roles:manage` | Gerir perfis e permissões | core |
 | `core.customers:view` | Ver clientes | core |
 | `core.customers:manage` | Criar/editar clientes | core |
+| `core.customers:lgpd` | Atender titular (LGPD): exportar e anonimizar dados de cliente | core |
 | `core.products:view` | Ver produtos | core |
 | `core.products:manage` | Criar/editar produtos | core |
 | `core.stock:view` | Ver estoque | core |
@@ -383,6 +512,7 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `core.suppliers:manage` | Cadastrar fornecedores | core |
 | `core.payments:manage` | Cobrar online (PIX/link) | core |
 | `core.webhooks:manage` | Integrações (webhooks) | core |
+| `core.billing:manage` | Gerir assinatura e pagamento | core |
 | `varejo.pdv:operate` | Operar PDV (abrir caixa, vender) | VAREJO |
 | `varejo.pdv:close` | Fechar caixa | VAREJO |
 | `varejo.grade:manage` | Gerir grades (tamanho/cor) | VAREJO |
@@ -414,6 +544,28 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 | `svc.catalogo:manage` | Gerir catálogo de serviços | SERVICOS |
 | `svc.agenda:operate` | Agendar e atender agenda | SERVICOS |
 | `svc.relatorios:view` | Ver relatórios da oficina | SERVICOS |
+| `bel.agenda:operate` | Agendar e atender | BELEZA |
+| `bel.cadastro:manage` | Cadastrar profissionais e serviços | BELEZA |
+| `bel.pacotes:manage` | Criar pacotes de sessões | BELEZA |
+| `bel.comissoes:view` | Ver comissões dos profissionais | BELEZA |
+| `bel.comissoes:manage` | Pagar comissões | BELEZA |
+| `bel.relatorios:view` | Ver relatórios do salão | BELEZA |
+| `pet.pets:view` | Ver pets e tutores | PET |
+| `pet.pets:manage` | Cadastrar pets | PET |
+| `pet.banho:operate` | Agendar e tocar banho e tosa | PET |
+| `pet.vet:view` | Ver prontuário, vacinas e lembretes | PET |
+| `pet.vet:manage` | Registrar atendimento e vacina | PET |
+| `pet.relatorios:view` | Ver relatórios do pet shop | PET |
+| `cli.agenda:operate` | Agendar, receber e cobrar consultas | CLINICA |
+| `cli.cadastro:manage` | Cadastrar profissionais | CLINICA |
+| `cli.prontuario:view` | Ler prontuário | CLINICA |
+| `cli.prontuario:manage` | Escrever no prontuário | CLINICA |
+| `cli.convenios:manage` | Gerir convênios e repasses | CLINICA |
+| `cli.relatorios:view` | Ver relatórios da clínica | CLINICA |
+| `hot.reservas:operate` | Reservar, fazer check-in e check-out | HOTEL |
+| `hot.quartos:manage` | Cadastrar quartos e diárias | HOTEL |
+| `hot.governanca:operate` | Marcar limpeza e manutenção | HOTEL |
+| `hot.relatorios:view` | Ver ocupação e diária média | HOTEL |
 
 ## Jobs
 
@@ -421,6 +573,9 @@ Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <a
 |---|---|
 | core.outbox-dispatch | 1 min |
 | core.payments-expire | 5 min |
+| core.billing-cycle | 15 min |
+| core.recifrar-segredos | 60 min |
+| core.perfis-modelo | 1440 min |
 | gym.cobranca-recorrente | 360 min |
 | gym.gerar-sessoes | 720 min |
 

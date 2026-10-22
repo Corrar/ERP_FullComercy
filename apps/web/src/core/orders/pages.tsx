@@ -1,23 +1,28 @@
 import { useState } from 'react';
+import { CobrarPix } from '@/core/payments/CobrarPix';
 import { useNavigate, useParams } from 'react-router-dom';
-import { post } from '@/lib/api';
+import { baixarArquivo, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
-import { Badge, Card, ErrorBox, Field, Form, Modal, Money, Table } from '@/components/ui';
+import { Badge, Card, ErrorBox, Field, Form, Modal, Money, Paginador, Table } from '@/components/ui';
 import { dt, st } from '@/lib/format';
 import { useSession } from '@/lib/session';
 
 const STATUS = ['', 'OPEN', 'CONFIRMED', 'IN_PROGRESS', 'READY', 'COMPLETED', 'CANCELLED'];
 export function Orders() {
-  const nav = useNavigate(); const [status, setStatus] = useState(''); const [q, setQ] = useState('');
-  const { data } = useGet<{ rows: any[]; total: number }>('/orders', { status, q, pageSize: 50 });
+  const nav = useNavigate(); const [status, setStatus] = useState(''); const [q, setQ] = useState(''); const [page, setPage] = useState(1);
+  const { data } = useGet<{ rows: any[]; page: number; pageSize: number; total: number }>('/orders', { status, q, page, pageSize: 50 });
+  // CSV pelo cliente da API (Bearer): o link direto para /api ia sem token e voltava 401.
+  const csv = useAction(() => baixarArquivo('/orders', { format: 'csv', status: status || undefined, q: q || undefined, pageSize: 200 }, 'pedidos.csv'));
   return <div>
-    <div className="row between"><h1>Pedidos</h1><div className="row"><input className="input" placeholder="nº ou cliente" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 200 }} />
-      <select className="input" value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 180 }}>{STATUS.map((s) => <option key={s} value={s}>{s ? st(s) : 'Todos os status'}</option>)}</select>
-      <a className="btn" href={`/api/orders?format=csv&status=${status}`} target="_blank" rel="noreferrer">CSV</a></div></div>
+    <div className="row between"><h1>Pedidos</h1><div className="row"><input className="input" placeholder="nº ou cliente" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} style={{ width: 200 }} />
+      <select className="input" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} style={{ width: 180 }}>{STATUS.map((s) => <option key={s} value={s}>{s ? st(s) : 'Todos os status'}</option>)}</select>
+      <button className="btn" onClick={() => void csv.run()} disabled={csv.busy}>CSV</button></div></div>
+    <ErrorBox error={csv.error} />
     <Table rows={data?.rows} onRow={(r) => nav(`/pedidos/${r.id}`)} cols={[
       { h: '#', c: (r) => <span className="mono">{r.number}</span> }, { h: 'Quando', c: (r) => dt(r.createdAt) }, { h: 'Cliente', c: (r) => r.customer?.name ?? '—' },
       { h: 'Módulo', c: (r) => r.moduleKey ?? 'Core' }, { h: 'Canal', c: (r) => r.channel }, { h: 'Itens', c: (r) => r._count.items, right: true }, { h: 'Total', c: (r) => <Money v={r.total} />, right: true }, { h: 'Status', c: (r) => <Badge s={r.status} /> },
     ]} />
+    {data && <Paginador page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />}
   </div>;
 }
 
@@ -34,6 +39,7 @@ export function OrderDetail() {
   return <div className="grid">
     <div className="row between"><h1 style={{ margin: 0 }}>Pedido #{o.number} <Badge s={o.status} /></h1><div className="row">
       {falta > 0.009 && o.status !== 'CANCELLED' && can('core.orders:create') && <button className="btn primary" onClick={() => setPay(true)}>Receber {falta.toFixed(2)}</button>}
+      {o.status !== 'CANCELLED' && o.status !== 'COMPLETED' && <CobrarPix orderId={o.id} falta={falta} onPago={reload} />}
       {['OPEN', 'CONFIRMED', 'IN_PROGRESS', 'READY'].includes(o.status) && can('core.orders:create') && !o.serviceOrder && <button className="btn" onClick={() => void transitar.run('COMPLETED')}>Concluir</button>}
       {o.status !== 'CANCELLED' && can('core.orders:cancel') && <button className="btn danger" onClick={() => setCancel(true)}>Cancelar</button>}
       {o.serviceOrder && <a className="btn" href={`/servicos/os/${o.serviceOrder.id}`}>Abrir OS</a>}</div></div>

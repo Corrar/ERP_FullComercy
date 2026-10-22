@@ -1,5 +1,6 @@
 import { ModuleKey } from '@prisma/client';
 import type { ModuleDefinition } from '../module.contract';
+import { foodLgpd } from './services/lgpd';
 import router, { publicRouter } from './routes/food.routes';
 import { foodSalesStrategy } from './services/food-sales.strategy';
 
@@ -11,6 +12,7 @@ export const foodModule: ModuleDefinition = {
   router,
   publicRouter,
   salesStrategy: foodSalesStrategy,
+  lgpd: foodLgpd,
   permissions: [
     { key: 'food.salao:operate',    label: 'Operar salão (mesas, comandas, pedidos)', module: ModuleKey.FOOD },
     { key: 'food.salao:manage',     label: 'Cadastrar mesas e áreas',                module: ModuleKey.FOOD },

@@ -27,3 +27,24 @@ export const desempenhoEntregadores = (from: Date, to: Date) => ctx().db.$queryR
     FROM food_deliveries d JOIN food_couriers c ON c.id = d.courier_id
    WHERE d.tenant_id = ${ctx().tenantId}::uuid AND d.created_at BETWEEN ${from} AND ${to}
    GROUP BY 1 ORDER BY 2 DESC`;
+
+/** Tempo de cozinha por estação: espera na fila, preparo e total até "pronto" (minutos). */
+export const tempoDeCozinha = (from: Date, to: Date) => ctx().db.$queryRaw<{ estacao: string; tickets: number; espera_min: number | null; preparo_min: number | null; total_min: number | null; acima_20min: number }[]>`
+  SELECT t.station AS estacao, COUNT(*)::int AS tickets,
+         AVG(EXTRACT(EPOCH FROM (t.started_at - t.created_at)) / 60)::float AS espera_min,
+         AVG(EXTRACT(EPOCH FROM (t.ready_at - t.started_at)) / 60)::float AS preparo_min,
+         AVG(EXTRACT(EPOCH FROM (t.ready_at - t.created_at)) / 60)::float AS total_min,
+         COUNT(*) FILTER (WHERE t.ready_at - t.created_at > interval '20 minutes')::int AS acima_20min
+    FROM food_kitchen_tickets t
+   WHERE t.tenant_id = ${ctx().tenantId}::uuid AND t.ready_at IS NOT NULL AND t.created_at BETWEEN ${from} AND ${to}
+   GROUP BY 1 ORDER BY total_min DESC NULLS LAST`;
+
+/** Por garçom: quem lançou as rodadas no salão (a taxa de serviço, lançada no fechamento, fica fora). */
+export const porGarcom = (from: Date, to: Date) => ctx().db.$queryRaw<{ garcom: string; rodadas: number; itens: string; total: string; ticket_medio: string }[]>`
+  SELECT COALESCE(u.name, '(sem registro)') AS garcom, COUNT(DISTINCT o.id)::int AS rodadas,
+         SUM(i.quantity)::text AS itens, SUM(i.total)::text AS total, (SUM(i.total) / COUNT(DISTINCT o.id))::text AS ticket_medio
+    FROM core_orders o JOIN food_orders f ON f.order_id = o.id JOIN core_order_items i ON i.order_id = o.id
+    LEFT JOIN core_users u ON u.id = o.seller_user_id
+   WHERE o.tenant_id = ${ctx().tenantId}::uuid AND f.service_type = 'DINE_IN' AND o.status <> 'CANCELLED'
+     AND i.kind <> 'FEE' AND o.created_at BETWEEN ${from} AND ${to}
+   GROUP BY 1 ORDER BY SUM(i.total) DESC`;

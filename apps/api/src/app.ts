@@ -14,15 +14,16 @@ import { auditHttp } from './shared/audit-http';
 import dashboardRouter from './core/dashboard/dashboard.routes';
 import { prisma } from './infra/prisma';
 import { authenticate } from './core/auth/auth.middleware';
-import { tenantContext } from './core/tenancy/tenant.middleware';
+import { tenantContext, tenantContextAllowSuspended } from './core/tenancy/tenant.middleware';
 import { assertAllRequiredKeysAreDeclared } from './core/rbac/rbac.middleware';
+import { assertModelosUsamChavesDeclaradas } from './core/rbac/role-templates';
 import { salesStrategies } from './core/orders/sales-strategy';
 import { coreSalesStrategy } from './core/orders/core-sales.strategy';
 import { moduleRegistry } from './modules/module.registry';
 import { registerAllModules } from './modules';
 
 import authRouter from './core/auth/auth.routes';
-import tenantRouter from './core/tenancy/tenant.routes';
+import tenantRouter, { publicMarcaRouter } from './core/tenancy/tenant.routes';
 import usersRouter from './core/users/users.routes';
 import rolesRouter from './core/rbac/roles.routes';
 import customersRouter from './core/customers/customers.routes';
@@ -35,6 +36,8 @@ import webhooksRouter from './core/integration/webhooks.routes';
 import notificationsRouter from './core/notifications/notifications.routes';
 import { purchasesRouter, suppliersRouter } from './core/purchases/purchases.routes';
 import paymentsRouter, { publicRouter as paymentsPublicRouter } from './core/payments/payments.routes';
+import accountRouter from './core/account/account.routes';
+import billingRouter, { publicBillingRouter } from './core/billing/billing.routes';
 import { startOutboxPersistence } from './core/integration/outbox.service';
 import { startNotificationListeners } from './core/notifications/notifications.service';
 
@@ -51,6 +54,17 @@ function collect(prefix: string, router: import('express').Router, auth: Mounted
 
 export const corsOrigins = () => env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
 
+/** Origem permitida? Entrada com `*` casa um rótulo de host (ex.: `https://erp-*-corrars-projects.vercel.app`
+ *  para os previews da Vercel); o resto é igualdade exata. localhost sempre passa (dev). */
+export function originAllowed(origin: string): boolean {
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+  return corsOrigins().some((o) => {
+    if (!o.includes('*')) return o === origin;
+    const re = new RegExp('^' + o.split('*').map((p) => p.replace(/[.+?^${}()|[\]\\/]/g, '\\$&')).join('[a-z0-9-]+') + '$');
+    return re.test(origin);
+  });
+}
+
 export function buildApp() {
   // 0. Registro: estratégia do core primeiro, depois cada módulo se apresenta.
   salesStrategies.registerCore(coreSalesStrategy);
@@ -59,22 +73,23 @@ export function buildApp() {
   startNotificationListeners();
 
   const app = express();
-  app.set('trust proxy', 1);
+  app.set('trust proxy', env.TRUST_PROXY_HOPS);
   app.use(helmet());
   app.use(compression());
-  app.use(express.json({ limit: '5mb' }));
+  // O Stripe assina os BYTES do corpo: o webhook precisa do corpo cru além do JSON. Guardado só
+  // nas rotas de webhook (não custa memória no resto).
+  app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { if ((req as { url?: string }).url?.startsWith('/public/billing/webhooks/')) (req as { rawBody?: Buffer }).rawBody = Buffer.from(buf); } }));
   app.use(requestLog);
   app.use(csvMiddleware);
-  app.use(rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: true, legacyHeaders: false }));
+  app.use(rateLimit({ windowMs: 60_000, limit: env.RATE_LIMIT_PER_MIN, standardHeaders: true, legacyHeaders: false }));
 
-  const origins = corsOrigins();
   app.use(cors({
     origin: (origin, cb) => {
-      if (!origin || origins.includes(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+      if (!origin || originAllowed(origin)) return cb(null, true);
       cb(new Error('Bloqueio CORS: origem não permitida'), false);
     },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key', 'X-Turnstile-Token'],
   }));
 
   // 1. Público.
@@ -88,6 +103,10 @@ export function buildApp() {
   MOUNTED_ROUTES.push({ method: 'GET', path: '/health', auth: 'public' }, { method: 'GET', path: '/health/ready', auth: 'public' });
   app.use('/auth', authRouter); collect('/auth', authRouter, 'public');
   app.use('/public/payments', paymentsPublicRouter); collect('/public/payments', paymentsPublicRouter, 'public');
+  // Loja de módulos: vitrine pública e a conta do comprador (token próprio, sem tenant).
+  app.use('/public/billing', publicBillingRouter); collect('/public/billing', publicBillingRouter, 'public');
+  app.use('/public/marca', publicMarcaRouter); collect('/public/marca', publicMarcaRouter, 'public');
+  app.use('/account', accountRouter); collect('/account', accountRouter, 'public');
   moduleRegistry.mountPublic(app);
   for (const m of moduleRegistry.all()) if (m.publicRouter) collect(`/public/${m.basePath}`, m.publicRouter, 'public', m.key);
   // Plataforma: só existe se houver chave configurada.
@@ -103,6 +122,8 @@ export function buildApp() {
     ['/suppliers', suppliersRouter], ['/purchases', purchasesRouter], ['/payments', paymentsRouter],
   ];
   for (const [prefix, router] of core) { app.use(prefix, ...priv, router); collect(prefix, router, 'tenant'); }
+  // Assinatura: a única superfície aberta para a empresa suspensa (é por ela que se paga e volta).
+  app.use('/billing', authenticate, tenantContextAllowSuspended, auditHttp, billingRouter); collect('/billing', billingRouter, 'tenant');
 
   // 3. Privado — módulos, em /m/<módulo>, cada um atrás do seu requireModule.
   moduleRegistry.mountAuthenticated(app, ...priv);
@@ -110,6 +131,7 @@ export function buildApp() {
 
   // 4. Toda chave cobrada por rota tem de existir no catálogo. Falha no boot, não em produção.
   assertAllRequiredKeysAreDeclared();
+  assertModelosUsamChavesDeclaradas();
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -5,16 +5,21 @@ import { Prisma } from '@prisma/client';
 import type { TenantTx } from '../../../infra/prisma';
 import { D, round2, sum } from '../../../shared/money';
 import { ctx } from '../../../core/tenancy/tenant-context';
+import { AppError } from '../../../shared/errors';
 
 export async function calcularComissao(tx: TenantTx, orderId: string) {
   const sale = await tx.retailSale.findFirst({
     where: { orderId },
-    include: { order: { include: { items: { include: { variant: { include: { product: { select: { categoryId: true } } } } } } } }, salesperson: { include: { rules: true } } },
+    include: { order: { include: { items: { include: { variant: { include: { product: { select: { categoryId: true } } } } } } } }, salesperson: true },
   });
   if (!sale?.salesperson) return null;
 
+  // Regras do vendedor E as gerais (sem vendedor): `salesperson.rules` só traz as dele, e a regra
+  // geral por categoria nunca chegava aqui.
   const today = new Date();
-  const vigentes = sale.salesperson.rules.filter((r) => r.validFrom <= today && (!r.validTo || r.validTo >= today));
+  const regras = await tx.retailCommissionRule.findMany({ where: { OR: [{ salespersonId: sale.salespersonId }, { salespersonId: null }] }, orderBy: { validFrom: 'desc' } });
+  // Mais de uma regra vigente no mesmo nível: vale a de vigência mais recente.
+  const vigentes = regras.filter((r) => r.validFrom <= today && (!r.validTo || r.validTo >= today));
   const rateFor = (categoryId: string | null | undefined): Prisma.Decimal => {
     const pick = (f: (r: typeof vigentes[number]) => boolean) => vigentes.find(f)?.rate;
     return D(
@@ -48,8 +53,12 @@ export async function listarComissoes(filter: { salespersonId?: string; status?:
 }
 
 export const listarRegras = () => ctx().db.retailCommissionRule.findMany({ include: { salesperson: { select: { name: true } }, category: { select: { name: true } } }, orderBy: { validFrom: 'desc' } });
-export const criarRegra = (input: { salespersonId?: string; categoryId?: string; rate: number; validFrom: Date; validTo?: Date }) =>
-  ctx().db.retailCommissionRule.create({ data: { ...input, tenantId: ctx().tenantId } });
+export function criarRegra(input: { salespersonId?: string; categoryId?: string; rate: number; validFrom: Date; validTo?: Date }) {
+  // Sem vendedor e sem categoria a regra não casaria com nada: "todos em tudo" é a taxa padrão.
+  if (!input.salespersonId && !input.categoryId) throw AppError.validation('Escolha um vendedor, uma categoria ou os dois. Para a taxa geral de um vendedor, use a taxa padrão dele.');
+  if (input.validTo && input.validTo < input.validFrom) throw AppError.validation('O fim da vigência é antes do início.');
+  return ctx().db.retailCommissionRule.create({ data: { ...input, tenantId: ctx().tenantId } });
+}
 export const removerRegra = (id: string) => ctx().db.retailCommissionRule.delete({ where: { id } });
 
 export async function aprovarComissoes(ids: string[]) {

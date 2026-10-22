@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "description": "FullComercy — ERP SaaS modular e multi-tenant (Node.js + TypeScript + Express 5 + Prisma)",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "scripts": {
     "dev": "ts-node src/server.ts",
     "build": "prisma generate && tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
@@ -15,9 +15,9 @@
     "prisma:deploy": "node scripts/prisma-admin.js migrate deploy",
     "prisma:studio": "node scripts/prisma-admin.js studio",
     "db:seed": "ts-node prisma/seed.ts",
-    "test": "TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register --test 'test/*.test.ts'",
+    "test": "TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register --test test/*.test.ts",
     "smoke:boot": "ts-node -T -e \"require('./src/app').buildApp(); console.log('boot ok')\"",
-    "test:e2e": "E2E=1 TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register --test-concurrency=1 --test 'test/e2e/*.test.ts'",
+    "test:e2e": "E2E=1 TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register --test-concurrency=1 --test test/e2e/*.test.ts",
     "test:all": "npm test && npm run test:e2e",
     "db:rls": "node scripts/apply-rls.js",
     "docs:api": "ts-node -T scripts/gerar-api-md.ts"
@@ -39,6 +39,7 @@
     "nodemailer": "^10.1.2",
     "pdfkit": "^0.20.2",
     "socket.io": "^4.8.4",
+    "stripe": "^19.3.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
@@ -51,6 +52,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/pdfkit": "^0.17.6",
     "prisma": "^6.16.0",
+    "socket.io-client": "^4.8.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }

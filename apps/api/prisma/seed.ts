@@ -13,7 +13,11 @@ async function main() {
   await onboardTenant({ slug: 'fit-demo', name: 'Fit Demo (Academia)', adminEmail: 'admin@fit-demo.local', adminPassword: senha, modules: [ModuleKey.ACADEMIA] });
   await onboardTenant({ slug: 'oficina-demo', name: 'Oficina Demo (Serviços)', adminEmail: 'admin@oficina-demo.local', adminPassword: senha, modules: [ModuleKey.SERVICOS] });
   await onboardTenant({ slug: 'posto-demo', name: 'Posto Demo (Varejo + Food)', adminEmail: 'admin@posto-demo.local', adminPassword: senha, modules: [ModuleKey.VAREJO, ModuleKey.FOOD], settings: { defaultSalesModule: 'VAREJO' } });
-  console.log('seed ok — tenants: loja-demo, burger-demo, fit-demo, oficina-demo, posto-demo');
+  await onboardTenant({ slug: 'salao-demo', name: 'Salão Demo (Beleza)', adminEmail: 'admin@salao-demo.local', adminPassword: senha, modules: [ModuleKey.BELEZA] });
+  await onboardTenant({ slug: 'pet-demo', name: 'Pet Demo (Pet shop)', adminEmail: 'admin@pet-demo.local', adminPassword: senha, modules: [ModuleKey.PET] });
+  await onboardTenant({ slug: 'clinica-demo', name: 'Clínica Demo', adminEmail: 'admin@clinica-demo.local', adminPassword: senha, modules: [ModuleKey.CLINICA] });
+  await onboardTenant({ slug: 'pousada-demo', name: 'Pousada Demo (Hotelaria)', adminEmail: 'admin@pousada-demo.local', adminPassword: senha, modules: [ModuleKey.HOTEL] });
+  console.log('seed ok — tenants: loja-demo, burger-demo, fit-demo, oficina-demo, posto-demo, salao-demo, pet-demo, clinica-demo, pousada-demo');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

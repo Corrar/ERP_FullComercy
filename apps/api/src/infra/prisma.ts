@@ -21,14 +21,15 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { env } from '../config/env';
+import { withConnectTimeout } from './db-url';
 
 const log: Prisma.LogLevel[] = env.NODE_ENV === 'production' ? ['error'] : ['warn', 'error'];
 
 /** PLATAFORMA — papel com BYPASSRLS. */
-export const prisma = new PrismaClient({ datasourceUrl: env.DATABASE_ADMIN_URL ?? env.DATABASE_URL, log });
+export const prisma = new PrismaClient({ datasourceUrl: withConnectTimeout(env.DATABASE_ADMIN_URL ?? env.DATABASE_URL), log });
 
 /** TENANT — papel comum, sujeito ao RLS. Mesmo client quando não há separação. */
-const rlsBase: PrismaClient = env.DATABASE_ADMIN_URL ? new PrismaClient({ datasourceUrl: env.DATABASE_URL, log }) : prisma;
+const rlsBase: PrismaClient = env.DATABASE_ADMIN_URL ? new PrismaClient({ datasourceUrl: withConnectTimeout(env.DATABASE_URL), log }) : prisma;
 
 /** Modelos SEM tenant_id: só o próprio Tenant. Qualquer modelo novo nasce escopado. */
 const GLOBAL_MODELS = new Set<string>(['Tenant']);
@@ -93,12 +94,14 @@ export function prismaForTenant(tenantId: string) {
             // pela transação), redireciona para a transação: na conexão de fora não há GUC e o
             // RLS devolveria VAZIO em silêncio — achado pelo e2e no addItems.
             if (isItx(internals)) return query(scoped);
-            return (scope.tx as any)[lcFirst(model)][operation](scoped) as ReturnType<typeof query>;
+            // Sem `as ReturnType<typeof query>`: com ~110 modelos o TS estoura a profundidade de
+            // instanciação (TS2589). A expressão já é `any`, que o retorno do hook aceita.
+            return (scope.tx as any)[lcFirst(model)][operation](scoped);
           }
           // Fora de transação: lote [GUC, operação] no client BASE (não passa de novo por aqui).
           const delegate = (rlsBase as any)[lcFirst(model)];
           const [, result] = await rlsBase.$transaction([setGuc(tenantId), delegate[operation](scoped)]);
-          return result as Awaited<ReturnType<typeof query>>;
+          return result; // `any` pelo delegate; o cast tipado também estoura o TS2589
         },
       },
       async $queryRaw({ args, query }) {

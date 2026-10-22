@@ -5,6 +5,8 @@ import { parse } from '../../shared/http';
 import { ctx } from './tenant-context';
 import * as svc from './tenant-modules.service';
 import { moduleRegistry } from '../../modules/module.registry';
+import { semearModulo } from '../rbac/role-templates';
+import { AppError } from '../../shared/errors';
 
 export async function getModules(_req: Request, res: Response) {
   const rows = await svc.listModules(ctx().tenantId);
@@ -27,10 +29,17 @@ const putSchema = z.object({
 export async function putModule(req: Request, res: Response) {
   const key = parse(z.nativeEnum(ModuleKey), req.params.key);
   const body = parse(putSchema, req.body);
+  // Empresa contratada pela loja: módulo é item do PLANO (tem preço). Ligar aqui daria o módulo
+  // sem cobrar (e desligar, cobrar sem dar). O caminho é `PUT /billing/subscription/features`.
+  // Só `config` de módulo já ligado segue livre por esta rota.
+  const snap = await svc.loadTenantSnapshot(ctx().tenantId);
+  if (snap.planKeys && body.enabled !== snap.modules.has(key)) {
+    throw AppError.conflict('Os módulos desta empresa fazem parte da assinatura. Adicione ou remova pelo menu Assinatura.');
+  }
   const row = body.enabled
     ? await svc.enableModule(ctx().tenantId, key, body.config as never)
     : await svc.disableModule(ctx().tenantId, key);
-  if (body.enabled) await moduleRegistry.get(key)?.onEnable?.(ctx().tenantId);
+  if (body.enabled) await semearModulo(ctx().tenantId, key);
   res.json(row);
 }
 
@@ -40,7 +49,14 @@ const settingsSchema = z.object({
   name: z.string().min(2).max(160).optional(),
   document: z.string().max(20).optional(),
   timezone: z.string().max(40).optional(),
-  /** Qualquer outra chave livre da empresa (impressora, logo, mensagens). */
+  /** Marca da empresa: cor #RRGGBB (e-mails e, com `corNoSistema`, o sistema) e logo por link https (vazio apaga; o arquivo enviado em /tenant/marca/logo vence). */
+  marca: z.object({
+    cor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Cor no formato #RRGGBB.').optional(),
+    /** A cor também pinta o sistema (menu, botões) no lugar da cor de cada módulo. */
+    corNoSistema: z.boolean().optional(),
+    logoUrl: z.union([z.literal(''), z.string().url().refine((u) => u.startsWith('https://'), 'O logo precisa estar num endereço https.')]).optional(),
+  }).optional(),
+  /** Qualquer outra chave livre da empresa (impressora, mensagens). */
   extra: z.record(z.unknown()).optional(),
 });
 
@@ -62,6 +78,11 @@ export async function putSettings(req: Request, res: Response) {
     if (b.defaultSalesModule) settings.defaultSalesModule = b.defaultSalesModule; else delete settings.defaultSalesModule;
   }
   if (b.currency) settings.currency = b.currency;
+  if (b.marca) {
+    const m = { ...((settings.marca ?? {}) as Record<string, unknown>), ...b.marca };
+    if (m.logoUrl === '') delete m.logoUrl;
+    settings.marca = m;
+  }
   const t = await prisma.tenant.update({ where: { id: atual.id }, data: { name: b.name, document: b.document, timezone: b.timezone, settings: settings as never } });
   invalidateTenantCache(t.id);
   await ctx().db.auditLog.create({ data: { tenantId: t.id, userId: ctx().userId, action: 'tenant.settings', entity: 'Tenant', entityId: t.id, details: b as never } });

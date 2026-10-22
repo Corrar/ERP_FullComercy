@@ -21,8 +21,13 @@ export const getComandas = async (_req: Request, res: Response) => res.json(awai
 export const postComanda = async (req: Request, res: Response) => res.status(201).json(await mesas.abrirComanda(parse(z.object({ code: z.string().min(1).max(20), tableId: z.string().uuid().optional(), customerName: z.string().optional(), guests: z.number().int().positive().optional() }), req.body)));
 export const getConta = async (req: Request, res: Response) => res.json(await mesas.contaDaComanda(String(req.params.id)));
 export const postFecharComanda = async (req: Request, res: Response) => {
-  const b = parse(z.object({ payments: z.array(z.object({ method: z.nativeEnum(PaymentMethod), amount: z.number().positive() })).min(1), cobrarTaxa: z.boolean().default(true) }), req.body);
+  // Sem pagamento quando as partes já cobriram tudo (conta dividida): só fecha.
+  const b = parse(z.object({ payments: z.array(z.object({ method: z.nativeEnum(PaymentMethod), amount: z.number().positive() })).default([]), cobrarTaxa: z.boolean().default(true) }), req.body);
   res.json(await mesas.fecharComanda(String(req.params.id), b.payments, b.cobrarTaxa));
+};
+export const postParteComanda = async (req: Request, res: Response) => {
+  const b = parse(z.object({ payments: z.array(z.object({ method: z.nativeEnum(PaymentMethod), amount: z.number().positive() })).min(1), cobrarTaxa: z.boolean().default(true) }), req.body);
+  res.json(await mesas.pagarParte(String(req.params.id), b.payments, b.cobrarTaxa));
 };
 export const postTransferirComanda = async (req: Request, res: Response) => res.json(await mesas.transferirComanda(String(req.params.id), parse(z.object({ toTableId: z.string().uuid() }), req.body).toTableId));
 export const postCancelarComanda = async (req: Request, res: Response) => { await mesas.cancelarComanda(String(req.params.id), parse(z.object({ reason: z.string().min(3) }), req.body).reason); res.status(204).end(); };
@@ -51,7 +56,7 @@ export const getMenu = async (req: Request, res: Response) => res.json(await car
 export const postMenu = async (req: Request, res: Response) => res.status(201).json(await cardapio.criarMenu(parse(z.object({ name: z.string().min(1).max(80), slug: z.string().regex(/^[a-z0-9-]{2,60}$/), availability: z.array(z.record(z.unknown())).optional() }), req.body)));
 export const patchMenu = async (req: Request, res: Response) => res.json(await cardapio.atualizarMenu(String(req.params.id), parse(z.object({ name: z.string().optional(), isPublished: z.boolean().optional(), availability: z.array(z.record(z.unknown())).optional() }), req.body)));
 export const postCategoria = async (req: Request, res: Response) => res.status(201).json(await cardapio.criarCategoria(String(req.params.id), parse(z.object({ name: z.string().min(1).max(80), position: z.number().int().optional() }), req.body)));
-export const postItem = async (req: Request, res: Response) => res.status(201).json(await cardapio.criarItem(String(req.params.id), parse(z.object({ categoryId: z.string().uuid().optional(), variantId: z.string().uuid(), displayName: z.string().min(1).max(120), description: z.string().optional(), price: z.number().nonnegative(), imageUrl: z.string().url().optional(), station: z.string().max(30).optional(), prepTimeMin: z.number().int().positive().optional(), position: z.number().int().optional() }), req.body)));
+export const postItem = async (req: Request, res: Response) => res.status(201).json(await cardapio.criarItem(String(req.params.id), parse(z.object({ categoryId: z.string().uuid().optional(), variantId: z.string().uuid().optional(), displayName: z.string().min(1).max(120), description: z.string().optional(), price: z.number().nonnegative(), imageUrl: z.string().url().optional(), station: z.string().max(30).optional(), prepTimeMin: z.number().int().positive().optional(), position: z.number().int().optional() }), req.body)));
 export const patchItem = async (req: Request, res: Response) => res.json(await cardapio.atualizarItem(String(req.params.itemId), parse(z.object({ categoryId: z.string().uuid().nullable().optional(), displayName: z.string().optional(), description: z.string().optional(), price: z.number().nonnegative().optional(), imageUrl: z.string().url().nullable().optional(), station: z.string().optional(), prepTimeMin: z.number().int().nullable().optional(), isAvailable: z.boolean().optional(), position: z.number().int().optional() }), req.body)));
 export const getGrupos = async (_req: Request, res: Response) => res.json(await cardapio.listarGruposAdicionais());
 export const postGrupo = async (req: Request, res: Response) => res.status(201).json(await cardapio.criarGrupoAdicionais(parse(z.object({ name: z.string().min(1), minSelect: z.number().int().nonnegative().optional(), maxSelect: z.number().int().positive().optional(), modifiers: z.array(z.object({ name: z.string().min(1), price: z.number().nonnegative().optional() })).optional() }), req.body)));
@@ -64,6 +69,8 @@ export const getFicha = async (req: Request, res: Response) => res.json({ ficha:
 export const getRelItens = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.vendasPorItem(a, b)); };
 export const getRelTipos = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.porTipoDeServico(a, b)); };
 export const getRelHoras = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.movimentoPorHora(a, b)); };
+export const getRelCozinha = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.tempoDeCozinha(a, b)); };
+export const getRelGarcons = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.porGarcom(a, b)); };
 export const getRelEntregadores = async (req: Request, res: Response) => { const [a, b] = faixa(parse(periodo, req.query)); res.json(await rel.desempenhoEntregadores(a, b)); };
 
 // ── Público ──

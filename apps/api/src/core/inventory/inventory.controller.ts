@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { ProductKind } from '@prisma/client';
 import { z } from 'zod';
 import { parse } from '../../shared/http';
+import { paginacaoSchema } from '../../shared/paginacao';
 import { ctx } from '../tenancy/tenant-context';
 import { tenantTransaction } from '../../infra/prisma';
 import { D } from '../../shared/money';
@@ -23,7 +24,7 @@ const createSchema = z.object({
 });
 
 export async function getProducts(req: Request, res: Response) {
-  res.json(await products.listProducts(typeof req.query.q === 'string' ? req.query.q : undefined));
+  res.json(await products.listProducts(typeof req.query.q === 'string' ? req.query.q : undefined, parse(paginacaoSchema, req.query)));
 }
 export async function postProduct(req: Request, res: Response) {
   res.status(201).json(await products.createProduct(parse(createSchema, req.body)));

@@ -48,9 +48,10 @@ async function gerarCobranca(tx: TenantTx, tenantId: string, membershipId: strin
   return tx.gymMembershipCharge.create({ data: { tenantId, membershipId, financeEntryId: entry.id, periodStart: inicio, periodEnd: fim, amount: valor } });
 }
 
-/** JOB (plataforma, todos os tenants): gera a próxima cobrança e marca inadimplência. */
-export async function gerarCobrancasVencidas(hoje = new Date()) {
-  const tenants = await prisma.tenantModule.findMany({ where: { moduleKey: 'ACADEMIA', enabled: true }, select: { tenantId: true } });
+/** JOB (plataforma, todos os tenants): gera a próxima cobrança e marca inadimplência. Com
+ *  `soTenant` roda só para essa empresa: é o caminho da rota manual, que NUNCA pode mexer nas outras. */
+export async function gerarCobrancasVencidas(hoje = new Date(), soTenant?: string) {
+  const tenants = await prisma.tenantModule.findMany({ where: { moduleKey: 'ACADEMIA', enabled: true, ...(soTenant ? { tenantId: soTenant } : {}) }, select: { tenantId: true } });
   let geradas = 0;
   for (const { tenantId } of tenants) {
     const db = prismaForTenant(tenantId);

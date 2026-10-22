@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { parse } from '../../shared/http';
+import { paginacaoSchema } from '../../shared/paginacao';
 import { ctx } from '../tenancy/tenant-context';
 import { tenantTransaction } from '../../infra/prisma';
 import { D } from '../../shared/money';
@@ -35,7 +36,7 @@ export const putMinLevel = async (req: Request, res: Response) => {
   res.json(await cat.setMinLevel(String(req.params.variantId), b.warehouseId, b.minLevel));
 };
 export const getLowStock = async (_req: Request, res: Response) => res.json(await cat.lowStock());
-export const getLedger = async (req: Request, res: Response) => res.json(await cat.ledger(parse(z.object({
+export const getLedger = async (req: Request, res: Response) => res.json(await cat.ledger(parse(paginacaoSchema.extend({
   variantId: z.string().uuid().optional(), warehouseId: z.string().uuid().optional(), refType: z.string().optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional(), take: z.coerce.number().int().optional(),
 }), req.query)));
 
