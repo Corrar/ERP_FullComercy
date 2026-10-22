@@ -73,7 +73,9 @@ Detalhe e justificativa em `docs/ARQUITETURA.md`. O resumo que não pode ser esq
 
 13. **Preço e plano só no servidor** (`core/billing/catalog.ts`). O front mostra o `quote`; o checkout
     recalcula. Função nova vendável = entrada no catálogo com as chaves que libera (o teste de
-    cobertura derruba chave sem função).
+    cobertura derruba chave sem função) **e pronta no dia em que é contratada**: rota que cobra cada
+    chave, tela no menu (ou declarada dentro de outra) e, se precisa de preparo, passo no guia de
+    primeiros passos. `test/funcoes-prontas.test.ts` e o e2e `funcoes-prontas` derrubam o que faltar.
 14. **O plano corta permissão** em `rbac.service` (`canUse`): nem o admin usa o que não contratou.
     Empresa sem assinatura (seed/plataforma) não tem corte.
 15. **Cartão nunca passa pela API**: com Stripe, o número fica no iframe de js.stripe.com (SetupIntent +

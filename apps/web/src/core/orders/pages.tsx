@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CobrarPix } from '@/core/payments/CobrarPix';
 import { useNavigate, useParams } from 'react-router-dom';
 import { baixarArquivo, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
@@ -38,6 +39,7 @@ export function OrderDetail() {
   return <div className="grid">
     <div className="row between"><h1 style={{ margin: 0 }}>Pedido #{o.number} <Badge s={o.status} /></h1><div className="row">
       {falta > 0.009 && o.status !== 'CANCELLED' && can('core.orders:create') && <button className="btn primary" onClick={() => setPay(true)}>Receber {falta.toFixed(2)}</button>}
+      {o.status !== 'CANCELLED' && o.status !== 'COMPLETED' && <CobrarPix orderId={o.id} falta={falta} onPago={reload} />}
       {['OPEN', 'CONFIRMED', 'IN_PROGRESS', 'READY'].includes(o.status) && can('core.orders:create') && !o.serviceOrder && <button className="btn" onClick={() => void transitar.run('COMPLETED')}>Concluir</button>}
       {o.status !== 'CANCELLED' && can('core.orders:cancel') && <button className="btn danger" onClick={() => setCancel(true)}>Cancelar</button>}
       {o.serviceOrder && <a className="btn" href={`/servicos/os/${o.serviceOrder.id}`}>Abrir OS</a>}</div></div>

@@ -12,7 +12,11 @@ import * as orders from '../orders/order.service';
 import * as finance from '../finance/finance.service';
 import { tenantTransaction } from '../../infra/prisma';
 import type { PaymentProvider } from './providers/types';
-import { manualProvider } from './providers/manual';
+import { manualProvider, type ConfigPixManual } from './providers/manual';
+import { assinarPagamento, lerPagamento } from '../../shared/track-token';
+import { normalizarChavePix } from '../../shared/pix';
+import { appUrl } from '../../infra/mailer';
+import { marcaPublica } from '../tenancy/marca.service';
 import { mockProvider } from './providers/mock';
 
 const providers = new Map<string, PaymentProvider>([[manualProvider.key, manualProvider], [mockProvider.key, mockProvider]]);
@@ -45,8 +49,12 @@ export async function createIntent(input: { provider: string; method: PaymentMet
   }
 
   const intent = await db.paymentIntent.create({ data: { tenantId, provider: p.key, method: input.method, amount: amount!, orderId: input.orderId ?? null, financeEntryId: input.financeEntryId ?? null } });
-  const r = await p.create({ tenantId, intentId: intent.id, amount: amount!.toFixed(2), method: input.method, description, payer, config: providerConfig(tenantSettings, p.key) });
-  return db.paymentIntent.update({ where: { id: intent.id }, data: { externalId: r.externalId, qrCode: r.qrCode, checkoutUrl: r.checkoutUrl, expiresAt: r.expiresAt, raw: (r.raw ?? {}) as never } });
+  const r = await p.create({ tenantId, intentId: intent.id, amount: amount!.toFixed(2), method: input.method, description, payer, config: providerConfig(tenantSettings, p.key) })
+    .catch(async (e) => { await db.paymentIntent.delete({ where: { id: intent.id } }); throw e; });
+  // Sem página do provedor, o link é a NOSSA página pública (/pagar/<token>): Pix e situação.
+  const checkoutUrl = r.checkoutUrl ?? (r.qrCode ? appUrl(`/pagar/${assinarPagamento(tenantId, intent.id)}`) : undefined);
+  const upd = await db.paymentIntent.update({ where: { id: intent.id }, data: { externalId: r.externalId, qrCode: r.qrCode, checkoutUrl, expiresAt: r.expiresAt, raw: (r.raw ?? {}) as never } });
+  return comQr(upd);
 }
 
 /** Marca como PAGO e propaga: pedido (addPayments) ou título (settle). Idempotente. */
@@ -69,6 +77,60 @@ async function confirmPaid(intentId: string, paidAt = new Date()) {
 /** Confirmação pelo operador (provedor manual, ou conciliação à mão). */
 export const confirmManual = (intentId: string) => confirmPaid(intentId);
 export const cancelIntent = (intentId: string) => ctx().db.paymentIntent.update({ where: { id: intentId, status: PaymentIntentStatus.PENDING }, data: { status: PaymentIntentStatus.CANCELLED } });
+/** QR em SVG do copia e cola (o front mostra como imagem; o cliente lê com o app do banco). */
+async function qrSvg(texto: string | null) {
+  if (!texto) return null;
+  const bwip = await import('bwip-js');
+  return bwip.toSVG({ bcid: 'qrcode', text: texto, scale: 4, eclevel: 'M' } as never);
+}
+const comQr = async <T extends { qrCode: string | null }>(it: T) => ({ ...it, qrSvg: await qrSvg(it.qrCode) });
+
+export async function getIntent(id: string) {
+  const it = await ctx().db.paymentIntent.findUnique({ where: { id }, include: { order: { select: { number: true } } } });
+  if (!it) throw AppError.notFound('Cobrança');
+  return comQr(it);
+}
+
+/** Configuração do Pix pela chave (provedor manual): chave, nome e cidade do recebedor. */
+export function configPix() {
+  const c = providerConfig(ctx().tenantSettings, 'manual') as ConfigPixManual;
+  return { chave: c.pixKey ?? null, nome: c.nome ?? null, cidade: c.cidade ?? null };
+}
+export async function salvarConfigPix(input: { chave: string; nome: string; cidade: string }) {
+  const chave = normalizarChavePix(input.chave);
+  if (!chave) throw AppError.validation('Chave Pix inválida. Use CPF, CNPJ, e-mail, celular com +55 ou a chave aleatória.');
+  const { tenantId, userId } = ctx();
+  const t = await prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { settings: true } });
+  const settings = { ...((t.settings ?? {}) as Record<string, unknown>) };
+  const payments = { ...((settings.payments ?? {}) as Record<string, unknown>) };
+  payments.manual = { ...((payments.manual ?? {}) as object), pixKey: chave, nome: input.nome.trim(), cidade: input.cidade.trim() };
+  settings.payments = payments;
+  await tenantTransaction(ctx().db, tenantId, async (tx) => {
+    await tx.tenant.update({ where: { id: tenantId }, data: { settings: settings as never } });
+    await tx.auditLog.create({ data: { tenantId, userId, action: 'payments.pix.config', entity: 'Tenant', entityId: tenantId, details: { chave } } });
+  });
+  const { invalidateTenantCache } = await import('../tenancy/tenant-modules.service');
+  invalidateTenantCache(tenantId);
+  return { chave, nome: input.nome.trim(), cidade: input.cidade.trim() };
+}
+
+/** Página PÚBLICA do link de pagamento: só o que o cliente precisa para pagar. */
+export async function paginaDePagamento(token: string) {
+  const t = lerPagamento(token);
+  if (!t) throw AppError.notFound('Cobrança');
+  const it = await prisma.paymentIntent.findFirst({ where: { id: t.intentId, tenantId: t.tenantId }, include: { order: { select: { number: true } }, tenant: { select: { slug: true } } } });
+  if (!it) throw AppError.notFound('Cobrança');
+  const marca = await marcaPublica(it.tenant.slug);
+  return {
+    empresa: marca,
+    descricao: it.order ? `Pedido #${it.order.number}` : 'Pagamento',
+    valor: it.amount, metodo: it.method, status: it.status, expiraEm: it.expiresAt, pagoEm: it.paidAt,
+    // Pago, cancelado ou vencido: não mostra mais o Pix (ninguém paga duas vezes pelo link).
+    pix: it.status === PaymentIntentStatus.PENDING ? it.qrCode : null,
+    qrSvg: it.status === PaymentIntentStatus.PENDING ? await qrSvg(it.qrCode) : null,
+  };
+}
+
 export const listIntents = (filter: { orderId?: string; status?: PaymentIntentStatus }) => ctx().db.paymentIntent.findMany({ where: filter, orderBy: { createdAt: 'desc' }, take: 200 });
 
 /** Webhook PÚBLICO do provedor: acha a intenção pelo externalId em QUALQUER tenant (client de

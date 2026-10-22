@@ -7,6 +7,7 @@ import { get, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
 import { Badge, Card, ErrorBox, Money } from './ui';
 import { brl, num } from '@/lib/format';
+import { CobrarPix } from '@/core/payments/CobrarPix';
 
 const MEIOS: { k: string; label: string }[] = [{ k: 'PIX', label: 'PIX' }, { k: 'CASH', label: 'Dinheiro' }, { k: 'DEBIT', label: 'Débito' }, { k: 'CREDIT', label: 'Crédito' }, { k: 'TRANSFER', label: 'Transferência' }];
 
@@ -42,7 +43,8 @@ export function ContaAberta({ orderId, titulo = 'Conta', podeLancar = true, onCh
     {aberto && falta > 0 && <div className="row" style={{ marginTop: 10 }}>
       <select className="input" value={meio} onChange={(e) => setMeio(e.target.value)} style={{ width: 150 }}>{MEIOS.map((m) => <option key={m.k} value={m.k}>{m.label}</option>)}</select>
       <input className="input" type="number" step="0.01" min={0} placeholder={falta.toFixed(2)} value={valor} onChange={(e) => setValor(e.target.value)} aria-label="Valor a receber" />
-      <button className="btn primary" onClick={() => void receber.run()} disabled={receber.busy}>Receber</button></div>}
+      <button className="btn primary" onClick={() => void receber.run()} disabled={receber.busy}>Receber</button>
+      <CobrarPix orderId={orderId} falta={falta} onPago={recarregar} /></div>}
     <ErrorBox error={receber.error} />
   </Card>;
 }

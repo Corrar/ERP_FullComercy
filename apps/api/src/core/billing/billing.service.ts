@@ -25,6 +25,7 @@ import { issueTenantSession } from '../auth/auth.service';
 import { invalidateTenantCache, enableModule, disableModule } from '../tenancy/tenant-modules.service';
 import { ctx } from '../tenancy/tenant-context';
 import { semearModulo } from '../rbac/role-templates';
+import { dispensarPrimeirosPassos } from '../tenancy/primeiros-passos.service';
 import { enviarBoasVindas } from './boas-vindas';
 import { avisarFaturaAberta, avisarPagamentoRecebido, avisarPagamentoRecusado, avisarSuspensa, avisarTesteAcabando, CARD_MAX_ATTEMPTS } from './avisos';
 import { googleMode } from '../account/google';
@@ -462,11 +463,11 @@ export async function changeFeatures(input: { modules: ModuleKey[]; features: st
   }
   const keep = new Map(sub.items.map((i) => [i.featureKey, i]));
   const next = new Set(resolved.items.map((i) => i.key));
+  const novas = resolved.items.filter((i) => !keep.has(i.key));
 
   const amount = await tenantTransaction(ctx().db, tenantId, async (tx) => {
     await tx.subscriptionItem.deleteMany({ where: { tenantId, subscriptionId: sub.id, featureKey: { notIn: [...next] } } });
-    const add = resolved.items.filter((i) => !keep.has(i.key));
-    if (add.length) await tx.subscriptionItem.createMany({ data: add.map((i) => ({ tenantId, subscriptionId: sub.id, featureKey: i.key, moduleKey: i.module, label: i.label, price: D(i.price) })) });
+    if (novas.length) await tx.subscriptionItem.createMany({ data: novas.map((i) => ({ tenantId, subscriptionId: sub.id, featureKey: i.key, moduleKey: i.module, label: i.label, price: D(i.price) })) });
     const items = await tx.subscriptionItem.findMany({ where: { tenantId, subscriptionId: sub.id } });
     const total = items.reduce((a: Prisma.Decimal, i: { price: Prisma.Decimal }) => a.plus(i.price), D(0));
     await tx.subscription.update({ where: { id: sub.id }, data: { amount: total } });
@@ -477,6 +478,9 @@ export async function changeFeatures(input: { modules: ModuleKey[]; features: st
   const active = await prisma.tenantModule.findMany({ where: { tenantId, enabled: true }, select: { moduleKey: true } });
   for (const m of resolved.modules) if (!active.some((a) => a.moduleKey === m)) { await enableModule(tenantId, m); await semearModulo(tenantId, m); }
   for (const a of active) if (!resolved.modules.includes(a.moduleKey)) await disableModule(tenantId, a.moduleKey);
+  // Função nova chega com o "como começar" no painel: o guia volta mesmo se o dono o tinha dispensado
+  // (os passos antigos aparecem como feitos; os da função nova, pendentes).
+  if (novas.length) await dispensarPrimeirosPassos(false);
   invalidateTenantCache(tenantId);
   if (faturaProp && sub.method !== 'CARD') await collectInvoice(faturaProp.id); // boleto/Pix: gera e avisa
   return { ...(await getSubscription()), amount: amount.toFixed(2), proporcional: prop };

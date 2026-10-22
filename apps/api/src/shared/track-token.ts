@@ -17,3 +17,18 @@ export function lerAcompanhamento(token: string): { tenantId: string; orderId: s
     return typeof p.oid === 'string' && typeof p.tid === 'string' ? { tenantId: p.tid, orderId: p.oid } : null;
   } catch { return null; }
 }
+
+// ── Link de PAGAMENTO (página pública /pagar/<token>) ─────────────────────────────────────────
+// Mesmo cuidado: chave derivada própria e audiência própria. Abre só a página daquela cobrança
+// (valor, Pix, situação) — nem o pedido inteiro, nem nada da empresa além do nome e da marca.
+const chavePagamento = () => createHmac('sha256', env.JWT_SECRET).update('fc-pay-v1').digest();
+
+export const assinarPagamento = (tenantId: string, intentId: string) =>
+  jwt.sign({ tid: tenantId, iid: intentId }, chavePagamento(), { expiresIn: '30d', audience: 'pay' });
+
+export function lerPagamento(token: string): { tenantId: string; intentId: string } | null {
+  try {
+    const p = jwt.verify(token, chavePagamento(), { audience: 'pay' }) as jwt.JwtPayload;
+    return typeof p.iid === 'string' && typeof p.tid === 'string' ? { tenantId: p.tid, intentId: p.iid } : null;
+  } catch { return null; }
+}

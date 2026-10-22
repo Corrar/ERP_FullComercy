@@ -75,6 +75,9 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Um segredo ilegível (chave de cifra trocada sem a antiga) parava o despacho de webhooks de TODAS as empresas, e a catraca daquele aparelho respondia 500 | `open()` lança, e era chamado sem proteção dentro do laço do lote (`dispatchPending`) e na autenticação do aparelho | o erro fica só no item: a entrega falha com o motivo gravado e a catraca responde 401. Provado no `segredos.test.ts`: tirando o `try`, o dispatch volta a dar 500 |
 | Diff de 489 linhas no `schema.prisma` para acrescentar uma tabela | `npx prisma format` realinhou o arquivo inteiro | não rodar `prisma format` no schema todo; editar à mão e conferir com `prisma validate` |
 | Relatei "lint ok" sem haver lint | `npm run -s lint` com `-s` esconde o "Missing script" e não imprime nada | o repositório não tem lint; o que vale é o que o CI roda (`typecheck`, `test`, `build`, e2e, Playwright) |
+| "Cobrança online" era vendida sem botão de cobrar; a lista só aparecia em Integrações (outra função paga) | nenhum teste olhava se a função vendida tinha tela | `test/funcoes-prontas.test.ts` (rota + menu de toda função) e e2e `funcoes-prontas` (contratar e já responder); contra-prova: tirar o item do menu derruba o teste |
+| Spec de navegador via a sessão "velha" depois de mudar o plano | `page.addInitScript` roda de novo a cada navegação e regravava a sessão injetada | injetar só se `localStorage` estiver vazio |
+| Teste esperava `code: 'NOT_IN_PLAN'` | o corte do plano responde `FORBIDDEN` com `details.reason = 'NOT_IN_PLAN'` | ler `body.details.reason` |
 | "Depois de anonimizar a busca não acha" passava no vazio | a busca não olha e-mail, e o telefone de teste montado de `run` (letras) nem era único | asserção do ANTES (acha 1) com documento e telefone únicos; só então o DEPOIS (acha 0) vale |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
@@ -176,6 +179,8 @@ npm run docs:api                                 # regenera docs/API.md (265 rot
 | LGPD do titular (exportar/anonimizar) | `apps/api/src/core/customers/lgpd.service.ts` + `lgpd` em cada `modules/<m>/services/lgpd.ts` |
 | cifra de segredos e rotação de chave | `apps/api/src/shared/crypto.ts`, `apps/api/src/core/platform/segredos.service.ts`, `docs/OPERACAO.md` |
 | marca da empresa (logo, cor, página `/e/<slug>`) | `apps/api/src/core/tenancy/marca.service.ts`, `apps/web/src/lib/marca.ts`, `EquipeEmpresa` em `apps/web/src/core/auth/pages.tsx` |
+| cobrança por Pix (BR Code, link público) | `apps/api/src/shared/pix.ts`, `apps/api/src/core/payments/`, `apps/web/src/core/payments/`, `apps/web/src/public/Pagar.tsx` |
+| garantia de função pronta | `apps/api/test/funcoes-prontas.test.ts`, `apps/api/test/e2e/funcoes-prontas.test.ts`, passos em `primeiros-passos.service.ts` |
 | conta do comprador e Google | `apps/api/src/core/account/` |
 | loja (telas) | `apps/web/src/store/` |
 | identidade (nome/marca) | `apps/web/src/app/brand.ts` + `--brand` em `styles.css` |

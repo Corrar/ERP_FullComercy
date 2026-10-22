@@ -32,7 +32,9 @@
 - [x] Modelo de perfis aplicado nas empresas antigas (job `core.perfis-modelo`, uma vez por empresa, só perfil vazio)
 - [x] Primeiros passos no painel: roteiro por módulo comprado, marcado pelos dados da empresa, "Fazer agora" leva à tela, dispensável (volta em Empresa)
 - [x] Conta do comprador: esqueci a senha da conta (leva junto a senha das empresas que usam a da conta), reenviar dados de acesso, assinatura e faturas de cada empresa na Minha conta
-- [x] Testes: 44 unit, 47 e2e API, 22 Playwright
+- [x] Funções prontas ao contratar: teste que percorre TODAS as funções opcionais (antes cortada pelo plano, depois responde na hora, menu e guia do painel) + regra no CLAUDE.md; guia de primeiros passos ganhou os passos das funções opcionais e volta quando entra função nova
+- [x] Cobrança online de verdade: chave Pix da empresa, "Cobrar por Pix" no pedido e nas contas abertas (BR Code do Banco Central com valor, QR), link público `/pagar/<token>` para o cliente, confirmação do recebimento; tela própria "Cobranças online" (antes ficava escondida em Integrações, outra função paga)
+- [x] Testes: 46 unit, 49 e2e API, 24 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
@@ -59,7 +61,7 @@
 - [ ] `GOOGLE_CLIENT_ID` de produção (origem do domínio próprio autorizada no console do Google)
 - [ ] Nota fiscal de serviço da mensalidade do SaaS
 
-- [ ] Gateway de pagamento real (PIX dinâmico de um banco/PSP) como provedor em `core/payments/providers/`
+- [ ] Gateway de pagamento real (PIX dinâmico de um banco/PSP, com baixa automática pelo webhook) como provedor em `core/payments/providers/` — hoje o Pix pela chave já cobra, mas o recebimento é confirmado à mão
 - [x] Rotação de `APP_ENCRYPTION_KEY`: selo com id da chave, chave anterior só para abrir, job `core.recifrar-segredos`, status em `/platform/segredos`; produção não sobe sem a chave; segredo ilegível falha só o item (webhook/catraca), não o lote — procedimento em `docs/OPERACAO.md`
 - [x] Política de backup/restore escrita (`docs/OPERACAO.md` §2)
 - [ ] Executar a política: `pg_dump` semanal fora do Neon, conferir a janela de restauração do plano, primeiro ensaio de restauração — passo do responsável

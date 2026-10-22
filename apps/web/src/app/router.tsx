@@ -17,6 +17,8 @@ import { Company } from '@/core/company/Company';
 import { Audit } from '@/core/audit/Audit';
 import { Account } from '@/core/auth/Account';
 import { Storefront, OrderTracking } from '@/public/Storefront';
+import { Pagar } from '@/public/Pagar';
+import { Cobrancas } from '@/core/payments/Cobrancas';
 import { CustomerDetail } from '@/core/customers/CustomerDetail';
 import { Subscription } from '@/core/billing/Subscription';
 import { Landing } from '@/store/Landing';
@@ -64,6 +66,7 @@ export const router = createBrowserRouter([
   // Público (cliente final): vitrine do cardápio e acompanhamento do pedido.
   { path: '/cardapio/:tenant/:menu', element: <Storefront /> },
   { path: '/pedido/:tenant/:numero', element: <OrderTracking /> },
+  { path: '/pagar/:token', element: <Pagar /> },
   {
     element: <RequireAuth />,
     children: [{
@@ -80,6 +83,7 @@ export const router = createBrowserRouter([
         { path: '/compras', element: <Purchases /> },
         { path: '/compras/:id', element: <PurchaseDetail /> },
         { path: '/financeiro', element: <Finance /> },
+        { path: '/cobrancas', element: <Cobrancas /> },
         { path: '/usuarios', element: <Users /> },
         { path: '/perfis', element: <Roles /> },
         { path: '/integracoes', element: <Integrations /> },
