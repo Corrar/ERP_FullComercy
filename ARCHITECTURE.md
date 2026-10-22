@@ -88,6 +88,8 @@ O app abre na **loja** (`/comecar`): a pessoa escolhe o comércio (módulo), lig
   Avisos por e-mail à conta que paga (`core/billing/avisos.ts`): teste acabando (2 dias antes), fatura
   disponível (boleto/Pix), pagamento recusado (1ª recusa e última tentativa), suspensão e comprovante.
   Cada um sai uma vez por (tipo, referência) em `core_billing_notices`; falha de envio não mexe na cobrança.
+  Função ligada no meio do mês pago gera fatura proporcional (dias inteiros que faltam, mínimo R$ 0,50,
+  `note` descreve); no cartão a cobrança vem ANTES de ligar. Remover não devolve.
 
 ## 4. Eventos e integrações
 

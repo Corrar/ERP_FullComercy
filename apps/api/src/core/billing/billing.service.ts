@@ -19,7 +19,7 @@ import { BillingMethod, ModuleKey, Prisma } from '@prisma/client';
 import { env } from '../../config/env';
 import { prisma, tenantTransaction } from '../../infra/prisma';
 import { AppError } from '../../shared/errors';
-import { D } from '../../shared/money';
+import { D, round2 } from '../../shared/money';
 import { onboardTenant } from '../platform/onboarding.service';
 import { issueTenantSession } from '../auth/auth.service';
 import { invalidateTenantCache, enableModule, disableModule } from '../tenancy/tenant-modules.service';
@@ -187,7 +187,7 @@ export async function checkout(accountId: string, input: CheckoutInput, meta: { 
 type InvoiceRow = Prisma.InvoiceGetPayload<object>;
 export const invoiceView = (i: InvoiceRow) => ({
   id: i.id, amount: i.amount.toFixed(2), status: i.status, method: i.method, periodStart: i.periodStart, periodEnd: i.periodEnd,
-  dueAt: i.dueAt, paidAt: i.paidAt, attempts: i.attempts, failureReason: i.failureReason, boletoUrl: i.boletoUrl, boletoLine: i.boletoLine, pixCode: i.pixCode,
+  dueAt: i.dueAt, paidAt: i.paidAt, attempts: i.attempts, failureReason: i.failureReason, boletoUrl: i.boletoUrl, boletoLine: i.boletoLine, pixCode: i.pixCode, note: i.note,
 });
 
 /**
@@ -400,10 +400,66 @@ export async function getSubscription() {
 /** Liga/desliga funções. Vale NA HORA para o acesso; o novo valor entra na próxima fatura (sem
  *  proporcional nesta versão — a tela avisa). Preço da função nova: o do catálogo de hoje; a que
  *  já estava mantém o preço contratado. */
+// ── Proporcional (pro rata) ao ligar função no meio do período ──────────────────────────────
+
+/** Mínimo cobrável: o do Stripe em BRL. Abaixo disso a diferença fica por nossa conta. */
+const PRORATA_MIN = D('0.50');
+const DIA_MS = 86_400_000;
+export type Proporcional = { valor: string; dias: number; diasPeriodo: number; funcoes: string[]; motivo?: 'teste' | 'sem_novas' | 'nao_ativa' | 'abaixo_minimo' };
+
+/**
+ * Quanto cobrar AGORA pelas funções que entram: o preço delas × dias que faltam ÷ dias do período,
+ * em dias inteiros (hoje conta). Só com o mês pago correndo (ACTIVE): no teste grátis nada é
+ * cobrado. Função que sai não devolve nada do mês em curso; o valor menor vale na próxima fatura.
+ */
+export function calcularProporcional(
+  sub: { status: string; currentPeriodStart: Date; currentPeriodEnd: Date; items: { featureKey: string }[] },
+  resolved: Resolved, now = new Date(),
+): Proporcional {
+  const novas = resolved.items.filter((i) => !sub.items.some((x) => x.featureKey === i.key));
+  const funcoes = novas.map((i) => i.label);
+  const zero = (motivo: Proporcional['motivo'], dias = 0, diasPeriodo = 0): Proporcional => ({ valor: '0.00', dias, diasPeriodo, funcoes, motivo });
+  if (!novas.length) return zero('sem_novas');
+  if (sub.status === 'TRIALING') return zero('teste');
+  if (sub.status !== 'ACTIVE') return zero('nao_ativa');
+  const diasPeriodo = Math.max(1, Math.round((sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime()) / DIA_MS));
+  const dias = Math.min(diasPeriodo, Math.max(0, Math.ceil((sub.currentPeriodEnd.getTime() - now.getTime()) / DIA_MS)));
+  const valor = round2(novas.reduce((a, i) => a.plus(i.price), D(0)).times(dias).div(diasPeriodo));
+  if (valor.lt(PRORATA_MIN)) return zero('abaixo_minimo', dias, diasPeriodo);
+  return { valor: valor.toFixed(2), dias, diasPeriodo, funcoes };
+}
+
+/** O que a troca de funções faria, sem fazer: novo valor mensal e o proporcional de agora. */
+export async function previewFeatures(input: { modules: ModuleKey[]; features: string[] }) {
+  const sub = await mySubscription();
+  const resolved = resolveSelection(input);
+  return { novoValor: resolved.total.toFixed(2), valorAtual: sub.amount.toFixed(2), proporcional: calcularProporcional(sub, resolved) };
+}
+
+const notaProporcional = (p: Proporcional) => `Proporcional: ${p.funcoes.join(', ')} · ${p.dias} de ${p.diasPeriodo} dias`.slice(0, 200);
+
 export async function changeFeatures(input: { modules: ModuleKey[]; features: string[] }) {
   const sub = await mySubscription();
   const tenantId = ctx().tenantId;
   const resolved = resolveSelection(input);
+
+  // Cartão: cobra o proporcional ANTES de ligar. Recusou → nada muda e a pessoa vê o motivo (sem
+  // e-mail de recusa: ela está na tela). Boleto/Pix: liga e gera a fatura, que segue o fluxo normal.
+  const prop = calcularProporcional(sub, resolved);
+  let faturaProp: InvoiceRow | null = null;
+  if (Number(prop.valor) > 0) {
+    const now = new Date();
+    faturaProp = await prisma.invoice.create({ data: { tenantId, subscriptionId: sub.id, amount: D(prop.valor), method: sub.method, periodStart: now, periodEnd: sub.currentPeriodEnd, dueAt: sub.method === 'BOLETO' ? addDays(now, BOLETO_DUE_DAYS) : now, note: notaProporcional(prop) } });
+    if (sub.method === 'CARD') {
+      const r = await cobrar(faturaProp.id);
+      // OPEN = aceita e ainda processando no gateway (o webhook liquida): segue como aceita.
+      if (r.status === 'FAILED') {
+        await prisma.invoice.update({ where: { id: r.id }, data: { status: 'VOID' } });
+        throw AppError.validation(`A cobrança proporcional de ${prop.valor.replace('.', ',')} foi recusada (${r.failureReason ?? 'cartão recusado'}). As funções não foram adicionadas: troque o cartão em "Forma de pagamento" e tente de novo.`);
+      }
+      faturaProp = r;
+    }
+  }
   const keep = new Map(sub.items.map((i) => [i.featureKey, i]));
   const next = new Set(resolved.items.map((i) => i.key));
 
@@ -422,7 +478,8 @@ export async function changeFeatures(input: { modules: ModuleKey[]; features: st
   for (const m of resolved.modules) if (!active.some((a) => a.moduleKey === m)) { await enableModule(tenantId, m); await semearModulo(tenantId, m); }
   for (const a of active) if (!resolved.modules.includes(a.moduleKey)) await disableModule(tenantId, a.moduleKey);
   invalidateTenantCache(tenantId);
-  return { ...(await getSubscription()), amount: amount.toFixed(2) };
+  if (faturaProp && sub.method !== 'CARD') await collectInvoice(faturaProp.id); // boleto/Pix: gera e avisa
+  return { ...(await getSubscription()), amount: amount.toFixed(2), proporcional: prop };
 }
 
 export async function changePaymentMethod(input: { method: BillingMethod; cardToken?: string }) {

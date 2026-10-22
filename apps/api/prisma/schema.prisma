@@ -2535,6 +2535,8 @@ model Invoice {
   boletoUrl      String?       @map("boleto_url")
   boletoLine     String?       @map("boleto_line") @db.VarChar(80)
   pixCode        String?       @map("pix_code")
+  /// O que a fatura cobra quando não é a mensalidade cheia (ex.: "Proporcional: Etiquetas · 20 de 30 dias").
+  note           String?       @db.VarChar(200)
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 

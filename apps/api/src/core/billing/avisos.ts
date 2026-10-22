@@ -92,7 +92,7 @@ export async function avisarPagamentoRecebido(inv: Fatura, reativou: boolean) {
     assunto: `pagamento de ${reais(inv.amount)} recebido`,
     titulo: 'Pagamento recebido',
     paragrafos: [
-      `Recebemos ${reais(inv.amount)} ${inv.method === sub.method ? comoCobra(sub) : `por ${MEIO[inv.method] ?? 'pagamento'}`}, referente à mensalidade de ${sub.tenant.name} de ${data(inv.periodStart)} a ${data(inv.periodEnd)}.`,
+      `Recebemos ${reais(inv.amount)} ${inv.method === sub.method ? comoCobra(sub) : `por ${MEIO[inv.method] ?? 'pagamento'}`}, referente ${inv.note ? `a ${inv.note.replace(/^Proporcional:/, 'funções adicionadas no meio do mês:')} (até ${data(inv.periodEnd)})` : `à mensalidade de ${sub.tenant.name} de ${data(inv.periodStart)} a ${data(inv.periodEnd)}`}.`,
       reativou ? 'O acesso ao sistema foi liberado de novo para toda a equipe.' : 'Nada a fazer: é só um comprovante.',
     ],
   });

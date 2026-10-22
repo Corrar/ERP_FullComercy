@@ -270,6 +270,54 @@ if (!E2E) {
     assert.equal(avisos(/recebido/).length, todos, 'confirmação repetida não duplica o comprovante');
   });
 
+  test('proporcional: função nova no meio do mês paga só os dias que faltam; recusa não liga nada', async () => {
+    const mail = `prorata-${run.toLowerCase()}@exemplo.com`;
+    const t = (await api().post('/account/register', { name: 'Dona Proporcional', email: mail, password: 'Senha-forte-123' })).token;
+    const r = await api(t).post('/account/checkout', { company: { name: `Prop ${run}`, document: cpf(9) }, modules: ['VAREJO'], features: [], payment: { method: 'CARD', cardToken: 'tok_mock_visa_4242_1230' } });
+    const C = api(r.session.accessToken);
+    const sel = (features: string[]) => ({ modules: ['VAREJO'], features });
+
+    // No teste grátis, ligar função não cobra nada agora.
+    const noTeste = await C.post('/billing/subscription/features/preview', sel(['varejo.comissoes']));
+    assert.deepEqual([noTeste.proporcional.valor, noTeste.proporcional.motivo, noTeste.novoValor], ['0.00', 'teste', '134.40']);
+
+    // Mês pago correndo: 10 dias usados, 20 pela frente (de 30).
+    const { prisma } = await import('../../src/infra/prisma');
+    const agora = Date.now();
+    await prisma.subscription.update({ where: { id: r.subscriptionId }, data: { status: 'ACTIVE', trialEndsAt: null, currentPeriodStart: new Date(agora - 10 * DIA), currentPeriodEnd: new Date(agora + 20 * DIA) } });
+    const prev = await C.post('/billing/subscription/features/preview', sel(['varejo.comissoes']));
+    // 19,90 × 20/30 = 13,2666… → 13,27
+    assert.deepEqual([prev.proporcional.valor, prev.proporcional.dias, prev.proporcional.diasPeriodo], ['13.27', 20, 30]);
+    assert.deepEqual(prev.proporcional.funcoes, ['Comissões de vendedores']);
+
+    const { outbox } = await import('../../src/infra/mailer');
+    const s = await C.put('/billing/subscription/features', sel(['varejo.comissoes']));
+    assert.equal(s.amount, '134.40', 'mensalidade cheia nova vale na próxima fatura');
+    const f = s.invoices.find((i: any) => i.note?.startsWith('Proporcional'));
+    assert.deepEqual([f.amount, f.status], ['13.27', 'PAID']);
+    assert.match(f.note, /Comissões de vendedores · 20 de 30 dias/);
+    assert.ok(outbox.some((m) => m.to === mail && /13,27 recebido/.test(m.subject) && /no meio do mês/.test(m.text)), 'comprovante do proporcional');
+    assert.equal((await C.raw('GET', '/m/varejo/comissoes')).status, 200, 'a função já vale');
+
+    // Cartão sem limite: a cobrança proporcional é recusada e NADA muda (nem e-mail de recusa: a pessoa está na tela).
+    await C.put('/billing/payment-method', { method: 'CARD', cardToken: 'tok_mock_master_0341_1230' });
+    const recusas = outbox.filter((m) => m.to === mail && /não conseguimos cobrar/.test(m.subject)).length;
+    const bad = await C.raw('PUT', '/billing/subscription/features', sel(['varejo.comissoes', 'varejo.etiquetas']));
+    assert.equal(bad.status, 400);
+    assert.match(bad.body.error, /proporcional de 6,60 foi recusada/);
+    const depois = await C.get('/billing/subscription');
+    assert.equal(depois.amount, '134.40');
+    assert.ok(!depois.items.some((i: any) => i.key === 'varejo.etiquetas'), 'recusada, a função não entra');
+    assert.equal((await C.raw('GET', '/m/varejo/etiquetas/modelos')).status, 403);
+    assert.equal(outbox.filter((m) => m.to === mail && /não conseguimos cobrar/.test(m.subject)).length, recusas);
+
+    // Tirar função não cobra nem devolve agora: o valor menor vale na próxima fatura.
+    const notas = depois.invoices.length;
+    const menos = await C.put('/billing/subscription/features', sel([]));
+    assert.equal(menos.amount, '114.50');
+    assert.equal(menos.invoices.length, notas, 'remover não gera fatura');
+  });
+
   test('aviso de fim do teste grátis: 2 dias antes, uma vez, com valor e cartão', async () => {
     const mail = `teste-acabando-${run.toLowerCase()}@exemplo.com`;
     const t = (await api().post('/account/register', { name: 'Dona Fim de Teste', email: mail, password: 'Senha-forte-123' })).token;
