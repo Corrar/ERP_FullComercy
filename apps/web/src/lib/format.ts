@@ -5,7 +5,7 @@ export const d = (v: unknown) => (v ? new Date(v as string).toLocaleDateString('
 export const hhmm = (v: unknown) => (v ? new Date(v as string).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—');
 export const STATUS_PT: Record<string, string> = {
   DRAFT: 'Rascunho', OPEN: 'Aberto', CONFIRMED: 'Confirmado', IN_PROGRESS: 'Em andamento', READY: 'Pronto', COMPLETED: 'Concluído', CANCELLED: 'Cancelado',
-  QUEUED: 'Na fila', PREPARING: 'Preparando', SERVED: 'Servido', PENDING: 'Pendente', ASSIGNED: 'Atribuída', PICKED_UP: 'Saiu', DELIVERED: 'Entregue', FAILED: 'Falhou',
+  QUEUED: 'Na fila', PREPARING: 'Preparando', SERVED: 'Servido', PENDING: 'Pendente', ASSIGNED: 'Atribuída', PICKED_UP: 'Saiu', DELIVERED: 'Entregue', FAILED: 'Falhou', GENERATED: 'Gerado', PRINTED: 'Impresso',
   RECEIVED: 'Recebido', DIAGNOSING: 'Diagnóstico', AWAITING_APPROVAL: 'Aguardando aprovação', APPROVED: 'Aprovado', AWAITING_PARTS: 'Aguardando peça', IN_SERVICE: 'Em serviço', QUALITY_CHECK: 'Qualidade',
   SCHEDULED: 'Agendado', ARRIVED: 'Chegou', NO_SHOW: 'Faltou', DONE: 'Concluído', BOOKED: 'Reservada', CHECKED_IN: 'Hospedado', CHECKED_OUT: 'Saiu',
   ACTIVE: 'Ativa', PAUSED: 'Pausada', OVERDUE: 'Inadimplente', EXPIRED: 'Expirada', PAID: 'Pago', PARTIAL: 'Parcial', REFUNDED: 'Reembolsada', ORDERED: 'Enviado', FREE: 'Livre', OCCUPIED: 'Ocupada', RESERVED: 'Reservada', CLOSING: 'Fechando',

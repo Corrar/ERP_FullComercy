@@ -21,11 +21,11 @@ export const accentStyle = (m?: ModuleKey | null): CSSProperties => (m ? ({ ['--
 /** Ícone de cada item de menu, pela rota (o menu do Shell e o da prévia usam a mesma tabela). */
 export const NAV_ICON: Record<string, string> = {
   '/': 'home', '/pedidos': 'receipt', '/clientes': 'users', '/produtos': 'box', '/estoque': 'grid', '/compras': 'truck', '/financeiro': 'dollar',
-  '/usuarios': 'user', '/perfis': 'shield', '/integracoes': 'link', '/empresa': 'building', '/assinatura': 'card',
+  '/usuarios': 'user', '/perfis': 'shield', '/integracoes': 'link', '/empresa': 'building', '/auditoria': 'eye', '/assinatura': 'card',
   '/varejo/pdv': 'monitor', '/varejo/caixa': 'dollar', '/varejo/grade': 'grid', '/varejo/etiquetas': 'tag', '/varejo/comissoes': 'users', '/varejo/devolucoes': 'undo', '/varejo/relatorios': 'chart',
   '/food/salao': 'utensils', '/food/cozinha': 'flame', '/food/entregas': 'truck', '/food/cardapio': 'clipboard',
   '/academia': 'chart', '/academia/recepcao': 'userCheck', '/academia/matriculas': 'clipboard', '/academia/planos': 'tag', '/academia/turmas': 'calendar', '/academia/acesso': 'idCard',
-  '/servicos': 'clipboard', '/servicos/nova': 'plus', '/servicos/agenda': 'calendar', '/servicos/veiculos': 'car',
+  '/servicos': 'clipboard', '/servicos/nova': 'plus', '/servicos/agenda': 'calendar', '/servicos/veiculos': 'car', '/servicos/catalogo': 'tag',
   '/beleza/agenda': 'calendar', '/beleza/comandas': 'receipt', '/beleza/cadastros': 'scissors', '/beleza/pacotes': 'gift', '/beleza/comissoes': 'users', '/beleza/relatorios': 'chart',
   '/pet/pets': 'paw', '/pet/banho-tosa': 'sparkles', '/pet/balcao': 'monitor', '/pet/veterinaria': 'syringe', '/pet/relatorios': 'chart',
   '/clinica/agenda': 'calendar', '/clinica/pacientes': 'heart', '/clinica/cadastros': 'stethoscope', '/clinica/convenios': 'shield', '/clinica/relatorios': 'chart',

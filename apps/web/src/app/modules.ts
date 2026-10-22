@@ -32,6 +32,7 @@ export const ADMIN_NAV: NavItem[] = [
   { to: '/perfis', label: 'Perfis e permissões', perm: 'core.roles:manage' },
   { to: '/integracoes', label: 'Integrações', perm: 'core.webhooks:manage' },
   { to: '/empresa', label: 'Empresa e módulos', perm: 'core.tenant:manage' },
+  { to: '/auditoria', label: 'Auditoria', perm: 'core.tenant:manage' },
   { to: '/assinatura', label: 'Assinatura', perm: 'core.billing:manage' },
 ];
 

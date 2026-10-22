@@ -12,9 +12,12 @@ export function Matriculas() {
     const o = await post('/orders', { channel: 'SUBSCRIPTION', customerId: v.customerId, items: [], payments: v.amount ? [{ method: v.method, amount: v.amount }] : undefined, moduleData: { planId: v.planId } });
     setAdesao(false); await mats.reload(); if (o.status !== 'COMPLETED') alert(`Adesão criada como pedido #${o.number}. A matrícula nasce quando o pedido for pago.`);
   });
+  const [cobrado, setCobrado] = useState<string | null>(null);
+  const cobrar = useAction(async () => { const r = await post<any>('/m/academia/matriculas/rodar-cobranca'); setCobrado(`Cobranças geradas: ${r?.cobrancasGeradas ?? r?.geradas ?? JSON.stringify(r)}.`); await mats.reload(); });
   const acao = useAction(async (id: string, a: string, body?: unknown) => { await post(`/m/academia/matriculas/${id}/${a}`, body ?? {}); await mats.reload(); });
   return <div className="grid">
-    <div className="row between"><h1 style={{ margin: 0 }}>Matrículas</h1><button className="btn primary" onClick={() => setAdesao(true)}>Nova adesão</button></div>
+    <div className="row between"><h1 style={{ margin: 0 }}>Matrículas</h1><div className="row"><button className="btn" onClick={() => void cobrar.run()} title="O job roda sozinho a cada 6 h; aqui é para não esperar.">Gerar cobranças vencidas agora</button><button className="btn primary" onClick={() => setAdesao(true)}>Nova adesão</button></div></div>
+    <ErrorBox error={cobrar.error} />{cobrado && <div className="card" style={{ padding: 10 }}>{cobrado}</div>}
     <Tabs tabs={[{ k: 'ACTIVE', label: 'Ativas' }, { k: 'PAUSED', label: 'Pausadas' }, { k: 'OVERDUE', label: 'Inadimplentes' }, { k: 'CANCELLED', label: 'Canceladas' }]} active={tab} onChange={setTab} />
     <ErrorBox error={acao.error} />
     <Card><Table rows={mats.data} cols={[{ h: 'Aluno', c: (r) => <>{r.customer.name}<div className="muted">{r.customer.phone}</div></> }, { h: 'Plano', c: (r) => r.plan.name }, { h: 'Início', c: (r) => d(r.startDate) }, { h: 'Próx. cobrança', c: (r) => d(r.nextBillingAt) }, { h: 'Status', c: (r) => <Badge s={r.status} /> },

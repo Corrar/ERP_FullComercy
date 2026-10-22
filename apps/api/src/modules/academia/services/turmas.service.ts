@@ -38,7 +38,11 @@ export async function gerarSessoes(dias = 14, hoje = new Date()) {
 
 export const agenda = (from: Date, to: Date) => ctx().db.gymClassSession.findMany({
   where: { startsAt: { gte: from, lte: to }, cancelled: false },
-  include: { class: { select: { name: true, durationMin: true, instructor: { select: { name: true } } } }, _count: { select: { bookings: { where: { status: { in: ['BOOKED', 'ATTENDED'] } } } } } },
+  include: {
+    class: { select: { name: true, durationMin: true, instructor: { select: { name: true } } } }, _count: { select: { bookings: { where: { status: { in: ['BOOKED', 'ATTENDED'] } } } } },
+    // Quem reservou: a tela de chamada marca presença em cima desta lista.
+    bookings: { where: { status: { not: 'CANCELLED' } }, select: { customerId: true, status: true, customer: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
+  },
   orderBy: { startsAt: 'asc' },
 });
 

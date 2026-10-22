@@ -12,7 +12,7 @@ import { defaultWarehouseId } from '../inventory/products.service';
 import { events } from '../../shared/events';
 
 // ── Fornecedores ──
-export const listSuppliers = (q?: string) => ctx().db.supplier.findMany({ where: { isActive: true, ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}) }, orderBy: { name: 'asc' }, take: 200 });
+export const listSuppliers = (q?: string, todos = false) => ctx().db.supplier.findMany({ where: { ...(todos ? {} : { isActive: true }), ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}) }, orderBy: [{ isActive: 'desc' }, { name: 'asc' }], take: 200 });
 export const createSupplier = (input: { name: string; document?: string; email?: string; phone?: string; notes?: string }) => ctx().db.supplier.create({ data: { ...input, tenantId: ctx().tenantId, document: input.document?.replace(/\D/g, '') || undefined } });
 export const updateSupplier = (id: string, input: { name?: string; email?: string; phone?: string; notes?: string; isActive?: boolean }) => ctx().db.supplier.update({ where: { id }, data: input });
 

@@ -14,6 +14,7 @@ import { Users } from '@/core/users/Users';
 import { Roles } from '@/core/users/Roles';
 import { Integrations } from '@/core/integrations/Integrations';
 import { Company } from '@/core/company/Company';
+import { Audit } from '@/core/audit/Audit';
 import { Account } from '@/core/auth/Account';
 import { Storefront, OrderTracking } from '@/public/Storefront';
 import { CustomerDetail } from '@/core/customers/CustomerDetail';
@@ -77,6 +78,7 @@ export const router = createBrowserRouter([
         { path: '/perfis', element: <Roles /> },
         { path: '/integracoes', element: <Integrations /> },
         { path: '/empresa', element: <Company /> },
+        { path: '/auditoria', element: <Audit /> },
         { path: '/conta', element: <Account /> },
         { path: '/assinatura', element: <Subscription /> },
         ...MODULES.map((m) => ({ element: <RequireModule k={m.key} />, children: m.routes })),

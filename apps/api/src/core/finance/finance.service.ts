@@ -2,7 +2,7 @@
 // Os módulos NÃO criam `FinanceEntry` por conta própria: chamam `createEntry`/`settle` daqui.
 // Assim "quanto entrou hoje" é UMA query no core, somando PDV, delivery, mensalidade e OS.
 import { FinanceEntryKind, FinanceEntryStatus, PaymentMethod, Prisma } from '@prisma/client';
-import type { TenantTx } from '../../infra/prisma';
+import { tenantTransaction, type TenantTx } from '../../infra/prisma';
 import { ctx } from '../tenancy/tenant-context';
 import { AppError } from '../../shared/errors';
 import { D, round2 } from '../../shared/money';
@@ -64,7 +64,7 @@ async function defaultAccountId(tx: TenantTx): Promise<string> {
 export async function listEntries(filter: { kind?: FinanceEntryKind; status?: FinanceEntryStatus; from?: Date; to?: Date }) {
   return ctx().db.financeEntry.findMany({
     where: { kind: filter.kind, status: filter.status, dueDate: { gte: filter.from, lte: filter.to } },
-    include: { customer: { select: { name: true } }, payments: true },
+    include: { customer: { select: { name: true } }, category: { select: { name: true } }, payments: true },
     orderBy: { dueDate: 'asc' }, take: 500,
   });
 }
@@ -79,16 +79,52 @@ export async function createAccount(input: { name: string; kind: 'CASH' | 'BANK'
 export const listCategories = () => ctx().db.financeCategory.findMany({ orderBy: [{ kind: 'asc' }, { name: 'asc' }] });
 export const createCategory = (input: { name: string; kind: FinanceEntryKind }) => ctx().db.financeCategory.create({ data: { ...input, tenantId: ctx().tenantId } });
 
-export async function cancelEntry(id: string, reason: string) {
-  const { db } = ctx();
-  const e = await db.financeEntry.findUnique({ where: { id } });
-  if (!e) throw AppError.notFound('Título');
-  if (D(e.paidAmount).gt(0)) throw AppError.conflict('Título com baixa não pode ser cancelado; estorne os pagamentos.');
-  return db.financeEntry.update({ where: { id }, data: { status: FinanceEntryStatus.CANCELLED, notes: [e.notes, `Cancelado: ${reason}`].filter(Boolean).join('\n') } });
+// Mexer em título à mão (baixa, edição, cancelamento) deixa rastro na auditoria: é dinheiro.
+const auditar = (tx: TenantTx, action: string, entityId: string, details: Record<string, unknown>) =>
+  tx.auditLog.create({ data: { tenantId: ctx().tenantId, userId: ctx().userId, action, entity: 'FinanceEntry', entityId, details: details as Prisma.InputJsonValue } });
+
+/** Baixa manual (tela do financeiro). As baixas de venda/compra entram por `settle` direto. */
+export async function baixaManual(input: SettleInput) {
+  const { db, tenantId } = ctx();
+  return tenantTransaction(db, tenantId, async (tx) => {
+    const row = await settle(tx, tenantId, input);
+    await auditar(tx, 'finance.entry.settle', input.entryId, { amount: input.amount.toString(), method: input.method, accountId: input.accountId, reference: input.reference });
+    return row;
+  });
 }
 
-export const updateEntry = (id: string, input: { description?: string; dueDate?: Date; categoryId?: string | null; notes?: string; amount?: number }) =>
-  ctx().db.financeEntry.update({ where: { id }, data: { ...input, amount: input.amount !== undefined ? round2(D(input.amount)) : undefined } });
+export async function cancelEntry(id: string, reason: string) {
+  const { db, tenantId } = ctx();
+  return tenantTransaction(db, tenantId, async (tx) => {
+    const e = await tx.financeEntry.findUnique({ where: { id } });
+    if (!e) throw AppError.notFound('Título');
+    if (e.status === FinanceEntryStatus.CANCELLED) throw AppError.conflict('Título já cancelado.');
+    if (D(e.paidAmount).gt(0)) throw AppError.conflict('Título com baixa não pode ser cancelado; estorne os pagamentos.');
+    const row = await tx.financeEntry.update({ where: { id }, data: { status: FinanceEntryStatus.CANCELLED, notes: [e.notes, `Cancelado: ${reason}`].filter(Boolean).join('\n') } });
+    await auditar(tx, 'finance.entry.cancel', id, { reason, amount: e.amount.toString(), description: e.description });
+    return row;
+  });
+}
+
+/** Edição do título. O valor não desce abaixo do já baixado e o status acompanha o novo valor
+ *  (antes ficava PARTIAL com o pago maior que o total, ou OPEN com tudo quitado). */
+export async function updateEntry(id: string, input: { description?: string; dueDate?: Date; categoryId?: string | null; notes?: string; amount?: number }) {
+  const { db, tenantId } = ctx();
+  return tenantTransaction(db, tenantId, async (tx) => {
+    const e = await tx.financeEntry.findUnique({ where: { id } });
+    if (!e) throw AppError.notFound('Título');
+    if (e.status === FinanceEntryStatus.CANCELLED) throw AppError.conflict('Título cancelado não se edita.');
+    let status: FinanceEntryStatus | undefined; let amount: Prisma.Decimal | undefined;
+    if (input.amount !== undefined) {
+      amount = round2(D(input.amount)); const pago = D(e.paidAmount);
+      if (amount.lt(pago)) throw AppError.validation(`O valor não pode ficar abaixo do já baixado (${pago.toFixed(2)}).`);
+      status = amount.eq(pago) ? FinanceEntryStatus.PAID : pago.gt(0) ? FinanceEntryStatus.PARTIAL : FinanceEntryStatus.OPEN;
+    }
+    const row = await tx.financeEntry.update({ where: { id }, data: { ...input, amount, status } });
+    await auditar(tx, 'finance.entry.update', id, { antes: { description: e.description, amount: e.amount.toString(), dueDate: e.dueDate, categoryId: e.categoryId }, depois: input });
+    return row;
+  });
+}
 
 /** Fluxo de caixa do período: recebido × pago por dia, por conta e por categoria; vencidos. */
 export async function summary(from: Date, to: Date) {

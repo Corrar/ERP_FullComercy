@@ -69,3 +69,10 @@ export const acct = {
   get: <T = any>(path: string) => api<T>(path, { auth: 'account' }),
   post: <T = any>(path: string, body?: unknown, headers?: Record<string, string>) => api<T>(path, { method: 'POST', body: body ?? {}, auth: 'account', headers }),
 };
+
+/** Baixa um arquivo da API com o Bearer (PDF, CSV): link solto não leva o token e dá 401. */
+export async function baixarArquivo(path: string, query: Req['query'], nome: string) {
+  const res = await api<Response>(path, { query, raw: true });
+  if (!res.ok) throw new ApiError(res.status, 'HTTP', (await res.json().catch(() => null))?.error ?? `Erro ${res.status}`);
+  const url = URL.createObjectURL(await res.blob()); const a = document.createElement('a'); a.href = url; a.download = nome; a.click(); URL.revokeObjectURL(url);
+}

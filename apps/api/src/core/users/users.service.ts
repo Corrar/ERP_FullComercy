@@ -5,7 +5,7 @@ import { hashPassword } from '../auth/auth.service';
 
 export async function listUsers() {
   return ctx().db.user.findMany({
-    select: { id: true, name: true, email: true, isActive: true, lastLoginAt: true, roles: { select: { role: { select: { key: true, name: true } } } } },
+    select: { id: true, name: true, email: true, isActive: true, lastLoginAt: true, roles: { select: { role: { select: { key: true, name: true } } } }, permissions: { select: { permissionKey: true, effect: true } } },
     orderBy: { name: 'asc' },
   });
 }

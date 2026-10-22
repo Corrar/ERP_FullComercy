@@ -136,6 +136,8 @@ if (!E2E) {
 
     const mesa = await A.post('/m/food/mesas', { number: await mesaLivre(A), seats: 2 });
     const comanda = await A.post('/m/food/comandas', { code: `C-${run}`, tableId: mesa.id, guests: 2 });
+    // Mesa com comanda aberta não sai do mapa (a conta ficaria sem lugar para fechar).
+    assert.equal((await A.raw('PATCH', `/m/food/mesas/${mesa.id}`, { isActive: false })).status, 409);
 
     // Rodada 1 — preço do cardápio (29.90) vence o de tabela (25).
     const r1 = await A.post('/orders', { channel: 'TABLE', items: [{ variantId: burger.variants[0].id, quantity: 2, metadata: { modifiers: [{ name: 'Bacon', price: 4 }] } }], moduleData: { tabId: comanda.id, tableId: mesa.id, menuId: menu.id } });
@@ -210,6 +212,13 @@ if (!E2E) {
     assert.equal((await A.raw('POST', `/m/academia/agenda/${sessao.id}/reservas`, { customerId: outro.id })).status, 403, 'sem matrícula não reserva');
     const painel = await A.get('/m/academia/painel');
     assert.ok(painel.ativos >= 1); assert.ok(Number(painel.mrr) >= 149.9);
+
+    // "Gerar cobranças agora" é da empresa de quem clica: com outra academia no banco, a rota
+    // manual não pode varrer as duas (antes rodava o job de plataforma inteiro).
+    const outra = `fit2-${run.toLowerCase()}`;
+    const r = await api().raw('POST', '/platform/tenants', { slug: outra, name: 'Outra Academia', adminEmail: `admin@${outra}.local`, adminPassword: 'Senha-12345678', modules: ['ACADEMIA'] }, { 'x-platform-key': process.env.PLATFORM_API_KEY! });
+    assert.equal(r.status, 201);
+    assert.equal((await A.post('/m/academia/matriculas/rodar-cobranca')).tenants, 1);
   });
 
   // ───────────────────────────── SERVIÇOS ─────────────────────────────

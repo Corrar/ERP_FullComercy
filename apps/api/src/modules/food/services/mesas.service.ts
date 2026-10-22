@@ -100,8 +100,11 @@ export async function cancelarComanda(tabId: string, reason: string) {
   await db.auditLog.create({ data: { tenantId: ctx().tenantId, userId: ctx().userId, action: 'food.tab.cancel', entity: 'FoodTab', entityId: tabId, details: { reason } } });
 }
 
-export const atualizarMesa = (id: string, input: { name?: string; area?: string; seats?: number; status?: 'FREE' | 'OCCUPIED' | 'RESERVED' | 'CLOSING'; isActive?: boolean }) =>
-  ctx().db.foodTable.update({ where: { id }, data: input });
+export async function atualizarMesa(id: string, input: { name?: string; area?: string; seats?: number; status?: 'FREE' | 'OCCUPIED' | 'RESERVED' | 'CLOSING'; isActive?: boolean }) {
+  // Mesa desativada some do mapa: com comanda aberta, a conta ficaria sem lugar para fechar.
+  if (input.isActive === false && await ctx().db.foodTab.count({ where: { tableId: id, status: 'OPEN' } })) throw AppError.conflict('Mesa com comanda aberta: feche ou transfira a comanda antes de desativar.');
+  return ctx().db.foodTable.update({ where: { id }, data: input });
+}
 
 /** Mapa do salão: cada mesa com a comanda aberta e o total parcial. */
 export async function mapaDoSalao() {
