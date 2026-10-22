@@ -26,7 +26,7 @@ export function Pagar() {
         <div className="muted small">Abra o app do seu banco e escolha <strong>Pix → Ler QR Code</strong>. No celular, use <strong>Pix Copia e Cola</strong>:</div>
         <div className="mono" style={{ wordBreak: 'break-all', fontSize: 11, background: 'var(--hover)', padding: 10, borderRadius: 10, textAlign: 'left' }}>{p.data.pix}</div>
         <Copiar texto={p.data.pix} rotulo="Copiar código Pix" />
-        <div className="faint small">Depois de pagar, a empresa confirma o recebimento.{p.data.expiraEm ? ` Vence em ${dt(p.data.expiraEm)}.` : ''}</div>
+        <div className="faint small">{p.data.baixaAutomatica ? 'O pagamento é reconhecido na hora.' : 'Depois de pagar, a empresa confirma o recebimento.'}{p.data.expiraEm ? ` Vence em ${dt(p.data.expiraEm)}.` : ''}</div>
         <button className="btn" onClick={() => void p.reload()}><Icon name="refresh" size={16} /> Já paguei — atualizar</button>
       </> : <div className={`banner ${p.data.status === 'PAID' ? 'info' : 'warn'}`} style={{ margin: 0 }}>{SITUACAO[p.data.status] ?? p.data.status}{p.data.pagoEm ? ` (${dt(p.data.pagoEm)})` : ''}</div>}
     </>}

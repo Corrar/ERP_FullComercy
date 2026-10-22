@@ -26,7 +26,8 @@ export function Storefront() {
       zoneId: tipo === 'DELIVERY' && zona ? zona : undefined,
       itens: carrinho.map((l) => ({ menuItemId: l.menuItemId, quantity: l.qtd, modifiers: l.modifiers })),
       pagamentoNaEntrega: v.pagamento as never, observacoes: v.obs || undefined,
-      pagarOnline: v.pagamento === 'ONLINE' ? { provider: v.provider || 'mock', method: 'PIX' } : undefined,
+      // O meio (Mercado Pago ou chave Pix) é o da loja: quem escolhe é a API.
+      pagarOnline: v.pagamento === 'ONLINE' ? { method: 'PIX' } : undefined,
     });
     sessionStorage.setItem(`fc.pedido.${r.number}`, JSON.stringify({ telefone: v.telefone, pagamento: r.pagamento ?? null }));
     nav(`/pedido/${tenant}/${r.number}?tel=${encodeURIComponent(v.telefone)}`);
@@ -49,8 +50,7 @@ export function Storefront() {
         <div className="row"><Field label="Rua"><input className="input" name="street" required /></Field><Field label="Nº"><input className="input" name="number" /></Field></div>
         <div className="row"><Field label="Bairro"><input className="input" name="district" /></Field><Field label="Cidade"><input className="input" name="city" required /></Field><Field label="UF"><input className="input" name="state" maxLength={2} required /></Field></div>
         <Field label="Referência"><input className="input" name="reference" /></Field></>}
-      <Field label="Pagamento"><select className="input" name="pagamento" defaultValue="PIX"><option value="PIX">PIX na {tipo === 'DELIVERY' ? 'entrega' : 'retirada'}</option><option value="CASH">Dinheiro</option><option value="DEBIT">Débito</option><option value="CREDIT">Crédito</option><option value="ONLINE">Pagar agora (PIX online)</option></select></Field>
-      <input type="hidden" name="provider" value="mock" />
+      <Field label="Pagamento"><select className="input" name="pagamento" defaultValue="PIX"><option value="PIX">PIX na {tipo === 'DELIVERY' ? 'entrega' : 'retirada'}</option><option value="CASH">Dinheiro</option><option value="DEBIT">Débito</option><option value="CREDIT">Crédito</option>{c.pagamentoOnline && <option value="ONLINE">Pagar agora (Pix online)</option>}</select></Field>
       <Field label="Observações"><input className="input" name="obs" /></Field>
       <div className="row between"><span className="muted">Itens {brl(total)}{taxa ? ` + entrega ${brl(taxa)}` : ''}</span><strong>Total {brl(total + taxa)}</strong></div>
       <ErrorBox error={pedir.error} />

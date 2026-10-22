@@ -51,6 +51,7 @@ export function initRealtime(http: HttpServer, allowed: (origin: string) => bool
   events.on('delivery.status', (p) => emitToTenant(p.tenantId, 'delivery.status', p));
   events.on('gym.access',      (p) => emitToTenant(p.tenantId, 'gym.access', p));
   events.on('os.status',       (p) => emitToTenant(p.tenantId, 'os.status', p));
+  events.on('payment.paid',    (p) => emitToTenant(p.tenantId, 'payment.paid', p));
   // Acompanhamento público: só o aviso "mudou" (a página relê pelo GET que exige o telefone).
   const avisar = (orderId?: string | null) => { if (orderId) io?.to(`track:${orderId}`).emit('track.update', { orderId }); };
   events.on('order.status', (p) => avisar(p.orderId));

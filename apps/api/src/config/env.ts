@@ -46,6 +46,11 @@ export const envSchema = z.object({
   APP_ENCRYPTION_KEY_PREVIOUS: z.string().min(16).optional(),
   /// URL pública do FRONT (links de e-mail: redefinir senha, convite).
   APP_URL: z.string().url().default('http://localhost:5173'),
+  /// URL pública da API (com https), para o gateway avisar o pagamento (Mercado Pago:
+  /// `<API_PUBLIC_URL>/public/payments/mercadopago/webhook`). Na Vercel: `https://<front>/api`.
+  API_PUBLIC_URL: z.string().url().optional(),
+  /// API do Mercado Pago (Pix com baixa automática na conta da empresa). Trocar só em teste (servidor falso).
+  MERCADOPAGO_API_URL: z.string().url().default('https://api.mercadopago.com'),
   /// E-mail transacional. Sem SMTP_HOST, provedor `console` (loga o link; nada sai).
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().default(587),
@@ -115,6 +120,8 @@ export function configProblems(c: z.infer<typeof envSchema>, st: 'local' | 'stag
   if (c.APP_ENCRYPTION_KEY_PREVIOUS && !c.APP_ENCRYPTION_KEY) out.push('APP_ENCRYPTION_KEY_PREVIOUS sem APP_ENCRYPTION_KEY: a chave nova vai na atual, a antiga na PREVIOUS.');
   if (c.APP_ENCRYPTION_KEY_PREVIOUS && c.APP_ENCRYPTION_KEY_PREVIOUS === c.APP_ENCRYPTION_KEY) out.push('APP_ENCRYPTION_KEY_PREVIOUS igual à atual: a rotação não troca nada.');
   if (st === 'production' && !c.APP_ENCRYPTION_KEY) out.push('Produção exige APP_ENCRYPTION_KEY (sem ela os segredos dos webhooks e das catracas ficam em claro no banco).');
+  if (st === 'production' && c.MERCADOPAGO_API_URL !== 'https://api.mercadopago.com') out.push('MERCADOPAGO_API_URL só muda fora de produção (servidor falso dos testes).');
+  if (st === 'production' && !c.API_PUBLIC_URL?.startsWith('https://')) out.push('Produção exige API_PUBLIC_URL com https (o Mercado Pago avisa o Pix pago nesse endereço).');
   // Sem SMTP o cliente compra e nunca recebe os dados de acesso nem o "esqueci a senha".
   if (st === 'production' && !c.SMTP_HOST) out.push('Produção exige e-mail de verdade (SMTP_HOST, e SMTP_USER/SMTP_PASS se o servidor pedir).');
   return out;

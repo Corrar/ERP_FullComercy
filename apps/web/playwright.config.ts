@@ -1,5 +1,6 @@
 // playwright.config.ts — e2e do FRONT no navegador real. Sobe a API (porta 3300, .env de apps/api)
-// e o Vite (porta 5180, proxy para a API) e roda os cenários em e2e/*.spec.ts.
+// e o Vite (porta 5180, proxy para a API) e roda os cenários em e2e/*.spec.ts. O Mercado Pago é um
+// servidor falso (porta 3399, e2e/mercadopago-falso.mjs): nada sai para a internet.
 // Exige banco migrado + seed (mesmo pré-requisito do e2e da API).
 import { defineConfig } from '@playwright/test';
 
@@ -14,7 +15,8 @@ export default defineConfig({
   reporter: [['list']],
   use: { baseURL: WEB, trace: 'retain-on-failure', locale: 'pt-BR' },
   webServer: [
-    { command: 'npx ts-node -T src/server.ts', cwd: '../api', port: 3300, env: { PORT: '3300', JOBS_ENABLED: '0', RATE_LIMIT_PER_MIN: '20000' }, reuseExistingServer: true, timeout: 60_000 },
+    { command: 'node e2e/mercadopago-falso.mjs', port: 3399, reuseExistingServer: true, timeout: 10_000 },
+    { command: 'npx ts-node -T src/server.ts', cwd: '../api', port: 3300, env: { PORT: '3300', JOBS_ENABLED: '0', RATE_LIMIT_PER_MIN: '20000', MERCADOPAGO_API_URL: 'http://127.0.0.1:3399' }, reuseExistingServer: true, timeout: 60_000 },
     // Vite em 127.0.0.1 explícito: sem --host ele segue o `localhost` do sistema, que no runner do
     // GitHub resolve para ::1 — a checagem por porta aceitava ::1 e o navegador, em 127.0.0.1, era recusado.
     { command: `npx vite --host 127.0.0.1 --port 5180 --strictPort`, env: { API_PROXY: API }, url: WEB, reuseExistingServer: true, timeout: 60_000 },

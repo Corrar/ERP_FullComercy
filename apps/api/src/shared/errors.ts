@@ -12,6 +12,7 @@ export type AppErrorCode =
   | 'MODULE_AMBIGUOUS'
   | 'STOCK_INSUFFICIENT'
   | 'INVALID_TRANSITION'
+  | 'UNAVAILABLE'
   | 'INTERNAL';
 
 const STATUS: Record<AppErrorCode, number> = {
@@ -24,6 +25,7 @@ const STATUS: Record<AppErrorCode, number> = {
   MODULE_AMBIGUOUS: 422,
   STOCK_INSUFFICIENT: 422,
   INVALID_TRANSITION: 422,
+  UNAVAILABLE: 503,
   INTERNAL: 500,
 };
 

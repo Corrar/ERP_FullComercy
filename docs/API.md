@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-22. 351 rotas.
+> Gerado por `npm run docs:api` em 2026-10-22. 354 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
 
@@ -142,6 +142,9 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/payments/intents/:id` | `core.payments:manage` |
 | `GET` | `/payments/config/pix` | `core.payments:manage` |
 | `PUT` | `/payments/config/pix` | `core.payments:manage` |
+| `GET` | `/payments/config/mercadopago` | `core.payments:manage` |
+| `PUT` | `/payments/config/mercadopago` | `core.payments:manage` |
+| `DELETE` | `/payments/config/mercadopago` | `core.payments:manage` |
 | `POST` | `/payments/intents/:id/confirm` | `core.payments:manage` |
 | `POST` | `/payments/intents/:id/cancel` | `core.payments:manage` |
 

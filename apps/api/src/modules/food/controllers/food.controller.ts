@@ -82,7 +82,7 @@ const pedidoOnlineSchema = z.object({
   zoneId: z.string().uuid().optional(),
   itens: z.array(z.object({ menuItemId: z.string().uuid(), quantity: z.number().positive().max(50), modifiers: z.array(z.object({ name: z.string(), price: z.number().nonnegative() })).optional(), obs: z.string().max(200).optional() })).min(1).max(50),
   observacoes: z.string().max(500).optional(), pagamentoNaEntrega: z.enum(['CASH', 'DEBIT', 'CREDIT', 'PIX']), trocoPara: z.number().positive().optional(),
-  pagarOnline: z.object({ provider: z.string().min(2).max(30), method: z.enum(['PIX', 'CREDIT']) }).optional(),
+  pagarOnline: z.object({ provider: z.string().min(2).max(30).optional(), method: z.enum(['PIX', 'CREDIT']) }).optional(),
 });
 export const postPedidoOnline = async (req: Request, res: Response) => res.status(201).json(await online.pedidoOnline(String(req.params.tenant), parse(pedidoOnlineSchema, req.body)));
 export const getAcompanhar = async (req: Request, res: Response) => { const q = parse(z.object({ telefone: z.string().min(8) }), req.query); res.json(await online.acompanharPedido(String(req.params.tenant), Number(req.params.numero), q.telefone)); };

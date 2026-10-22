@@ -22,7 +22,7 @@ function roteiro(): Record<'CORE' | ModuleKey, Passo[]> {
       // Funções opcionais do núcleo: o passo só aparece para quem contratou (o front filtra por `can`).
       { key: 'core.compras', titulo: 'Cadastre seus fornecedores', descricao: 'Com eles você faz o pedido de compra e recebe a mercadoria no estoque.', rota: '/compras', permissao: 'core.suppliers:manage', feito: () => tem(db.supplier.count()) },
       { key: 'core.financeiro', titulo: 'Lance a primeira conta a pagar', descricao: 'Aluguel, luz, fornecedor: com vencimento, para o fluxo de caixa mostrar o mês.', rota: '/financeiro', permissao: 'core.finance:manage', feito: () => tem(db.financeEntry.count({ where: { kind: 'PAYABLE' } })) },
-      { key: 'core.cobranca', titulo: 'Cadastre a chave Pix da empresa', descricao: 'Com ela, cada pedido ganha o botão Cobrar por Pix (QR e link para o cliente).', rota: '/cobrancas', permissao: 'core.payments:manage', feito: async () => !!(ctx().tenantSettings.payments as { manual?: { pixKey?: string } } | undefined)?.manual?.pixKey },
+      { key: 'core.cobranca', titulo: 'Cadastre a chave Pix da empresa', descricao: 'Com ela, cada pedido ganha o botão Cobrar por Pix (QR e link para o cliente).', rota: '/cobrancas', permissao: 'core.payments:manage', feito: async () => !!(await import('../payments/payments.service')).provedorPix(ctx().tenantSettings) },
       { key: 'core.integracoes', titulo: 'Conecte outro sistema', descricao: 'Um webhook avisa o seu outro sistema a cada venda, pagamento ou estoque baixo.', rota: '/integracoes', permissao: 'core.webhooks:manage', feito: () => tem(db.webhook.count()) },
     ],
     VAREJO: [

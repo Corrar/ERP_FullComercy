@@ -4,7 +4,7 @@ import { parse } from '../../shared/http';
 import * as auth from './auth.service';
 import type { AuthRequest } from './auth.middleware';
 import { effectivePermissions, visiblePermissions } from '../rbac/rbac.service';
-import { loadTenantSnapshot } from '../tenancy/tenant-modules.service';
+import { loadTenantSnapshot, settingsParaTela } from '../tenancy/tenant-modules.service';
 
 const loginSchema = z.object({
   tenant: z.string().min(1),
@@ -40,7 +40,7 @@ export async function getMe(req: Request, res: Response) {
   const [perms, snap] = await Promise.all([effectivePermissions(a.tenantId, a.userId), loadTenantSnapshot(a.tenantId)]);
   res.json({
     userId: a.userId,
-    tenant: { id: snap.id, slug: snap.slug, name: snap.name, settings: snap.settings },
+    tenant: { id: snap.id, slug: snap.slug, name: snap.name, settings: settingsParaTela(snap.settings) },
     permissions: visiblePermissions(perms),
     modules: [...snap.modules.keys()],
   });

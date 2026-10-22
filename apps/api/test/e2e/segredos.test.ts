@@ -1,5 +1,5 @@
-// test/e2e/segredos.test.ts — rotação da APP_ENCRYPTION_KEY: os segredos do banco (webhook e
-// catraca) vão para a chave nova sem perder o valor; com a chave fora do ambiente, quem depende
+// test/e2e/segredos.test.ts — rotação da APP_ENCRYPTION_KEY: os segredos do banco (webhook,
+// catraca e credenciais do Mercado Pago) vão para a chave nova sem perder o valor; com a chave fora do ambiente, quem depende
 // do segredo falha SÓ naquele item (401 na catraca, entrega falha no webhook), sem 500 nem lote
 // parado; e volta tudo ao recifrar de novo.
 import test, { before, after } from 'node:test';
@@ -31,6 +31,11 @@ if (!E2E || !process.env.APP_ENCRYPTION_KEY) {
     const slug = `cifra-${run.toLowerCase()}`;
     await api().post('/platform/tenants', { slug, name: 'Cifra Co', adminEmail: `admin@${slug}.local`, adminPassword: 'Senha-12345678', modules: ['SERVICOS'] }, P);
     const A = api((await api().post('/auth/login', { tenant: slug, email: `admin@${slug}.local`, password: 'Senha-12345678' })).accessToken);
+    // Credenciais do Mercado Pago da empresa (seladas em settings.payments.mercadopago).
+    const { prisma } = await import('../../src/infra/prisma');
+    const MP = { accessToken: `APP_USR-token-${run}`, webhookSecret: `aviso-${run}` };
+    await prisma.tenant.update({ where: { slug }, data: { settings: { payments: { mercadopago: { accessToken: cifra.seal(MP.accessToken), webhookSecret: cifra.seal(MP.webhookSecret), conta: { id: '1' } } } } } });
+    const mpSelado = async () => ((await prisma.tenant.findUniqueOrThrow({ where: { slug } })).settings as any).payments.mercadopago as Record<string, string>;
     const recebidos: { sig: string; body: string; orderId: string }[] = [];
     const srv: Server = createServer((req, res) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => { recebidos.push({ sig: String(req.headers['x-fc-signature']), body: b, orderId: JSON.parse(b).data?.orderId }); res.end(); }); });
     await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
@@ -55,6 +60,8 @@ if (!E2E || !process.env.APP_ENCRYPTION_KEY) {
       const s1 = await statusDosSegredos(rot);
       assert.equal(s1.pendentes, 0); assert.equal(s1.porChave[cifra.kid!] ?? 0, 0, 'nada ficou na chave antiga');
       assert.equal((await recifrarSegredos(rot)).recifrados, 0, 'segunda passada não regrava nada');
+      const mp1 = await mpSelado();
+      assert.deepEqual([rot.chaveDo(mp1.accessToken), rot.open(mp1.accessToken), rot.open(mp1.webhookSecret)], [rot.kid, MP.accessToken, MP.webhookSecret], 'credencial do Mercado Pago na chave nova, mesmo valor');
       // A API no ar ainda NÃO tem a chave nova: o status mostra e quem depende do segredo falha sozinho.
       assert.equal((await statusDosSegredos()).ilegiveis, s1.total);
       assert.equal((await bater()).status, 401, 'catraca recusa, sem 500');
@@ -68,6 +75,8 @@ if (!E2E || !process.env.APP_ENCRYPTION_KEY) {
       assert.ok((await recifrarSegredos(criarCifra(atual, nova))).recifrados >= 2);
       assert.equal((await statusDosSegredos()).ilegiveis, 0);
       assert.equal((await bater()).status, 200, 'o token da catraca é o mesmo');
+      const mp2 = await mpSelado();
+      assert.deepEqual([cifra.open(mp2.accessToken), cifra.open(mp2.webhookSecret), mp2.conta], [MP.accessToken, MP.webhookSecret, { id: '1' } as never]);
       const ped = await vender();
       await despachar(() => recebidos.some((x) => x.orderId === ped.id));
       const ev = recebidos.find((x) => x.orderId === ped.id);

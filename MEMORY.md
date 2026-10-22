@@ -78,6 +78,9 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | "Cobrança online" era vendida sem botão de cobrar; a lista só aparecia em Integrações (outra função paga) | nenhum teste olhava se a função vendida tinha tela | `test/funcoes-prontas.test.ts` (rota + menu de toda função) e e2e `funcoes-prontas` (contratar e já responder); contra-prova: tirar o item do menu derruba o teste |
 | Spec de navegador via a sessão "velha" depois de mudar o plano | `page.addInitScript` roda de novo a cada navegação e regravava a sessão injetada | injetar só se `localStorage` estiver vazio |
 | Teste esperava `code: 'NOT_IN_PLAN'` | o corte do plano responde `FORBIDDEN` com `details.reason = 'NOT_IN_PLAN'` | ler `body.details.reason` |
+| Cardápio online: "Pagar agora (PIX online)" falhava em toda loja real e deixava o pedido criado | a vitrine mandava `provider: 'mock'` fixo; a API conferia o provedor DEPOIS de `createOrder` | o servidor escolhe (`provedorPix`), a vitrine só mostra a opção com `pagamentoOnline`, e a recusa vem antes do pedido (e2e `mercadopago`: contagem de pedidos igual; contra-prova: tirar a checagem derruba) |
+| `settings` da empresa ia inteiro para a tela (`/auth/me`, `/tenant/settings`) e `extra` regravava qualquer chave | servia para marca e módulo padrão; credencial de gateway nunca tinha morado ali | `settingsParaTela` tira `payments`; `extra` não toca `payments` (só o `mock`, fora de produção); provedor `mock` nem existe em produção |
+| e2e do navegador com o Mercado Pago falso passou e, na rodada seguinte, o aviso "não pagou" | o servidor falso recomeçava os ids em 5000000 e o banco local ainda tinha a cobrança da rodada anterior com o mesmo id | ids do falso a partir do relógio; vale para qualquer servidor falso que gere id |
 | Testes de navegador passavam, mas o cliente novo não conseguia montar o cardápio pela tela | os testes PREPARAVAM cadastros pela API; a tela de item exigia um produto que a empresa nova não tem | `e2e/primeiro-dia.spec.ts`: cada comércio do zero, só pela tela — nada preparado pela API |
 | "Depois de anonimizar a busca não acha" passava no vazio | a busca não olha e-mail, e o telefone de teste montado de `run` (letras) nem era único | asserção do ANTES (acha 1) com documento e telefone únicos; só então o DEPOIS (acha 0) vale |
 
@@ -180,6 +183,7 @@ npm run docs:api                                 # regenera docs/API.md (265 rot
 | LGPD do titular (exportar/anonimizar) | `apps/api/src/core/customers/lgpd.service.ts` + `lgpd` em cada `modules/<m>/services/lgpd.ts` |
 | cifra de segredos e rotação de chave | `apps/api/src/shared/crypto.ts`, `apps/api/src/core/platform/segredos.service.ts`, `docs/OPERACAO.md` |
 | marca da empresa (logo, cor, página `/e/<slug>`) | `apps/api/src/core/tenancy/marca.service.ts`, `apps/web/src/lib/marca.ts`, `EquipeEmpresa` em `apps/web/src/core/auth/pages.tsx` |
+| Pix com baixa automática (Mercado Pago da empresa) | `apps/api/src/core/payments/providers/mercadopago.ts`, `payments.service.ts` (`provedorPix`, `conectarMercadoPago`), `apps/web/src/core/payments/Cobrancas.tsx`, falsos: `test/e2e/mercadopago.test.ts`, `apps/web/e2e/mercadopago-falso.mjs` |
 | cobrança por Pix (BR Code, link público) | `apps/api/src/shared/pix.ts`, `apps/api/src/core/payments/`, `apps/web/src/core/payments/`, `apps/web/src/public/Pagar.tsx` |
 | garantia de função pronta | `apps/api/test/funcoes-prontas.test.ts`, `apps/api/test/e2e/funcoes-prontas.test.ts`, passos em `primeiros-passos.service.ts` |
 | conta do comprador e Google | `apps/api/src/core/account/` |

@@ -90,3 +90,44 @@ têm kid; a API os abre por tentativa, e o job os regrava no formato novo.
 uma rotação) num lugar separado do backup:
 - a cópia sem a chave não abre os webhooks nem as catracas;
 - a chave junto da cópia anula a cifra.
+
+---
+
+## 3. Pix com baixa automática (Mercado Pago da empresa)
+
+Cada empresa recebe na conta do Mercado Pago **dela**. A plataforma não intermedeia o dinheiro.
+
+**No servidor (uma vez):**
+- `API_PUBLIC_URL` no Render. É o endereço https público da API, e o Mercado Pago avisa o pagamento
+  em `<API_PUBLIC_URL>/public/payments/mercadopago/webhook`.
+  - Homologação: use `https://erp-modular-api.onrender.com`. A Vercel exige login do time e barraria
+    o aviso.
+  - Produção: sem `API_PUBLIC_URL` com https, a API não sobe (`configProblems`).
+
+**Na empresa (pela tela "Cobranças online"):**
+1. No Mercado Pago, abra **Suas integrações → (aplicação) → Credenciais de produção** e copie o
+   Access Token (`APP_USR-…`).
+2. Cole o token em "Conectar Mercado Pago". A API confere o token lá (`/users/me`); se o Mercado
+   Pago recusar, nada é gravado. O token fica **selado** com a `APP_ENCRYPTION_KEY`, entra na rotação
+   do §1 e não volta à tela.
+3. Opcional, como reforço: em **Webhooks** da mesma aplicação, ative "Pagamentos" e copie a
+   assinatura secreta para o campo "Assinatura secreta dos avisos". Com ela, aviso sem assinatura
+   válida é recusado (401).
+
+**Como a baixa acontece:**
+- Com a conta conectada, "Cobrar por Pix" (pedido) e "Pagar agora" (cardápio online) geram o Pix pelo
+  Mercado Pago.
+- O aviso traz só o id do pagamento. A API **relê** o pagamento na API do Mercado Pago com o token
+  da empresa. Só `approved` baixa o pedido, e só uma vez.
+- Sem conta conectada, vale a chave Pix: o operador confirma o recebimento à mão.
+
+**Problemas:**
+- **Pix pago e pedido sem baixa.** Confira `API_PUBLIC_URL`. Depois veja o log do Render em
+  `/public/payments/mercadopago/webhook`:
+  - 401: assinatura secreta diferente da do painel;
+  - 404: o aviso chegou antes de a cobrança ser gravada, e o Mercado Pago reenvia sozinho.
+- **Empresa trocou o token no Mercado Pago.** "Desconectar" e conectar de novo.
+  - As cobranças pendentes da conta anterior já não podem ser conferidas lá; o aviso delas é
+    recusado (401).
+  - Enquanto não houver conta conectada, a lista mostra "Confirmar à mão" para essas cobranças. Use
+    só depois de ver o dinheiro na conta.

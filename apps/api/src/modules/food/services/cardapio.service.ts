@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { createProduct } from '../../../core/inventory/products.service';
 import { AppError } from '../../../shared/errors';
 import { ctx } from '../../../core/tenancy/tenant-context';
+import { provedorPix } from '../../../core/payments/payments.service';
 
 export async function cardapioPublico(tenantSlug: string, menuSlug: string) {
   const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true, name: true, status: true, settings: true, modules: { where: { moduleKey: 'FOOD', enabled: true } } } });
@@ -23,6 +24,8 @@ export async function cardapioPublico(tenantSlug: string, menuSlug: string) {
     menu: { id: menu.id, name: menu.name, availability: menu.availability, abertoAgora: abertoAgora(menu.availability as never) },
     categorias: menu.categories.map((c) => ({ id: c.id, name: c.name, itens: c.items.map((i) => ({ id: i.id, variantId: i.variantId, nome: i.displayName, descricao: i.description, preco: i.price, imagem: i.imageUrl, prepTimeMin: i.prepTimeMin, adicionais: i.modifierGroups.map((g) => g.group) })) })),
     zonasEntrega: zonas,
+    /** Dá para pagar agora por Pix? (o provedor em si fica no servidor) */
+    pagamentoOnline: !!provedorPix((tenant.settings ?? {}) as Record<string, unknown>),
   };
 }
 

@@ -65,7 +65,10 @@
 - [ ] `GOOGLE_CLIENT_ID` de produção (origem do domínio próprio autorizada no console do Google)
 - [ ] Nota fiscal de serviço da mensalidade do SaaS
 
-- [ ] Gateway de pagamento real (PIX dinâmico de um banco/PSP, com baixa automática pelo webhook) como provedor em `core/payments/providers/` — hoje o Pix pela chave já cobra, mas o recebimento é confirmado à mão
+- [x] Pix com baixa automática: a empresa conecta a conta do Mercado Pago dela em "Cobranças online" (token conferido lá e guardado selado, nunca volta à tela nem vai no `settings` da sessão); "Cobrar por Pix" e o "pagar agora" do cardápio online usam essa conta; o aviso do Mercado Pago só baixa depois de RELER o pagamento na API deles (e confere a assinatura secreta, se cadastrada); a janela do pedido fecha ao vivo. Sem conta conectada, segue a chave Pix com confirmação à mão
+- [x] Cardápio online: "Pagar agora" mandava o provedor `mock` (de teste) e só aparecia em loja sem nada configurado; recusa deixava pedido órfão — agora o meio é o da loja, a opção só aparece se houver, e a recusa vem antes de criar o pedido
+- [ ] `API_PUBLIC_URL` no Render (homologação: `https://erp-modular-api.onrender.com`, a Vercel exige login do time e barraria o aviso) — e, para cada empresa, cadastrar o webhook no painel do Mercado Pago com a assinatura secreta (opcional, reforço)
+- [ ] Outros PSPs (Efí, Asaas, banco direto) como provedores em `core/payments/providers/` — mesmo contrato do Mercado Pago
 - [x] Rotação de `APP_ENCRYPTION_KEY`: selo com id da chave, chave anterior só para abrir, job `core.recifrar-segredos`, status em `/platform/segredos`; produção não sobe sem a chave; segredo ilegível falha só o item (webhook/catraca), não o lote — procedimento em `docs/OPERACAO.md`
 - [x] Política de backup/restore escrita (`docs/OPERACAO.md` §2)
 - [ ] Executar a política: `pg_dump` semanal fora do Neon, conferir a janela de restauração do plano, primeiro ensaio de restauração — passo do responsável
