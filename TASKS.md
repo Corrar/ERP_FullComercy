@@ -32,7 +32,7 @@
 - [x] Modelo de perfis aplicado nas empresas antigas (job `core.perfis-modelo`, uma vez por empresa, só perfil vazio)
 - [x] Primeiros passos no painel: roteiro por módulo comprado, marcado pelos dados da empresa, "Fazer agora" leva à tela, dispensável (volta em Empresa)
 - [x] Conta do comprador: esqueci a senha da conta (leva junto a senha das empresas que usam a da conta), reenviar dados de acesso, assinatura e faturas de cada empresa na Minha conta
-- [x] Testes: 44 unit, 46 e2e API, 21 Playwright
+- [x] Testes: 44 unit, 47 e2e API, 22 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
@@ -70,7 +70,9 @@
 
 ## P1 — próxima rodada
 
-- [ ] Identidade visual (nome, logo, cor) — trocar `app/brand.ts`, `--brand` e o ícone
+- [x] Marca DA EMPRESA cliente: logo enviado (PNG/JPEG/WebP conferidos pelos bytes, até 256 KB), cor no menu e nos botões quando a empresa liga, página de acesso da equipe `/e/<empresa>` com a marca dela, aparelho da equipe volta para essa página ao sair, e-mails com o logo enviado
+- [ ] Domínio próprio por empresa (ex.: `sistema.minhaloja.com.br` → página da empresa): exige domínio do produto, DNS e certificado por cliente na Vercel
+- [ ] Identidade visual DO PRODUTO (nome, logo, cor) — trocar `app/brand.ts`, `--brand` e o ícone
 - [x] Proporcional (pro rata) ao ligar função no meio do mês pago: só as funções novas, pelos dias que faltam; cartão cobra antes de ligar (recusou, nada muda); prévia na tela antes de salvar; remover não devolve e o valor menor vale na próxima fatura
 - [x] E-mails de aviso da cobrança: fim do teste em 2 dias, fatura disponível (boleto/Pix), recusa (1ª e última tentativa), suspensão e comprovante — uma vez cada (`core_billing_notices`)
 - [x] Painel do dia por permissão já cortada pelo plano: cada número só para quem pode vê-lo (o Caixa não vê "a receber"; sem Comissões no plano, sem "comissões pendentes"); chaves na conferência de boot

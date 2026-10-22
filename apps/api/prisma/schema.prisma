@@ -215,8 +215,23 @@ model Tenant {
   hotRooms               HotRoom[]
   hotReservations        HotReservation[]
   hotStays               HotStay[]
+  logo                   TenantLogo?
 
   @@map("core_tenants")
+}
+
+/// Logo da empresa (tela Empresa): aparece no menu do sistema, na página de acesso da equipe
+/// (`/e/<slug>`) e nos e-mails. Os bytes ficam aqui (até 256 KB, PNG/JPEG/WebP conferidos pela
+/// assinatura do arquivo) e saem por `GET /public/marca/:slug/logo`. Uma por empresa.
+model TenantLogo {
+  tenantId  String   @id @map("tenant_id") @db.Uuid
+  mime      String   @db.VarChar(20)
+  data      Bytes
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("core_tenant_logos")
 }
 
 /// Quais módulos a empresa contratou/ativou. Ausência de linha = módulo desligado.

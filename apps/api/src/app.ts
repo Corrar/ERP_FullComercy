@@ -23,7 +23,7 @@ import { moduleRegistry } from './modules/module.registry';
 import { registerAllModules } from './modules';
 
 import authRouter from './core/auth/auth.routes';
-import tenantRouter from './core/tenancy/tenant.routes';
+import tenantRouter, { publicMarcaRouter } from './core/tenancy/tenant.routes';
 import usersRouter from './core/users/users.routes';
 import rolesRouter from './core/rbac/roles.routes';
 import customersRouter from './core/customers/customers.routes';
@@ -105,6 +105,7 @@ export function buildApp() {
   app.use('/public/payments', paymentsPublicRouter); collect('/public/payments', paymentsPublicRouter, 'public');
   // Loja de módulos: vitrine pública e a conta do comprador (token próprio, sem tenant).
   app.use('/public/billing', publicBillingRouter); collect('/public/billing', publicBillingRouter, 'public');
+  app.use('/public/marca', publicMarcaRouter); collect('/public/marca', publicMarcaRouter, 'public');
   app.use('/account', accountRouter); collect('/account', accountRouter, 'public');
   moduleRegistry.mountPublic(app);
   for (const m of moduleRegistry.all()) if (m.publicRouter) collect(`/public/${m.basePath}`, m.publicRouter, 'public', m.key);

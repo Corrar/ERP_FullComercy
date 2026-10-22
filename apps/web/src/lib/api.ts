@@ -27,16 +27,16 @@ async function tryRefresh(): Promise<boolean> {
   return refreshing;
 }
 
-export interface Req { method?: string; body?: unknown; query?: Record<string, string | number | boolean | undefined>; headers?: Record<string, string>; raw?: boolean; auth?: 'tenant' | 'account' | 'none' }
+export interface Req { method?: string; body?: unknown; /** Arquivo como o próprio corpo (logo): vai com o tipo dele, sem JSON. */ file?: Blob; query?: Record<string, string | number | boolean | undefined>; headers?: Record<string, string>; raw?: boolean; auth?: 'tenant' | 'account' | 'none' }
 
 export async function api<T = any>(path: string, opts: Req = {}, retry = true): Promise<T> {
   const q = opts.query ? '?' + new URLSearchParams(Object.entries(opts.query).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)])).toString() : '';
   const auth = opts.auth ?? 'tenant';
   const token = auth === 'tenant' ? session.get()?.accessToken : auth === 'account' ? accountSession.get()?.token : undefined;
   const res = await fetch(`${BASE}${path}${q}`, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { ...(opts.body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), ...(opts.headers ?? {}) },
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    method: opts.method ?? (opts.body || opts.file ? 'POST' : 'GET'),
+    headers: { ...(opts.file ? { 'content-type': opts.file.type || 'application/octet-stream' } : opts.body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), ...(opts.headers ?? {}) },
+    body: opts.file ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
   });
   if (res.status === 401 && retry && token && auth === 'tenant' && !path.startsWith('/auth/')) {
     if (await tryRefresh()) return api<T>(path, opts, false);

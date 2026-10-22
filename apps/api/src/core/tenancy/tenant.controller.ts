@@ -49,9 +49,11 @@ const settingsSchema = z.object({
   name: z.string().min(2).max(160).optional(),
   document: z.string().max(20).optional(),
   timezone: z.string().max(40).optional(),
-  /** Marca nos e-mails da empresa: cor #RRGGBB e logo em https (vazio apaga). */
+  /** Marca da empresa: cor #RRGGBB (e-mails e, com `corNoSistema`, o sistema) e logo por link https (vazio apaga; o arquivo enviado em /tenant/marca/logo vence). */
   marca: z.object({
     cor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Cor no formato #RRGGBB.').optional(),
+    /** A cor também pinta o sistema (menu, botões) no lugar da cor de cada módulo. */
+    corNoSistema: z.boolean().optional(),
     logoUrl: z.union([z.literal(''), z.string().url().refine((u) => u.startsWith('https://'), 'O logo precisa estar num endereço https.')]).optional(),
   }).optional(),
   /** Qualquer outra chave livre da empresa (impressora, mensagens). */

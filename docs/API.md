@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-22. 337 rotas.
+> Gerado por `npm run docs:api` em 2026-10-22. 342 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
 
@@ -22,6 +22,8 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/public/billing/catalog` |  |
 | `POST` | `/public/billing/quote` |  |
 | `POST` | `/public/billing/webhooks/:provider` |  |
+| `GET` | `/public/marca/:slug` |  |
+| `GET` | `/public/marca/:slug/logo` |  |
 | `POST` | `/account/register` |  |
 | `POST` | `/account/login` |  |
 | `POST` | `/account/google` |  |
@@ -213,6 +215,9 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `PUT` | `/tenant/settings` | `core.tenant:manage` |
 | `GET` | `/tenant/primeiros-passos` | `core.tenant:manage` |
 | `POST` | `/tenant/primeiros-passos/dispensar` | `core.tenant:manage` |
+| `GET` | `/tenant/marca` |  |
+| `PUT` | `/tenant/marca/logo` | `core.tenant:manage` |
+| `DELETE` | `/tenant/marca/logo` | `core.tenant:manage` |
 
 ## Core · users
 
