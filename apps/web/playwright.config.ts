@@ -15,7 +15,9 @@ export default defineConfig({
   use: { baseURL: WEB, trace: 'retain-on-failure', locale: 'pt-BR' },
   webServer: [
     { command: 'npx ts-node -T src/server.ts', cwd: '../api', port: 3300, env: { PORT: '3300', JOBS_ENABLED: '0' }, reuseExistingServer: true, timeout: 60_000 },
-    { command: `npx vite --port 5180 --strictPort`, env: { API_PROXY: API }, port: 5180, reuseExistingServer: true, timeout: 60_000 },
+    // Vite em 127.0.0.1 explícito: sem --host ele segue o `localhost` do sistema, que no runner do
+    // GitHub resolve para ::1 — a checagem por porta aceitava ::1 e o navegador, em 127.0.0.1, era recusado.
+    { command: `npx vite --host 127.0.0.1 --port 5180 --strictPort`, env: { API_PROXY: API }, url: WEB, reuseExistingServer: true, timeout: 60_000 },
   ],
   projects: [{ name: 'chromium', use: { browserName: 'chromium', launchOptions: process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {} } }],
 });
