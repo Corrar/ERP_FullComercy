@@ -198,6 +198,11 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; backgro
 .feat .price small { display: block; font-size: 11px; color: var(--faint); font-weight: 600; }
 .summary { position: sticky; top: 88px; display: grid; gap: 14px; }
 .summary .total { font-size: 34px; font-weight: 850; letter-spacing: -.03em; line-height: 1; }
+/* Total da loja contando ao mudar o pacote: verde subindo, discreto descendo. */
+.valor-contando { display: inline-block; font-variant-numeric: tabular-nums; transition: color .25s, transform .25s; }
+.valor-contando.sobe { color: var(--ok); transform: scale(1.04); }
+.valor-contando.desce { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .valor-contando { transition: none; transform: none !important; } }
 .summary .total small { font-size: 14px; font-weight: 700; color: var(--muted); letter-spacing: 0; }
 .trial { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--ok-soft); color: var(--ok); font-weight: 650; font-size: 13px; }
 .line { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; padding: 6px 0; }

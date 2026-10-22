@@ -22,7 +22,11 @@ test('loja: comércio → funções → prévia → carrinho → login → cart�
   await expect(page.locator('[data-feature="varejo.pdv"] [role=switch]')).toBeDisabled();
   await expect(page.locator('[data-feature="core.clientes"]')).toContainText('Exigido por PDV e caixa');
   await page.locator('[data-feature="varejo.etiquetas"]').click();
-  await expect(page.getByTestId('total').first()).toContainText('124,40');
+  // O total conta de 114,50 até 124,40 (passa por valores intermediários, em verde) e para no do servidor.
+  const total = page.getByTestId('total').first();
+  await expect(total.locator('.valor-contando.sobe')).toBeVisible();
+  await expect(total).toContainText('124,40');
+  await expect(total.locator('.valor-contando')).not.toHaveClass(/sobe/);
 
   await page.getByRole('button', { name: 'Visualizar meu ERP' }).first().click();
   const prev = page.locator('.preview-frame aside');

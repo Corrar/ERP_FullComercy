@@ -120,6 +120,29 @@ export function FeatureList({ catalog, modules, quote, selected, onToggle }: { c
 }
 
 /** Resumo com o total que o SERVIDOR calculou. `actions` são os botões do contexto. */
+/** Total que CONTA do valor anterior ao novo quando uma função entra ou sai do pacote. Interrompido
+ *  no meio (cliques seguidos), recomeça de onde está. Quem pediu menos movimento vê o valor direto.
+ *  O número final é sempre o do servidor (`quote.total`). */
+export function ValorContando({ valor }: { valor: string | number }) {
+  const alvo = Number(valor);
+  const [mostrado, setMostrado] = useState(alvo); const [dir, setDir] = useState<'sobe' | 'desce' | null>(null);
+  const atual = useRef(alvo);
+  useEffect(() => {
+    const de = atual.current; if (de === alvo) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { atual.current = alvo; setMostrado(alvo); return; }
+    setDir(alvo > de ? 'sobe' : 'desce');
+    const t0 = performance.now(); let raf = 0;
+    const passo = (t: number) => {
+      const p = Math.min(1, (t - t0) / 700); const v = de + (alvo - de) * (1 - (1 - p) ** 3);
+      atual.current = p < 1 ? v : alvo; setMostrado(atual.current);
+      if (p < 1) raf = requestAnimationFrame(passo); else setDir(null);
+    };
+    raf = requestAnimationFrame(passo);
+    return () => cancelAnimationFrame(raf);
+  }, [alvo]);
+  return <span className={`valor-contando${dir ? ` ${dir}` : ''}`}>{brl(mostrado)}</span>;
+}
+
 export function Summary({ catalog, quote, trialAvailable, actions, title = 'Seu ERP' }: { catalog: Catalog; quote: Quote | null; trialAvailable: boolean; actions?: ReactNode; title?: string }) {
   return (
     <aside className="summary bar-on-mobile">
@@ -127,7 +150,7 @@ export function Summary({ catalog, quote, trialAvailable, actions, title = 'Seu 
         <div className="row between"><strong>{title}</strong>{quote && <span className="muted small">{quote.items.length} funções</span>}</div>
         <div className="row" style={{ gap: 6 }}>{quote?.modules.map((m) => <ModuleBadge key={m} m={m} catalog={catalog} />)}</div>
         <div>
-          <div className="total mono" data-testid="total">{quote ? brl(quote.total) : '—'} <small>/mês</small></div>
+          <div className="total mono" data-testid="total">{quote ? <ValorContando valor={quote.total} /> : '—'} <small>/mês</small></div>
         </div>
         {trialAvailable && catalog.trialDays > 0 && <div className="trial"><Icon name="gift" size={18} /><span>{catalog.trialDays} dias grátis na primeira compra. A cobrança só começa depois.</span></div>}
         <div style={{ maxHeight: 260, overflow: 'auto' }} className="scroll">
@@ -140,7 +163,7 @@ export function Summary({ catalog, quote, trialAvailable, actions, title = 'Seu 
 }
 
 export function MobileBar({ quote, children }: { quote: Quote | null; children: ReactNode }) {
-  return <div className="mobile-bar"><div className="tot"><span className="muted small">Total por mês</span><b className="mono">{quote ? brl(quote.total) : '—'}</b></div>{children}</div>;
+  return <div className="mobile-bar"><div className="tot"><span className="muted small">Total por mês</span><b className="mono">{quote ? <ValorContando valor={quote.total} /> : '—'}</b></div>{children}</div>;
 }
 
 // ── Pagamento ─────────────────────────────────────────────────────────────────────────────
