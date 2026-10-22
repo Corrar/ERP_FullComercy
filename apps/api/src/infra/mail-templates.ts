@@ -2,6 +2,7 @@
 // logo de `tenant.settings.marca`) e a versão em texto puro ao lado. Layout em tabela com estilo
 // inline: é o que Gmail/Outlook respeitam. Tudo que vem de fora (nome de pessoa, de empresa) passa
 // por `esc`; cor só #RRGGBB e logo só https — senão cai no padrão. Sem script, sem CSS externo.
+import { env } from '../config/env';
 import { prisma } from './prisma';
 
 export interface Marca { nome: string; cor: string; logoUrl: string | null }
@@ -10,6 +11,13 @@ const COR_PADRAO = '#2563eb';
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const corValida = (c: unknown) => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c) ? c : COR_PADRAO);
 const logoValido = (u: unknown) => { try { return typeof u === 'string' && new URL(u).protocol === 'https:' ? u : null; } catch { return null; } };
+
+/** Marca da PLATAFORMA (e-mails da conta do comprador, que ainda não é de empresa nenhuma): o
+ *  nome vem do remetente configurado (`MAIL_FROM` "Nome <endereço>"), um lugar só para trocar. */
+export function marcaDaPlataforma(): Marca {
+  const nome = /^\s*"?([^"<]+?)"?\s*</.exec(env.MAIL_FROM)?.[1]?.trim();
+  return { nome: nome || 'ERP Modular', cor: COR_PADRAO, logoUrl: null };
+}
 
 /** Marca da empresa para o e-mail (leitura de plataforma: roda também fora do contexto do tenant). */
 export async function marcaDaEmpresa(tenantId: string): Promise<Marca> {

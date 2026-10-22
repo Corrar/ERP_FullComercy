@@ -33,6 +33,7 @@ REVOKE ALL ON TABLE _prisma_migrations FROM :app_role;
 --     O GRANT ALL acima as incluiu; aqui o privilégio sai. Tabela `plat_*` nova entra nesta lista
 --     (statement simples, não bloco DO: o psql não expande `:app_role` dentro de $$).
 REVOKE ALL ON TABLE plat_accounts FROM :app_role;
+REVOKE ALL ON TABLE plat_account_password_resets FROM :app_role;
 
 -- 2. A política, em toda tabela que tenha `tenant_id`.
 DO $$

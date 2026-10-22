@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate, Outlet, useLocation } from 'react-router
 import { useSession, type ModuleKey } from '@/lib/session';
 import { Shell } from './Shell';
 import { MODULES } from './modules';
-import { Login, Forgot, Reset } from '@/core/auth/pages';
+import { Login, Forgot, Reset, AccountForgot, AccountReset } from '@/core/auth/pages';
 import { Dashboard } from '@/core/dashboard/Dashboard';
 import { Orders, OrderDetail } from '@/core/orders/pages';
 import { Customers } from '@/core/customers/Customers';
@@ -48,6 +48,8 @@ export const router = createBrowserRouter([
   { path: '/esqueci-senha', element: <Forgot /> },
   { path: '/redefinir-senha', element: <Reset /> },
   { path: '/definir-senha', element: <Reset invite /> },
+  { path: '/conta/esqueci-senha', element: <AccountForgot /> },
+  { path: '/conta/redefinir-senha', element: <AccountReset /> },
   // Loja de módulos (pública até o pagamento; checkout e minhas empresas pedem a conta).
   { path: '/comecar', element: <Landing /> },
   { path: '/comecar/:modulo', element: <Configurator /> },

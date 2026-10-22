@@ -31,7 +31,8 @@
 - [x] Pós-compra pronto: perfis da equipe por módulo (modelo), e-mail de boas-vindas com dados de acesso e link de senha, dados de acesso na tela de conclusão; produção sem SMTP não sobe
 - [x] Modelo de perfis aplicado nas empresas antigas (job `core.perfis-modelo`, uma vez por empresa, só perfil vazio)
 - [x] Primeiros passos no painel: roteiro por módulo comprado, marcado pelos dados da empresa, "Fazer agora" leva à tela, dispensável (volta em Empresa)
-- [x] Testes: 43 unit, 38 e2e API, 18 Playwright
+- [x] Conta do comprador: esqueci a senha da conta (leva junto a senha das empresas que usam a da conta), reenviar dados de acesso, assinatura e faturas de cada empresa na Minha conta
+- [x] Testes: 43 unit, 39 e2e API, 19 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
@@ -67,7 +68,6 @@
 - [ ] Identidade visual (nome, logo, cor) — trocar `app/brand.ts`, `--brand` e o ícone
 - [ ] Proporcional (pro rata) ao adicionar função no meio do ciclo; hoje o valor novo vale na próxima fatura
 - [ ] E-mail de aviso: fim do teste em 2 dias, fatura gerada, pagamento recusado, suspensão
-- [ ] Recuperar senha da CONTA do comprador (hoje só o "esqueci" do funcionário por empresa)
 - [ ] Painel do dia esconder KPI de módulo cuja função não está no plano (ex.: comissões pendentes)
 
 - [ ] Emissão fiscal por adaptador (NFC-e no PDV, NF-e na compra) ouvindo `order.status` COMPLETED

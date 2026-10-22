@@ -58,7 +58,9 @@ acesso só ao que o perfil permite.
   entra como administrador e recebe por e-mail os dados de acesso (endereço, identificador da
   empresa, e-mail) com link de uso único para definir a senha — senha nunca vai por e-mail. No
   painel, o guia de **primeiros passos** do(s) módulo(s) comprado(s) (cadastrar, configurar,
-  primeira operação), marcado sozinho pelos dados da empresa.
+  primeira operação), marcado sozinho pelos dados da empresa. Na **Minha conta**, por empresa:
+  plano, próxima cobrança e faturas (só para quem paga) e "reenviar dados de acesso"; e o
+  "esqueci a senha" da conta, que leva junto a senha das empresas que ainda usam a da conta.
 - **Clientes**: cadastro, endereços, resumo comercial (compras, ticket médio, em aberto).
 - **Produtos e estoque central**: produto → variantes (SKU/código de barras), categorias,
   armazéns, razão imutável, reserva/consumo/entrada/ajuste/transferência, mínimo com alerta,

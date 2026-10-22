@@ -28,10 +28,30 @@ router.post('/google', authLimiter, asyncHandler(async (req, res) => {
   res.json(await account.loginWithGoogle(b.credential));
 }));
 
+// Esqueci a senha da conta: resposta sempre igual (não revela se o e-mail tem conta).
+const forgotLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false });
+router.post('/forgot', forgotLimiter, requireHuman, asyncHandler(async (req, res) => {
+  await account.forgotAccountPassword(parse(z.object({ email: z.string().email() }), req.body).email);
+  res.json({ ok: true });
+}));
+router.post('/reset', authLimiter, asyncHandler(async (req, res) => {
+  const b = parse(z.object({ token: z.string().min(20).max(200), password: z.string().min(8).max(200) }), req.body);
+  res.json(await account.resetAccountPassword(b.token, b.password));
+}));
+
 router.get('/me', authenticateAccount, asyncHandler(async (req, res) => { res.json(await account.me(accountId(req))); }));
 router.post('/companies/:tenantId/session', authenticateAccount, asyncHandler(async (req, res) => {
   const tenantId = parse(z.string().uuid(), req.params.tenantId);
   res.json(await account.enterCompany(accountId(req), tenantId, meta(req)));
+}));
+
+// Reenviar dados de acesso: por conta, poucos por janela (não vira disparador de e-mail).
+const reenvioLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 3, standardHeaders: true, legacyHeaders: false, keyGenerator: (req) => `acct:${accountId(req)}` });
+router.post('/companies/:tenantId/reenviar-acesso', authenticateAccount, reenvioLimiter, asyncHandler(async (req, res) => {
+  res.json(await account.reenviarDadosDeAcesso(accountId(req), parse(z.string().uuid(), req.params.tenantId)));
+}));
+router.get('/companies/:tenantId/assinatura', authenticateAccount, asyncHandler(async (req, res) => {
+  res.json(await account.assinaturaDaEmpresa(accountId(req), parse(z.string().uuid(), req.params.tenantId)));
 }));
 
 const checkoutSchema = z.object({

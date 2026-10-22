@@ -165,7 +165,7 @@ export async function checkout(accountId: string, input: CheckoutInput, meta: { 
   }
   invalidateTenantCache(tenant.id);
   // Dados de acesso por e-mail (com link para definir a senha; senha nunca vai no e-mail).
-  await enviarBoasVindas({ tenantId: tenant.id, slug: tenant.slug, adminUserId, nome: account.name, email: account.email, temSenha: !!account.passwordHash, resolved, total, trialAte: trial ? periodEnd : null });
+  await enviarBoasVindas({ tenantId: tenant.id, slug: tenant.slug, adminUserId, nome: account.name, email: account.email, temSenha: !!account.passwordHash, modulos: resolved.modules, funcoes: resolved.items.map((i) => i.label), total, trialAte: trial ? periodEnd : null });
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: adminUserId } });
   return {

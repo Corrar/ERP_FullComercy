@@ -14,6 +14,11 @@ import { prisma } from '../../infra/prisma';
 import { AppError } from '../../shared/errors';
 import { issueTenantSession } from '../auth/auth.service';
 import { verifyGoogleCredential } from './google';
+import { createHash, randomBytes } from 'node:crypto';
+import { appUrl, sendMail } from '../../infra/mailer';
+import { emailDaEmpresa, marcaDaPlataforma } from '../../infra/mail-templates';
+import { enviarBoasVindas } from '../billing/boas-vindas';
+import { invoiceView } from '../billing/billing.service';
 
 export const ACCOUNT_TOKEN_TYPE = 'acct';
 
@@ -100,4 +105,80 @@ export async function enterCompany(accountId: string, tenantId: string, meta: { 
   const user = await prisma.user.findFirst({ where: { accountId, tenantId, isActive: true }, include: { tenant: true } });
   if (!user) throw AppError.forbidden('Esta empresa não pertence à sua conta.');
   return issueTenantSession(user, user.tenant, meta);
+}
+
+// ── Esqueci a senha da CONTA ─────────────────────────────────────────────────────────────
+// Token de uso único (1 h), só o hash no banco; resposta sempre igual (não revela se o e-mail
+// existe). Vale também para conta só-Google: é como ela ganha uma senha.
+const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
+
+export async function forgotAccountPassword(email: string) {
+  const a = await prisma.account.findUnique({ where: { email: email.toLowerCase().trim() } });
+  if (!a) return;
+  const raw = randomBytes(32).toString('base64url');
+  await prisma.accountPasswordReset.updateMany({ where: { accountId: a.id, usedAt: null }, data: { usedAt: new Date() } });
+  await prisma.accountPasswordReset.create({ data: { accountId: a.id, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + 3_600_000) } });
+  const marca = marcaDaPlataforma();
+  await sendMail({ to: a.email, subject: `${marca.nome} · redefinir a senha da sua conta`, ...emailDaEmpresa({
+    marca, titulo: `Olá, ${a.name}`,
+    paragrafos: [a.passwordHash
+      ? 'Recebemos um pedido para redefinir a senha da sua conta (a da loja e da área Minha conta). O link vale por 1 hora e só funciona uma vez.'
+      : 'Você entra com o Google. Pelo link abaixo você cria também uma senha para a sua conta (vale por 1 hora e só funciona uma vez).'],
+    botao: { texto: 'Redefinir minha senha', url: appUrl(`/conta/redefinir-senha?token=${raw}`) },
+    nota: 'Se não foi você, ignore este e-mail: sua senha continua a mesma.',
+  }) });
+}
+
+/** Troca a senha da conta. Os usuários das empresas desta conta que ainda entram com a senha da
+ *  conta (herdada no checkout) passam a usar a nova — e as sessões deles caem; quem definiu uma
+ *  senha própria no sistema continua com a dela. */
+export async function resetAccountPassword(rawToken: string, password: string) {
+  const row = await prisma.accountPasswordReset.findUnique({ where: { tokenHash: sha256(rawToken) }, include: { account: true } });
+  if (!row || row.usedAt || row.expiresAt < new Date()) throw new AppError('UNAUTHENTICATED', 'Link inválido ou expirado. Peça um novo.');
+  const a = row.account; const novo = await bcrypt.hash(password, 12);
+  const herdaram = a.passwordHash ? await prisma.user.findMany({ where: { accountId: a.id, passwordHash: a.passwordHash }, select: { id: true } }) : [];
+  await prisma.$transaction([
+    prisma.accountPasswordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+    prisma.account.update({ where: { id: a.id }, data: { passwordHash: novo } }),
+    prisma.user.updateMany({ where: { id: { in: herdaram.map((u) => u.id) } }, data: { passwordHash: novo } }),
+    prisma.refreshToken.updateMany({ where: { userId: { in: herdaram.map((u) => u.id) }, revokedAt: null }, data: { revokedAt: new Date() } }),
+  ]);
+  return { ok: true, empresasAtualizadas: herdaram.length };
+}
+
+// ── Minhas empresas: dados de acesso e assinatura ───────────────────────────────────────
+async function minhaEmpresa(accountId: string, tenantId: string) {
+  const user = await prisma.user.findFirst({ where: { accountId, tenantId, isActive: true }, include: { tenant: { include: { modules: { where: { enabled: true }, select: { moduleKey: true } } } } } });
+  if (!user) throw AppError.forbidden('Esta empresa não pertence à sua conta.');
+  return user;
+}
+
+/** Reenvia o e-mail com os dados de acesso (e um link novo de senha; o anterior deixa de valer). */
+export async function reenviarDadosDeAcesso(accountId: string, tenantId: string) {
+  const user = await minhaEmpresa(accountId, tenantId);
+  const a = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const sub = await prisma.subscription.findUnique({ where: { tenantId }, include: { items: true } });
+  const enviado = await enviarBoasVindas({
+    tenantId, slug: user.tenant.slug, adminUserId: user.id, nome: a.name, email: user.email, temSenha: !!a.passwordHash,
+    modulos: user.tenant.modules.map((m) => m.moduleKey), funcoes: sub?.items.map((i) => i.label) ?? [],
+    total: sub?.amount.toFixed(2) ?? '0', trialAte: sub?.status === 'TRIALING' ? sub.trialEndsAt : null,
+  });
+  if (!enviado) throw new AppError('INTERNAL', 'Não conseguimos enviar o e-mail agora. Tente de novo em alguns minutos.');
+  return { enviadoPara: user.email };
+}
+
+/** Plano, próxima cobrança e faturas de uma empresa — só para a conta que paga a assinatura. */
+export async function assinaturaDaEmpresa(accountId: string, tenantId: string) {
+  await minhaEmpresa(accountId, tenantId);
+  const sub = await prisma.subscription.findUnique({ where: { tenantId }, include: { items: { orderBy: { price: 'desc' } } } });
+  if (!sub) return null;
+  if (sub.accountId !== accountId) throw AppError.forbidden('Só quem paga a assinatura vê as faturas.');
+  const faturas = await prisma.invoice.findMany({ where: { tenantId, subscriptionId: sub.id }, orderBy: { createdAt: 'desc' }, take: 12 });
+  return {
+    status: sub.status, method: sub.method, amount: sub.amount.toFixed(2), trialEndsAt: sub.trialEndsAt,
+    currentPeriodEnd: sub.currentPeriodEnd, cancelAtPeriodEnd: sub.cancelAtPeriodEnd, pastDueSince: sub.pastDueSince,
+    pagamento: (({ brand, last4 }) => ({ brand, last4 }))((sub.paymentInfo ?? {}) as { brand?: string; last4?: string }),
+    items: sub.items.map((i) => ({ label: i.label, price: i.price.toFixed(2) })),
+    faturas: faturas.map(invoiceView),
+  };
 }

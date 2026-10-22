@@ -166,6 +166,7 @@ export function Login() {
     <AuthLayout>
       <form onSubmit={(e) => void account.run(e)}>
         <h2>{cadastro ? 'Criar conta' : 'Entrar'}</h2>
+        {q.get('senha') === 'redefinida' && <div className="banner info" style={{ margin: 0 }}><Icon name="check" size={18} /><span className="grow">Senha redefinida. Entre com a nova senha.</span></div>}
         {next === '/checkout' && <div className="banner info" style={{ margin: 0 }}><Icon name="cart" size={18} /><span className="grow">Entre ou crie sua conta para finalizar o pedido. O carrinho fica guardado.</span></div>}
         <ErrorBox error={account.error ?? google.error} />
         <GoogleButton onCredential={(c) => void google.run(c)} busy={busy} />
@@ -173,6 +174,7 @@ export function Login() {
         {cadastro && <input className="pill" name="name" placeholder="Seu nome" autoComplete="name" required minLength={2} />}
         <input className="pill" name="email" type="email" placeholder="E-mail" autoComplete="email" required autoFocus={!cadastro} />
         <PasswordInput name="password" placeholder={cadastro ? 'Crie uma senha (mín. 8)' : 'Senha'} autoComplete={cadastro ? 'new-password' : 'current-password'} minLength={cadastro ? 8 : undefined} />
+        {!cadastro && <Link to="/conta/esqueci-senha" className="linkish" style={{ alignSelf: 'flex-end', fontSize: 13.5 }}>Esqueceu a senha?</Link>}
         <div className="ts-slot" ref={human.slot} /><ErrorBox error={human.error} />
         <button className="btn-pill main" disabled={busy || !human.ready}>{account.busy ? <Spinner /> : <Icon name="arrowRight" />} {cadastro ? 'Criar conta' : 'Entrar'}</button>
         <div className="row" style={{ justifyContent: 'center', gap: 6, fontSize: 13.5 }}>
@@ -228,6 +230,55 @@ export function Reset({ invite = false }: { invite?: boolean }) {
         <PasswordInput name="p1" placeholder="Senha (mín. 8)" autoComplete="new-password" minLength={8} />
         <PasswordInput name="p2" placeholder="Repita a senha" autoComplete="new-password" minLength={8} />
         <button className="btn-pill main" disabled={busy}>{busy ? <Spinner /> : <Icon name="check" />} Salvar e entrar</button>
+      </form>
+    </AuthLayout>
+  );
+}
+
+/** "Esqueci a senha" da CONTA do comprador (loja e Minha conta). Resposta sempre igual. */
+export function AccountForgot() {
+  const [done, setDone] = useState(false);
+  const human = useTurnstile('esqueci');
+  const { run, busy, error } = useAction(async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); const f = new FormData(e.currentTarget);
+    if (!human.ready) throw new Error('Aguarde a verificação anti-robô terminar.');
+    try { await api('/account/forgot', { method: 'POST', body: { email: f.get('email') }, headers: human.headers() }); } finally { human.reset(); }
+    setDone(true);
+  });
+  return (
+    <AuthLayout>
+      <form onSubmit={(e) => void run(e)}>
+        <h2>Esqueci a senha da conta</h2>
+        {done ? <div className="banner info" style={{ margin: 0 }}><Icon name="mail" size={18} /><span className="grow">Se houver conta com este e-mail, você receberá um link válido por 1 hora.</span></div> : <>
+          <div className="muted" style={{ fontSize: 13.5 }}>A conta é a que você usou para comprar na loja. Para a senha de funcionário de uma empresa, use o acesso da equipe.</div>
+          <ErrorBox error={error} />
+          <input className="pill" name="email" type="email" placeholder="E-mail da conta" autoComplete="email" required />
+          <div className="ts-slot" ref={human.slot} /><ErrorBox error={human.error} />
+          <button className="btn-pill main" disabled={busy || !human.ready}>{busy ? <Spinner /> : <Icon name="mail" />} Enviar link</button>
+        </>}
+        <Link to="/login" className="linkish" style={{ alignSelf: 'center' }}>Voltar</Link>
+      </form>
+    </AuthLayout>
+  );
+}
+
+export function AccountReset() {
+  const [q] = useSearchParams(); const nav = useNavigate();
+  const { run, busy, error } = useAction(async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); const f = new FormData(e.currentTarget);
+    if (f.get('p1') !== f.get('p2')) throw new Error('As senhas não conferem.');
+    await api('/account/reset', { method: 'POST', body: { token: q.get('token'), password: f.get('p1') } });
+    nav('/login?senha=redefinida', { replace: true });
+  });
+  return (
+    <AuthLayout>
+      <form onSubmit={(e) => void run(e)}>
+        <h2>Nova senha da conta</h2>
+        <div className="muted" style={{ fontSize: 13.5 }}>Vale para a loja e para a área Minha conta. Nas suas empresas, quem ainda entra com a senha da conta passa a usar esta.</div>
+        <ErrorBox error={error} />
+        <PasswordInput name="p1" placeholder="Senha (mín. 8)" autoComplete="new-password" minLength={8} />
+        <PasswordInput name="p2" placeholder="Repita a senha" autoComplete="new-password" minLength={8} />
+        <button className="btn-pill main" disabled={busy}>{busy ? <Spinner /> : <Icon name="check" />} Salvar</button>
       </form>
     </AuthLayout>
   );

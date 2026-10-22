@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-22. 327 rotas.
+> Gerado por `npm run docs:api` em 2026-10-22. 331 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
 
@@ -25,8 +25,12 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `POST` | `/account/register` |  |
 | `POST` | `/account/login` |  |
 | `POST` | `/account/google` |  |
+| `POST` | `/account/forgot` |  |
+| `POST` | `/account/reset` |  |
 | `GET` | `/account/me` |  |
 | `POST` | `/account/companies/:tenantId/session` |  |
+| `POST` | `/account/companies/:tenantId/reenviar-acesso` |  |
+| `GET` | `/account/companies/:tenantId/assinatura` |  |
 | `POST` | `/account/billing/card-setup` |  |
 | `POST` | `/account/checkout` |  |
 | `GET` | `/public/food/cardapio/:tenant/:menu` |  |

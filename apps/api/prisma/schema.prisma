@@ -2411,10 +2411,27 @@ model Account {
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  users         User[]
-  subscriptions Subscription[]
+  users          User[]
+  subscriptions  Subscription[]
+  passwordResets AccountPasswordReset[]
 
   @@map("plat_accounts")
+}
+
+/// "Esqueci a senha" da CONTA do comprador: token de uso único (1 h), guardado só o hash.
+/// Plataforma (sem tenant): o papel do tenant não toca (REVOKE em 001_rls_tenant.sql).
+model AccountPasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  accountId String    @map("account_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("plat_account_password_resets")
 }
 
 enum SubscriptionStatus {
