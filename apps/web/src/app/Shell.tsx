@@ -16,6 +16,7 @@ import { useGet } from '@/lib/use-api';
 import { useAccount } from '@/lib/account';
 import { brl, d } from '@/lib/format';
 import { daysLeft, METHOD_LABEL, type BillingMethod } from '@/lib/billing';
+import { InstalarApp } from '@/components/InstalarApp';
 
 const MOD_KEY = 'fc.module';
 
@@ -69,6 +70,7 @@ export function Shell() {
             </div>
           </div>
           <div className="row" style={{ flexWrap: 'nowrap' }}>
+            <InstalarApp compacto />
             <Bell />
             {account && <Link className="btn hide-sm" to="/minha-conta" title="Minhas empresas e nova compra"><Icon name="building" size={16} /> Minhas empresas</Link>}
           </div>

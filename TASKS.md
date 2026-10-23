@@ -32,7 +32,8 @@
 - [x] Modelo de perfis aplicado nas empresas antigas (job `core.perfis-modelo`, uma vez por empresa, só perfil vazio)
 - [x] Primeiros passos no painel: roteiro por módulo comprado, marcado pelos dados da empresa, "Fazer agora" leva à tela, dispensável (volta em Empresa)
 - [x] Conta do comprador: esqueci a senha da conta (leva junto a senha das empresas que usam a da conta), reenviar dados de acesso, assinatura e faturas de cada empresa na Minha conta
-- [x] Testes: 43 unit, 39 e2e API, 19 Playwright
+- [x] Site instalável como app (PWA): manifesto, ícones, service worker que guarda só a casca (nunca a API), página "sem conexão", botão "Instalar app" (Chrome/Edge/Android e instruções no iPhone)
+- [x] Testes: 43 unit, 39 e2e API, 22 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 

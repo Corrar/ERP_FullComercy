@@ -14,6 +14,7 @@ import { brl } from '@/lib/format';
 import { useCatalog, BRAND_LABEL, cardBrand, maskCard, maskExp, METHOD_LABEL, onlyDigits, type BillingMethod, type CardInput, type Catalog, type Feature, type Quote } from '@/lib/billing';
 import type { ModuleKey } from '@/lib/session';
 import { cardStyle, getStripe, stripeErrorMessage } from '@/lib/stripe';
+import { InstalarApp } from '@/components/InstalarApp';
 
 export const MODULE_SLUG: Record<ModuleKey, string> = { VAREJO: 'varejo', FOOD: 'food', ACADEMIA: 'academia', SERVICOS: 'servicos', BELEZA: 'beleza', PET: 'pet', CLINICA: 'clinica', HOTEL: 'hotel' };
 export const slugToModule = (s?: string): ModuleKey | null => (Object.entries(MODULE_SLUG).find(([, v]) => v === s)?.[0] as ModuleKey) ?? null;
@@ -57,6 +58,7 @@ export function StoreLayout({ module, children, step }: { module?: ModuleKey | n
       <header className="store-top">
         <Link to="/comecar" className="brand" aria-label={`${BRAND.name} — início`}><span className="brand-mark"><Icon name="grid" size={18} stroke={2.2} /></span><span className="hide-sm">{BRAND.name}</span></Link>
         <div className="row" style={{ flexWrap: 'nowrap' }}>
+          <InstalarApp />
           <button className="btn icon ghost" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Alternar tema" title="Tema"><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
           <button className="btn icon ghost" onClick={() => nav('/carrinho')} aria-label="Carrinho" title="Carrinho" style={{ position: 'relative' }}>
             <Icon name="cart" />{c.modules.length > 0 && <span style={{ position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)' }} />}
