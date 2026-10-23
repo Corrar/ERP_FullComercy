@@ -1,7 +1,7 @@
 // Agenda do salão: o dia de cada profissional. "Atender" abre a comanda (POST /orders com o
 // serviço do horário); se a cliente tem pacote daquele serviço, dá para usar uma sessão.
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { patch, post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
 import { useSession } from '@/lib/session';
@@ -54,6 +54,8 @@ function NovoHorario({ profs, servs, dia, onDone }: { profs: any[]; servs: any[]
     if (!cli) throw new Error('Escolha a cliente.');
     await post('/m/beleza/agenda', { customerId: cli.id, professionalId: prof, serviceId: serv, startsAt: new Date(`${dia}T${hora}:00`).toISOString(), notes: obs || undefined }); onDone();
   });
+  // Sem profissional ou serviço não há o que agendar: diz onde cadastrar em vez de um erro da API.
+  if (!profs.length || !servs.length) return <div className="banner warn" style={{ margin: 0 }}>Antes de agendar, cadastre {!profs.length ? 'ao menos um profissional' : ''}{!profs.length && !servs.length ? ' e ' : ''}{!servs.length ? 'ao menos um serviço' : ''} em <Link to="/beleza/cadastros">Profissionais e serviços</Link>.</div>;
   return <div className="grid" style={{ gap: 12 }}>
     <EscolherCliente value={cli} onChange={setCli} />
     <div className="row"><Field label="Profissional"><select className="input" value={prof} onChange={(e) => setProf(e.target.value)}>{profs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { del, patch, post, put } from '@/lib/api';
+import { baixarArquivo, del, patch, post, put } from '@/lib/api';
+import { useSession } from '@/lib/session';
 import { useAction, useGet } from '@/lib/use-api';
 import { Card, ErrorBox, Field, Form, Kpi, Modal, Toast } from '@/components/ui';
 import { dt } from '@/lib/format';
@@ -11,25 +12,48 @@ export function CustomerDetail() {
   const addEnd = useAction(async (v: Record<string, any>) => { await post(`/customers/${id}/addresses`, { ...v, isDefault: true }); setEndereco(false); await c.reload(); });
   const removerEnd = useAction(async (aid: string) => { await del(`/customers/${id}/addresses/${aid}`); await c.reload(); });
   const ativo = useAction(async () => { await patch(`/customers/${id}/active`, { isActive: !c.data.cliente.isActive }); await c.reload(); });
+  const { can } = useSession(); const [anon, setAnon] = useState(false);
+  const exportar = useAction(async () => { await baixarArquivo(`/customers/${id}/lgpd/export`, undefined, `dados-titular-${String(id).slice(0, 8)}.json`); setMsg('Dados exportados: entregue o arquivo ao titular.'); });
   if (!c.data) return <div className="muted">Carregando…</div>;
-  const cl = c.data.cliente;
+  // Form com key={updatedAt}: os campos são não controlados; sem remontar, depois de anonimizar a tela
+  // seguiria mostrando (e o "Salvar" regravaria) o que acabou de ser apagado.
+  const cl = c.data.cliente; const anonimizado = cl.name.startsWith('Titular anonimizado');
   return <div className="grid">
     <div className="row between"><h1 style={{ margin: 0 }}>{cl.name} {!cl.isActive && <span className="badge danger">inativo</span>}</h1><button className="btn" onClick={() => void ativo.run()}>{cl.isActive ? 'Desativar' : 'Reativar'}</button></div>
     <div className="grid kpis"><Kpi label="Compras" value={c.data.compras} /><Kpi label="Total gasto" value={c.data.totalGasto} money /><Kpi label="Ticket médio" value={c.data.ticketMedio} money /><Kpi label="Em aberto" value={c.data.emAberto.valor} money /></div>
     <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-      <Card title="Dados"><ErrorBox error={salvar.error} /><Form onSubmit={(v) => void salvar.run(v)} busy={salvar.busy}>
+      <Card title="Dados"><ErrorBox error={salvar.error} /><Form key={cl.updatedAt} onSubmit={(v) => void salvar.run(v)} busy={salvar.busy}>
         <Field label="Nome"><input className="input" name="name" defaultValue={cl.name} required /></Field><Field label="Telefone"><input className="input" name="phone" defaultValue={cl.phone ?? ''} /></Field>
         <Field label="CPF/CNPJ"><input className="input" name="document" defaultValue={cl.document ?? ''} /></Field><Field label="E-mail"><input className="input" name="email" type="email" defaultValue={cl.email ?? ''} /></Field>
         <Field label="Observações"><textarea className="input" name="notes" rows={3} defaultValue={cl.notes ?? ''} /></Field></Form></Card>
       <div className="grid">
         <Card title="Endereços" actions={<button className="btn" onClick={() => setEndereco(true)}>Adicionar</button>}><ErrorBox error={removerEnd.error} />
           {cl.addresses.length ? cl.addresses.map((a: any) => <div key={a.id} className="row between" style={{ padding: '6px 0', borderTop: '1px solid var(--line)' }}><span>{a.label && <strong>{a.label} · </strong>}{a.street}, {a.number} {a.complement} · {a.district} · {a.city}/{a.state}{a.isDefault && <span className="badge info" style={{ marginLeft: 6 }}>padrão</span>}</span><button className="btn" onClick={() => void removerEnd.run(a.id)}>✕</button></div>) : <div className="muted">Nenhum endereço.</div>}</Card>
+        {can('core.customers:lgpd') && <Card title="Privacidade (LGPD)"><ErrorBox error={exportar.error} />
+          <p className="muted" style={{ marginTop: 0 }}>Pedido do titular: entregue tudo o que a empresa guarda dele ou apague o que leva até ele. Pedidos e títulos ficam (obrigação fiscal), sem o nome.</p>
+          <div className="row"><button className="btn" onClick={() => void exportar.run()} disabled={exportar.busy}>Exportar dados</button>{!anonimizado && <button className="btn danger" onClick={() => setAnon(true)}>Anonimizar</button>}</div></Card>}
         <Card title="Última compra">{c.data.ultimaCompra ? <div>#{c.data.ultimaCompra.number} · {dt(c.data.ultimaCompra.completedAt)}</div> : <div className="muted">Nunca comprou.</div>}</Card>
       </div>
     </div>
     <Modal title="Novo endereço" open={endereco} onClose={() => setEndereco(false)}><ErrorBox error={addEnd.error} /><Form onSubmit={(v) => void addEnd.run(v)} busy={addEnd.busy}>
       <Field label="Rótulo"><input className="input" name="label" placeholder="Casa" /></Field><div className="row"><Field label="Rua"><input className="input" name="street" required /></Field><Field label="Nº"><input className="input" name="number" /></Field></div>
       <div className="row"><Field label="Bairro"><input className="input" name="district" /></Field><Field label="Cidade"><input className="input" name="city" required /></Field><Field label="UF"><input className="input" name="state" maxLength={2} required /></Field><Field label="CEP"><input className="input" name="zipCode" /></Field></div></Form></Modal>
+    <Modal title="Anonimizar cliente" open={anon} onClose={() => setAnon(false)}>{anon && <Anonimizar id={String(id)} nome={cl.name} onDone={async () => { setAnon(false); await c.reload(); setMsg('Cliente anonimizado.'); }} />}</Modal>
     <Toast msg={msg} />
+  </div>;
+}
+
+/** Confirma digitando o nome: não há como desfazer. Mostra antes o que impede (matrícula, reserva…). */
+function Anonimizar({ id, nome, onDone }: { id: string; nome: string; onDone: () => Promise<void> }) {
+  const pend = useGet<{ pendencias: string[] }>(`/customers/${id}/lgpd/pendencias`); const [digitado, setDigitado] = useState('');
+  const ok = digitado.trim().toLocaleLowerCase('pt-BR') === nome.trim().toLocaleLowerCase('pt-BR');
+  const anonimizar = useAction(async () => { await post(`/customers/${id}/lgpd/anonimizar`, { confirmacao: digitado }); await onDone(); });
+  if (!pend.data) return <div className="muted">Conferindo…</div>;
+  if (pend.data.pendencias.length) return <div className="grid"><p style={{ margin: 0 }}>Ainda não dá para anonimizar:</p><ul data-testid="lgpd-pendencias" style={{ margin: 0 }}>{pend.data.pendencias.map((p) => <li key={p}>{p}</li>)}</ul></div>;
+  return <div className="grid">
+    <p style={{ margin: 0 }}>Nome, documento, e-mail, telefone, nascimento, observações e endereços serão apagados, e o que os módulos guardam da pessoa também. <strong>Não há como desfazer.</strong> Exporte antes se o titular pediu uma cópia.</p>
+    <ErrorBox error={anonimizar.error} />
+    <Field label={`Digite o nome do cliente (${nome}) para confirmar`}><input className="input" value={digitado} onChange={(e) => setDigitado(e.target.value)} autoComplete="off" /></Field>
+    <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn danger" disabled={!ok || anonimizar.busy} onClick={() => void anonimizar.run()}>Anonimizar de vez</button></div>
   </div>;
 }

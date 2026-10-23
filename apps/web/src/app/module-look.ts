@@ -20,7 +20,7 @@ export const accentStyle = (m?: ModuleKey | null): CSSProperties => (m ? ({ ['--
 
 /** Ícone de cada item de menu, pela rota (o menu do Shell e o da prévia usam a mesma tabela). */
 export const NAV_ICON: Record<string, string> = {
-  '/': 'home', '/pedidos': 'receipt', '/clientes': 'users', '/produtos': 'box', '/estoque': 'grid', '/compras': 'truck', '/financeiro': 'dollar',
+  '/': 'home', '/pedidos': 'receipt', '/clientes': 'users', '/produtos': 'box', '/estoque': 'grid', '/compras': 'truck', '/financeiro': 'dollar', '/cobrancas': 'qr',
   '/usuarios': 'user', '/perfis': 'shield', '/integracoes': 'link', '/empresa': 'building', '/auditoria': 'eye', '/assinatura': 'card',
   '/varejo/pdv': 'monitor', '/varejo/caixa': 'dollar', '/varejo/grade': 'grid', '/varejo/etiquetas': 'tag', '/varejo/comissoes': 'users', '/varejo/devolucoes': 'undo', '/varejo/relatorios': 'chart',
   '/food/salao': 'utensils', '/food/cozinha': 'flame', '/food/entregas': 'truck', '/food/cardapio': 'clipboard',

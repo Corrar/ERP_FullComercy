@@ -18,6 +18,7 @@ export const CORE_PERMISSIONS: PermissionDef[] = [
   { key: 'core.roles:manage',       label: 'Gerir perfis e permissões',    module: null },
   { key: 'core.customers:view',     label: 'Ver clientes',                 module: null },
   { key: 'core.customers:manage',   label: 'Criar/editar clientes',        module: null },
+  { key: 'core.customers:lgpd',     label: 'Atender titular (LGPD): exportar e anonimizar dados de cliente', module: null },
   { key: 'core.products:view',      label: 'Ver produtos',                 module: null },
   { key: 'core.products:manage',    label: 'Criar/editar produtos',        module: null },
   { key: 'core.stock:view',         label: 'Ver estoque',                  module: null },

@@ -46,5 +46,7 @@ router.get('/devolucoes/vales/:customerId', P('varejo.pdv:operate'), asyncHandle
 router.get('/relatorios/vendedores', P('varejo.relatorios:view'), asyncHandler(c.getRelVendedores));
 router.get('/relatorios/horas', P('varejo.relatorios:view'), asyncHandler(c.getRelHoras));
 router.get('/relatorios/abc', P('varejo.relatorios:view'), asyncHandler(c.getRelAbc));
+router.get('/relatorios/resumo', P('varejo.relatorios:view'), asyncHandler(c.getRelResumo));
+router.get('/relatorios/pagamentos', P('varejo.relatorios:view'), asyncHandler(c.getRelPagamentos));
 router.get('/relatorios/sem-giro', P('varejo.relatorios:view'), asyncHandler(c.getRelSemGiro));
 export default router;

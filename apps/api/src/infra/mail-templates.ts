@@ -4,6 +4,7 @@
 // por `esc`; cor só #RRGGBB e logo só https — senão cai no padrão. Sem script, sem CSS externo.
 import { env } from '../config/env';
 import { prisma } from './prisma';
+import { caminhoDoLogo } from '../core/tenancy/marca.service';
 
 export interface Marca { nome: string; cor: string; logoUrl: string | null }
 const COR_PADRAO = '#2563eb';
@@ -21,9 +22,12 @@ export function marcaDaPlataforma(): Marca {
 
 /** Marca da empresa para o e-mail (leitura de plataforma: roda também fora do contexto do tenant). */
 export async function marcaDaEmpresa(tenantId: string): Promise<Marca> {
-  const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true, settings: true } });
+  const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true, slug: true, settings: true, logo: { select: { updatedAt: true } } } });
   const m = ((t?.settings ?? {}) as { marca?: { cor?: unknown; logoUrl?: unknown } }).marca ?? {};
-  return { nome: t?.name ?? '', cor: corValida(m.cor), logoUrl: logoValido(m.logoUrl) };
+  // Logo enviado na tela Empresa vence o link antigo. Sai pela URL pública do front (a Vercel repassa
+  // /api para a API); fora de https (dev local) o e-mail vai sem logo, como antes.
+  const enviado = t?.logo ? `${env.APP_URL.replace(/\/$/, '')}/api${caminhoDoLogo(t.slug, t.logo.updatedAt)}` : null;
+  return { nome: t?.name ?? '', cor: corValida(m.cor), logoUrl: logoValido(enviado ?? m.logoUrl) };
 }
 
 export interface ConteudoEmail {

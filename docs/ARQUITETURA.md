@@ -264,5 +264,10 @@ Escolhida a estratégia, o core delega a ela só os pontos de decisão de nicho 
   qualquer instância, mas o Socket.IO não compartilha salas entre instâncias (precisa do adapter
   Redis se houver mais de uma).
 - **E-mail**: provedor SMTP genérico; templates são texto puro (sem HTML/branding por empresa).
-- **Segredos cifrados exigem `APP_ENCRYPTION_KEY`**: sem ela ficam em claro com prefixo `plain:` e
-  um aviso no boot. Rotação de chave (recifrar) não existe.
+- **Segredos cifrados exigem `APP_ENCRYPTION_KEY`** (produção não sobe sem ela). A rotação existe:
+  - o selo leva o id da chave;
+  - `APP_ENCRYPTION_KEY_PREVIOUS` só abre;
+  - o job `core.recifrar-segredos` regrava tudo na chave atual;
+  - `GET /platform/segredos` mostra quantos faltam.
+
+  O procedimento está em `docs/OPERACAO.md`.

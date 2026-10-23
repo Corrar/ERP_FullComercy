@@ -19,6 +19,13 @@ export interface TenantSnapshot {
   planKeys: Set<string> | null;
 }
 
+/** O que de `settings` pode ir para a tela. `payments` fica no servidor: guarda credencial de
+ *  gateway (selada, mas ninguém precisa dela no navegador) e cada tela lê a sua rota de config. */
+export function settingsParaTela(settings: Record<string, unknown> | null | undefined) {
+  const { payments: _privado, ...resto } = (settings ?? {}) as Record<string, unknown>;
+  return resto;
+}
+
 const cache = new Map<string, { at: number; snap: TenantSnapshot }>();
 
 export function invalidateTenantCache(tenantId: string) {

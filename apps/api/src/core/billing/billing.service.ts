@@ -19,13 +19,15 @@ import { BillingMethod, ModuleKey, Prisma } from '@prisma/client';
 import { env } from '../../config/env';
 import { prisma, tenantTransaction } from '../../infra/prisma';
 import { AppError } from '../../shared/errors';
-import { D } from '../../shared/money';
+import { D, round2 } from '../../shared/money';
 import { onboardTenant } from '../platform/onboarding.service';
 import { issueTenantSession } from '../auth/auth.service';
 import { invalidateTenantCache, enableModule, disableModule } from '../tenancy/tenant-modules.service';
 import { ctx } from '../tenancy/tenant-context';
 import { semearModulo } from '../rbac/role-templates';
+import { dispensarPrimeirosPassos } from '../tenancy/primeiros-passos.service';
 import { enviarBoasVindas } from './boas-vindas';
+import { avisarFaturaAberta, avisarPagamentoRecebido, avisarPagamentoRecusado, avisarSuspensa, avisarTesteAcabando, CARD_MAX_ATTEMPTS } from './avisos';
 import { googleMode } from '../account/google';
 import { FEATURES, MODULE_OFFERS, resolveSelection, type Resolved } from './catalog';
 import { addDays, addMonths, normalizeDocument } from './periods';
@@ -34,8 +36,10 @@ import type { BillingProvider, Payer } from './providers/types';
 
 /** Boleto vence 3 dias depois de emitido (prazo usual para compensar). */
 const BOLETO_DUE_DAYS = 3;
-/** Cartão recusado: nova tentativa a cada 24 h, até 4 no total. */
-const CARD_MAX_ATTEMPTS = 4;
+/** Aviso de fim do teste sai quando faltam até 2 dias. */
+const TRIAL_NOTICE_DAYS = 2;
+// Cartão recusado: nova tentativa a cada 24 h, até CARD_MAX_ATTEMPTS (4) no total — o número mora em
+// avisos.ts, que avisa na primeira e na última.
 
 const serializeResolved = (r: Resolved) => ({
   modules: r.modules,
@@ -184,11 +188,22 @@ export async function checkout(accountId: string, input: CheckoutInput, meta: { 
 type InvoiceRow = Prisma.InvoiceGetPayload<object>;
 export const invoiceView = (i: InvoiceRow) => ({
   id: i.id, amount: i.amount.toFixed(2), status: i.status, method: i.method, periodStart: i.periodStart, periodEnd: i.periodEnd,
-  dueAt: i.dueAt, paidAt: i.paidAt, attempts: i.attempts, failureReason: i.failureReason, boletoUrl: i.boletoUrl, boletoLine: i.boletoLine, pixCode: i.pixCode,
+  dueAt: i.dueAt, paidAt: i.paidAt, attempts: i.attempts, failureReason: i.failureReason, boletoUrl: i.boletoUrl, boletoLine: i.boletoLine, pixCode: i.pixCode, note: i.note,
 });
 
-/** Tenta receber a fatura pelo meio atual da assinatura. Devolve a fatura atualizada. */
+/**
+ * Tenta receber a fatura pelo meio atual da assinatura. Devolve a fatura atualizada. Todo caminho
+ * de cobrança passa por aqui (checkout, ciclo, nova tentativa, "pagar agora", troca de cartão): é
+ * aqui que sai o aviso de recusa ou de boleto gerado (o de pagamento recebido sai em markInvoicePaid).
+ */
 export async function collectInvoice(invoiceId: string): Promise<InvoiceRow> {
+  const inv = await cobrar(invoiceId);
+  if (inv.status === 'FAILED') await avisarPagamentoRecusado(inv);
+  else if (inv.status === 'OPEN') await avisarFaturaAberta(inv);
+  return inv;
+}
+
+async function cobrar(invoiceId: string): Promise<InvoiceRow> {
   const inv = await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { subscription: { include: { tenant: true, account: true } } } });
   if (inv.status === 'PAID' || inv.status === 'VOID') return inv;
   const sub = inv.subscription;
@@ -228,14 +243,17 @@ export async function markInvoicePaid(invoiceId: string, providerRef?: string) {
   const inv = await prisma.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID', paidAt: new Date(), failureReason: null, ...(providerRef ? { providerRef } : {}) } });
   const stillOpen = await prisma.invoice.count({ where: { subscriptionId: inv.subscriptionId, status: { in: ['OPEN', 'FAILED'] }, dueAt: { lt: new Date() } } });
   const sub = await prisma.subscription.findUniqueOrThrow({ where: { id: inv.subscriptionId } });
+  let reativou = false;
   if (!stillOpen && sub.status !== 'CANCELED') {
     await prisma.subscription.update({ where: { id: sub.id }, data: { status: 'ACTIVE', pastDueSince: null, suspendedByBilling: false } });
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: sub.tenantId } });
-    if ((sub.suspendedByBilling && tenant.status === 'SUSPENDED') || tenant.status === 'TRIAL') {
+    reativou = sub.suspendedByBilling && tenant.status === 'SUSPENDED';
+    if (reativou || tenant.status === 'TRIAL') {
       await prisma.tenant.update({ where: { id: sub.tenantId }, data: { status: 'ACTIVE' } });
     }
     invalidateTenantCache(sub.tenantId);
   }
+  await avisarPagamentoRecebido(inv, reativou);
   return inv;
 }
 
@@ -243,14 +261,20 @@ export async function markInvoicePaid(invoiceId: string, providerRef?: string) {
 
 /**
  * Uma passada do faturamento. `now` é parâmetro para o e2e "viajar no tempo" sem relógio falso.
+ *   0. teste grátis acabando em até 2 dias → aviso por e-mail (uma vez por período);
  *   1. período vencido → nova fatura e cobrança (fim do teste vira a 1ª cobrança); cancelamento
  *      pedido → encerra no fim do período;
  *   2. cartão recusado → nova tentativa a cada 24 h, até 4;
  *   3. fatura vencida sem pagamento → assinatura PAST_DUE;
  *   4. PAST_DUE além da carência → empresa SUSPENDED (só as rotas de assinatura seguem abertas).
+ * Recusa, boleto gerado, pagamento recebido e suspensão também viram e-mail (avisos.ts).
  */
 export async function runBillingCycle(now = new Date()) {
   const out = { renewed: 0, canceled: 0, retried: 0, pastDue: 0, suspended: 0 };
+
+  // 0. Teste grátis terminando nos próximos 2 dias: avisa quando, quanto e por onde vai cobrar.
+  const acabando = await prisma.subscription.findMany({ where: { status: 'TRIALING', cancelAtPeriodEnd: false, currentPeriodEnd: { gt: now, lte: addDays(now, TRIAL_NOTICE_DAYS) } }, select: { id: true } });
+  for (const s of acabando) await avisarTesteAcabando(s.id);
 
   const due = await prisma.subscription.findMany({ where: { status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] }, currentPeriodEnd: { lte: now } }, include: { items: true } });
   for (const sub of due) {
@@ -296,6 +320,7 @@ export async function runBillingCycle(now = new Date()) {
       prisma.subscription.update({ where: { id: s.id }, data: { suspendedByBilling: true } }),
     ]);
     invalidateTenantCache(s.tenantId);
+    await avisarSuspensa(s.id);
     out.suspended++;
   }
   return out;
@@ -316,7 +341,7 @@ export async function handleWebhook(providerKey: string, headers: Record<string,
     // Um 404 faria o gateway reenviar por dias.
     if (!inv) return { ok: true, ignored: 'fatura desconhecida' };
     if (ev.status === 'PAID') await markInvoicePaid(inv.id);
-    else if (inv.status !== 'PAID') await prisma.invoice.update({ where: { id: inv.id }, data: { status: 'FAILED', failureReason: 'Pagamento não confirmado pelo banco.' } });
+    else if (inv.status !== 'PAID') await avisarPagamentoRecusado(await prisma.invoice.update({ where: { id: inv.id }, data: { status: 'FAILED', failureReason: 'Pagamento não confirmado pelo banco.' } }));
     return { ok: true, invoiceId: inv.id };
   }
   const sub = await prisma.subscription.findFirst({ where: { paymentRef: ev.authorizationId, provider: providerKey } });
@@ -376,17 +401,73 @@ export async function getSubscription() {
 /** Liga/desliga funções. Vale NA HORA para o acesso; o novo valor entra na próxima fatura (sem
  *  proporcional nesta versão — a tela avisa). Preço da função nova: o do catálogo de hoje; a que
  *  já estava mantém o preço contratado. */
+// ── Proporcional (pro rata) ao ligar função no meio do período ──────────────────────────────
+
+/** Mínimo cobrável: o do Stripe em BRL. Abaixo disso a diferença fica por nossa conta. */
+const PRORATA_MIN = D('0.50');
+const DIA_MS = 86_400_000;
+export type Proporcional = { valor: string; dias: number; diasPeriodo: number; funcoes: string[]; motivo?: 'teste' | 'sem_novas' | 'nao_ativa' | 'abaixo_minimo' };
+
+/**
+ * Quanto cobrar AGORA pelas funções que entram: o preço delas × dias que faltam ÷ dias do período,
+ * em dias inteiros (hoje conta). Só com o mês pago correndo (ACTIVE): no teste grátis nada é
+ * cobrado. Função que sai não devolve nada do mês em curso; o valor menor vale na próxima fatura.
+ */
+export function calcularProporcional(
+  sub: { status: string; currentPeriodStart: Date; currentPeriodEnd: Date; items: { featureKey: string }[] },
+  resolved: Resolved, now = new Date(),
+): Proporcional {
+  const novas = resolved.items.filter((i) => !sub.items.some((x) => x.featureKey === i.key));
+  const funcoes = novas.map((i) => i.label);
+  const zero = (motivo: Proporcional['motivo'], dias = 0, diasPeriodo = 0): Proporcional => ({ valor: '0.00', dias, diasPeriodo, funcoes, motivo });
+  if (!novas.length) return zero('sem_novas');
+  if (sub.status === 'TRIALING') return zero('teste');
+  if (sub.status !== 'ACTIVE') return zero('nao_ativa');
+  const diasPeriodo = Math.max(1, Math.round((sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime()) / DIA_MS));
+  const dias = Math.min(diasPeriodo, Math.max(0, Math.ceil((sub.currentPeriodEnd.getTime() - now.getTime()) / DIA_MS)));
+  const valor = round2(novas.reduce((a, i) => a.plus(i.price), D(0)).times(dias).div(diasPeriodo));
+  if (valor.lt(PRORATA_MIN)) return zero('abaixo_minimo', dias, diasPeriodo);
+  return { valor: valor.toFixed(2), dias, diasPeriodo, funcoes };
+}
+
+/** O que a troca de funções faria, sem fazer: novo valor mensal e o proporcional de agora. */
+export async function previewFeatures(input: { modules: ModuleKey[]; features: string[] }) {
+  const sub = await mySubscription();
+  const resolved = resolveSelection(input);
+  return { novoValor: resolved.total.toFixed(2), valorAtual: sub.amount.toFixed(2), proporcional: calcularProporcional(sub, resolved) };
+}
+
+const notaProporcional = (p: Proporcional) => `Proporcional: ${p.funcoes.join(', ')} · ${p.dias} de ${p.diasPeriodo} dias`.slice(0, 200);
+
 export async function changeFeatures(input: { modules: ModuleKey[]; features: string[] }) {
   const sub = await mySubscription();
   const tenantId = ctx().tenantId;
   const resolved = resolveSelection(input);
+
+  // Cartão: cobra o proporcional ANTES de ligar. Recusou → nada muda e a pessoa vê o motivo (sem
+  // e-mail de recusa: ela está na tela). Boleto/Pix: liga e gera a fatura, que segue o fluxo normal.
+  const prop = calcularProporcional(sub, resolved);
+  let faturaProp: InvoiceRow | null = null;
+  if (Number(prop.valor) > 0) {
+    const now = new Date();
+    faturaProp = await prisma.invoice.create({ data: { tenantId, subscriptionId: sub.id, amount: D(prop.valor), method: sub.method, periodStart: now, periodEnd: sub.currentPeriodEnd, dueAt: sub.method === 'BOLETO' ? addDays(now, BOLETO_DUE_DAYS) : now, note: notaProporcional(prop) } });
+    if (sub.method === 'CARD') {
+      const r = await cobrar(faturaProp.id);
+      // OPEN = aceita e ainda processando no gateway (o webhook liquida): segue como aceita.
+      if (r.status === 'FAILED') {
+        await prisma.invoice.update({ where: { id: r.id }, data: { status: 'VOID' } });
+        throw AppError.validation(`A cobrança proporcional de ${prop.valor.replace('.', ',')} foi recusada (${r.failureReason ?? 'cartão recusado'}). As funções não foram adicionadas: troque o cartão em "Forma de pagamento" e tente de novo.`);
+      }
+      faturaProp = r;
+    }
+  }
   const keep = new Map(sub.items.map((i) => [i.featureKey, i]));
   const next = new Set(resolved.items.map((i) => i.key));
+  const novas = resolved.items.filter((i) => !keep.has(i.key));
 
   const amount = await tenantTransaction(ctx().db, tenantId, async (tx) => {
     await tx.subscriptionItem.deleteMany({ where: { tenantId, subscriptionId: sub.id, featureKey: { notIn: [...next] } } });
-    const add = resolved.items.filter((i) => !keep.has(i.key));
-    if (add.length) await tx.subscriptionItem.createMany({ data: add.map((i) => ({ tenantId, subscriptionId: sub.id, featureKey: i.key, moduleKey: i.module, label: i.label, price: D(i.price) })) });
+    if (novas.length) await tx.subscriptionItem.createMany({ data: novas.map((i) => ({ tenantId, subscriptionId: sub.id, featureKey: i.key, moduleKey: i.module, label: i.label, price: D(i.price) })) });
     const items = await tx.subscriptionItem.findMany({ where: { tenantId, subscriptionId: sub.id } });
     const total = items.reduce((a: Prisma.Decimal, i: { price: Prisma.Decimal }) => a.plus(i.price), D(0));
     await tx.subscription.update({ where: { id: sub.id }, data: { amount: total } });
@@ -397,8 +478,12 @@ export async function changeFeatures(input: { modules: ModuleKey[]; features: st
   const active = await prisma.tenantModule.findMany({ where: { tenantId, enabled: true }, select: { moduleKey: true } });
   for (const m of resolved.modules) if (!active.some((a) => a.moduleKey === m)) { await enableModule(tenantId, m); await semearModulo(tenantId, m); }
   for (const a of active) if (!resolved.modules.includes(a.moduleKey)) await disableModule(tenantId, a.moduleKey);
+  // Função nova chega com o "como começar" no painel: o guia volta mesmo se o dono o tinha dispensado
+  // (os passos antigos aparecem como feitos; os da função nova, pendentes).
+  if (novas.length) await dispensarPrimeirosPassos(false);
   invalidateTenantCache(tenantId);
-  return { ...(await getSubscription()), amount: amount.toFixed(2) };
+  if (faturaProp && sub.method !== 'CARD') await collectInvoice(faturaProp.id); // boleto/Pix: gera e avisa
+  return { ...(await getSubscription()), amount: amount.toFixed(2), proporcional: prop };
 }
 
 export async function changePaymentMethod(input: { method: BillingMethod; cardToken?: string }) {

@@ -68,6 +68,21 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | Teste de webhooks falhava às vezes ("recebeu order.created") | esperava 300 ms fixos pelo outbox (`setImmediate`) | despacha em laço até a entrega aparecer, com teto |
 | Provedor de e-mail "console" imprimia o corpo (link de senha de uso único) no log da homologação | o log do Render é compartilhado e guardado | corpo só com `APP_STAGE=local`; fora disso só o aviso "NÃO ENVIADO"; produção sem `SMTP_HOST` não sobe (`configProblems`) |
 | Job das empresas antigas não achava nenhuma empresa sem a marca `perfisModelo` | filtro JSON do Prisma (`NOT: { settings: { path, equals } }`): caminho ausente vira NULL e a linha some | filtra a marca em código (`aplicarModeloNasEmpresasAntigas`); teste simula empresa antiga |
+| e2e da cobrança "tentou duas vezes" no mesmo dia | o ciclo viaja no tempo com `now`, mas o `updatedAt` da fatura é o relógio real: a nova tentativa (`updatedAt <= now-1d`) entra na mesma passada | no teste, seguir o NÚMERO de tentativas, não o dia; em produção `updatedAt` = agora e a regra de 24 h vale |
+| Playwright no CI: último teste caiu com `"Too many r"... is not valid JSON` | a suíte inteira sai de UM IP em ~1 min e passou do teto global de 600 req/min (cada tela chama a API várias vezes, mais o polling do tempo real); um teste a mais virou a conta | `RATE_LIMIT_PER_MIN` (padrão 600, produção igual) e o Playwright sobe a API com 20000. Reproduzido com 150 (mesmo erro) antes de corrigir |
+| Duas specs antigas caíram no login ("Hoje" não aparece) ao entrar a spec da LGPD | limite de 10 logins por conta+IP em 15 min (`auth.routes.ts`); `admin@loja-demo` já tinha 10 entradas na suíte e a spec nova somou 2 | spec nova usa empresa do seed menos usada (`posto-demo`); conte `uiLogin/apiLogin` por empresa antes de escolher |
+| Depois de anonimizar, a ficha seguia mostrando o telefone apagado (e o "Salvar" o regravaria) | campos não controlados (`defaultValue`) não releem o recarregado | `Form key={cl.updatedAt}` remonta o formulário (`CustomerDetail.tsx`); pego pelo Playwright |
+| Um segredo ilegível (chave de cifra trocada sem a antiga) parava o despacho de webhooks de TODAS as empresas, e a catraca daquele aparelho respondia 500 | `open()` lança, e era chamado sem proteção dentro do laço do lote (`dispatchPending`) e na autenticação do aparelho | o erro fica só no item: a entrega falha com o motivo gravado e a catraca responde 401. Provado no `segredos.test.ts`: tirando o `try`, o dispatch volta a dar 500 |
+| Diff de 489 linhas no `schema.prisma` para acrescentar uma tabela | `npx prisma format` realinhou o arquivo inteiro | não rodar `prisma format` no schema todo; editar à mão e conferir com `prisma validate` |
+| Relatei "lint ok" sem haver lint | `npm run -s lint` com `-s` esconde o "Missing script" e não imprime nada | o repositório não tem lint; o que vale é o que o CI roda (`typecheck`, `test`, `build`, e2e, Playwright) |
+| "Cobrança online" era vendida sem botão de cobrar; a lista só aparecia em Integrações (outra função paga) | nenhum teste olhava se a função vendida tinha tela | `test/funcoes-prontas.test.ts` (rota + menu de toda função) e e2e `funcoes-prontas` (contratar e já responder); contra-prova: tirar o item do menu derruba o teste |
+| Spec de navegador via a sessão "velha" depois de mudar o plano | `page.addInitScript` roda de novo a cada navegação e regravava a sessão injetada | injetar só se `localStorage` estiver vazio |
+| Teste esperava `code: 'NOT_IN_PLAN'` | o corte do plano responde `FORBIDDEN` com `details.reason = 'NOT_IN_PLAN'` | ler `body.details.reason` |
+| Cardápio online: "Pagar agora (PIX online)" falhava em toda loja real e deixava o pedido criado | a vitrine mandava `provider: 'mock'` fixo; a API conferia o provedor DEPOIS de `createOrder` | o servidor escolhe (`provedorPix`), a vitrine só mostra a opção com `pagamentoOnline`, e a recusa vem antes do pedido (e2e `mercadopago`: contagem de pedidos igual; contra-prova: tirar a checagem derruba) |
+| `settings` da empresa ia inteiro para a tela (`/auth/me`, `/tenant/settings`) e `extra` regravava qualquer chave | servia para marca e módulo padrão; credencial de gateway nunca tinha morado ali | `settingsParaTela` tira `payments`; `extra` não toca `payments` (só o `mock`, fora de produção); provedor `mock` nem existe em produção |
+| e2e do navegador com o Mercado Pago falso passou e, na rodada seguinte, o aviso "não pagou" | o servidor falso recomeçava os ids em 5000000 e o banco local ainda tinha a cobrança da rodada anterior com o mesmo id | ids do falso a partir do relógio; vale para qualquer servidor falso que gere id |
+| Testes de navegador passavam, mas o cliente novo não conseguia montar o cardápio pela tela | os testes PREPARAVAM cadastros pela API; a tela de item exigia um produto que a empresa nova não tem | `e2e/primeiro-dia.spec.ts`: cada comércio do zero, só pela tela — nada preparado pela API |
+| "Depois de anonimizar a busca não acha" passava no vazio | a busca não olha e-mail, e o telefone de teste montado de `run` (letras) nem era único | asserção do ANTES (acha 1) com documento e telefone únicos; só então o DEPOIS (acha 0) vale |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 
@@ -165,6 +180,12 @@ npm run docs:api                                 # regenera docs/API.md (265 rot
 | menu do front | `apps/web/src/app/modules.ts` |
 | preço, funções e o que cada uma libera | `apps/api/src/core/billing/catalog.ts` |
 | checkout, ciclo de cobrança, webhook | `apps/api/src/core/billing/billing.service.ts` |
+| LGPD do titular (exportar/anonimizar) | `apps/api/src/core/customers/lgpd.service.ts` + `lgpd` em cada `modules/<m>/services/lgpd.ts` |
+| cifra de segredos e rotação de chave | `apps/api/src/shared/crypto.ts`, `apps/api/src/core/platform/segredos.service.ts`, `docs/OPERACAO.md` |
+| marca da empresa (logo, cor, página `/e/<slug>`) | `apps/api/src/core/tenancy/marca.service.ts`, `apps/web/src/lib/marca.ts`, `EquipeEmpresa` em `apps/web/src/core/auth/pages.tsx` |
+| Pix com baixa automática (Mercado Pago da empresa) | `apps/api/src/core/payments/providers/mercadopago.ts`, `payments.service.ts` (`provedorPix`, `conectarMercadoPago`), `apps/web/src/core/payments/Cobrancas.tsx`, falsos: `test/e2e/mercadopago.test.ts`, `apps/web/e2e/mercadopago-falso.mjs` |
+| cobrança por Pix (BR Code, link público) | `apps/api/src/shared/pix.ts`, `apps/api/src/core/payments/`, `apps/web/src/core/payments/`, `apps/web/src/public/Pagar.tsx` |
+| garantia de função pronta | `apps/api/test/funcoes-prontas.test.ts`, `apps/api/test/e2e/funcoes-prontas.test.ts`, passos em `primeiros-passos.service.ts` |
 | conta do comprador e Google | `apps/api/src/core/account/` |
 | loja (telas) | `apps/web/src/store/` |
 | identidade (nome/marca) | `apps/web/src/app/brand.ts` + `--brand` em `styles.css` |

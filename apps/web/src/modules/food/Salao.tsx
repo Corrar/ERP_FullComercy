@@ -1,5 +1,6 @@
 // Salão: mapa de mesas → comanda → lançar rodada (POST /orders) → conta → fechar.
 import { useCallback, useState } from 'react';
+import { ContaComanda } from './ContaComanda';
 import { get, patch, post } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { useAction, useGet } from '@/lib/use-api';
@@ -20,7 +21,6 @@ export function Salao() {
   });
   const transferir = useAction(async (toTableId: string) => { if (!toTableId) return; await post(`/m/food/comandas/${mesa.comanda.id}/transferir`, { toTableId }); setMesa(null); await mesas.reload(); });
   const cancelarComanda = useAction(async () => { const reason = window.prompt('Motivo do cancelamento da comanda (mín. 3 letras)'); if (!reason) return; await post(`/m/food/comandas/${mesa.comanda.id}/cancelar`, { reason }); setMesa(null); await mesas.reload(); });
-  const fechar = useAction(async (v: Record<string, any>) => { await post(`/m/food/comandas/${mesa.comanda.id}/fechar`, { payments: [{ method: v.method, amount: v.amount }] }); setMesa(null); await mesas.reload(); });
   // Cadastro de mesas (quem gerencia o salão): criar, mudar área/lugares e desativar a mesa livre.
   const { can } = useSession(); const gerir = can('food.salao:manage'); const [novaMesa, setNovaMesa] = useState(false);
   const criarMesa = useAction(async (v: Record<string, any>) => { await post('/m/food/mesas', { number: v.number, area: v.area || undefined, seats: v.seats || undefined }); setNovaMesa(false); await mesas.reload(); });
@@ -41,8 +41,7 @@ export function Salao() {
         <div className="row between"><div>Comanda <strong>{mesa.comanda.code}</strong> · {mesa.comanda.guests} pessoas</div><select className="input" style={{ width: 200 }} value={menu?.id ?? ''} onChange={async (e) => setMenu(await get(`/m/food/menus/${e.target.value}`))}>{menus.data?.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
         <Card title="Lançar rodada">{menu?.categories.map((c: any) => <div key={c.id}><div className="muted" style={{ margin: '6px 0' }}>{c.name}</div><div className="row">{c.items.filter((i: any) => i.isAvailable).map((i: any) => <button key={i.id} className="btn" onClick={() => add(i)}>{i.displayName} · {brl(i.price)}</button>)}</div></div>)}
           {carrinho.length > 0 && <div style={{ marginTop: 10 }}>{carrinho.map((c) => <div key={c.variantId} className="row between"><span>{c.qtd}× {c.nome}</span><Money v={c.preco * c.qtd} /></div>)}<ErrorBox error={lancar.error} /><button className="btn primary" style={{ marginTop: 8 }} onClick={() => void lancar.run()} disabled={lancar.busy}>Enviar para a cozinha</button></div>}</Card>
-        {conta && <Card title="Conta"><div className="row between"><span>Consumo</span><Money v={conta.subtotal} /></div><div className="row between"><span>Taxa de serviço</span><Money v={conta.taxaServico} /></div><div className="row between"><strong>Total</strong><strong><Money v={conta.total} /></strong></div><div className="row between muted"><span>Pago</span><Money v={conta.pago} /></div>
-          <ErrorBox error={fechar.error} /><Form key={String(conta.restante)} onSubmit={(v) => void fechar.run(v)} busy={fechar.busy} submitLabel="Fechar conta"><div className="row"><Field label="Meio"><select className="input" name="method" defaultValue="PIX">{['PIX', 'CASH', 'DEBIT', 'CREDIT'].map((m) => <option key={m}>{m}</option>)}</select></Field><Field label="Valor"><input className="input" name="amount" type="number" step="0.01" defaultValue={Number(conta.restante).toFixed(2)} required /></Field></div></Form></Card>}
+        {conta && <ContaComanda key={conta.tab.id} conta={conta} onAtualizada={setConta} onFechada={async () => { setMesa(null); await mesas.reload(); }} />}
       </div>}
     </Modal>
     <Modal title="Nova mesa" open={novaMesa} onClose={() => setNovaMesa(false)}><ErrorBox error={criarMesa.error} /><Form onSubmit={(v) => void criarMesa.run(v)} busy={criarMesa.busy}>

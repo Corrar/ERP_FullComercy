@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { parse } from '../../shared/http';
 import { ctx } from './tenant-context';
 import * as svc from './tenant-modules.service';
+import { env } from '../../config/env';
 import { moduleRegistry } from '../../modules/module.registry';
 import { semearModulo } from '../rbac/role-templates';
 import { AppError } from '../../shared/errors';
@@ -49,9 +50,11 @@ const settingsSchema = z.object({
   name: z.string().min(2).max(160).optional(),
   document: z.string().max(20).optional(),
   timezone: z.string().max(40).optional(),
-  /** Marca nos e-mails da empresa: cor #RRGGBB e logo em https (vazio apaga). */
+  /** Marca da empresa: cor #RRGGBB (e-mails e, com `corNoSistema`, o sistema) e logo por link https (vazio apaga; o arquivo enviado em /tenant/marca/logo vence). */
   marca: z.object({
     cor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Cor no formato #RRGGBB.').optional(),
+    /** A cor também pinta o sistema (menu, botões) no lugar da cor de cada módulo. */
+    corNoSistema: z.boolean().optional(),
     logoUrl: z.union([z.literal(''), z.string().url().refine((u) => u.startsWith('https://'), 'O logo precisa estar num endereço https.')]).optional(),
   }).optional(),
   /** Qualquer outra chave livre da empresa (impressora, mensagens). */
@@ -61,7 +64,7 @@ const settingsSchema = z.object({
 export async function getSettings(_req: Request, res: Response) {
   const { prisma } = await import('../../infra/prisma');
   const t = await prisma.tenant.findUniqueOrThrow({ where: { id: ctx().tenantId }, select: { id: true, slug: true, name: true, document: true, timezone: true, status: true, settings: true, createdAt: true } });
-  res.json(t);
+  res.json({ ...t, settings: svc.settingsParaTela(t.settings as Record<string, unknown>) });
 }
 
 /** PUT /tenant/settings — é aqui que a empresa define `defaultSalesModule` (desempate da venda). */
@@ -70,7 +73,12 @@ export async function putSettings(req: Request, res: Response) {
   const { prisma } = await import('../../infra/prisma');
   const { invalidateTenantCache } = await import('./tenant-modules.service');
   const atual = await prisma.tenant.findUniqueOrThrow({ where: { id: ctx().tenantId } });
-  const settings = { ...(atual.settings as Record<string, unknown>), ...(b.extra ?? {}) };
+  // `payments` só pelas rotas de Cobranças online (lá o token é conferido e selado). A exceção é o
+  // simulador `mock` dos testes e da demonstração, que nem existe em produção.
+  const { payments: pedido, ...extra } = b.extra ?? {};
+  const settings = { ...(atual.settings as Record<string, unknown>), ...extra };
+  const mock = (pedido as { mock?: unknown } | undefined)?.mock;
+  if (mock && typeof mock === 'object' && env.APP_STAGE !== 'production') settings.payments = { ...((settings.payments ?? {}) as object), mock };
   if (b.defaultSalesModule !== undefined) {
     if (b.defaultSalesModule && !ctx().modules.has(b.defaultSalesModule)) return res.status(400).json({ error: `Módulo ${b.defaultSalesModule} não está ativo.`, code: 'VALIDATION' });
     if (b.defaultSalesModule) settings.defaultSalesModule = b.defaultSalesModule; else delete settings.defaultSalesModule;
@@ -84,5 +92,5 @@ export async function putSettings(req: Request, res: Response) {
   const t = await prisma.tenant.update({ where: { id: atual.id }, data: { name: b.name, document: b.document, timezone: b.timezone, settings: settings as never } });
   invalidateTenantCache(t.id);
   await ctx().db.auditLog.create({ data: { tenantId: t.id, userId: ctx().userId, action: 'tenant.settings', entity: 'Tenant', entityId: t.id, details: b as never } });
-  res.json({ id: t.id, name: t.name, document: t.document, timezone: t.timezone, settings: t.settings });
+  res.json({ id: t.id, name: t.name, document: t.document, timezone: t.timezone, settings: svc.settingsParaTela(t.settings as Record<string, unknown>) });
 }

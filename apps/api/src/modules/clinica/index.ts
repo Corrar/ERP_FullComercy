@@ -1,5 +1,6 @@
 import { ModuleKey } from '@prisma/client';
 import type { ModuleDefinition } from '../module.contract';
+import { clinicaLgpd } from './services/lgpd';
 import router from './routes/clinica.routes';
 import { clinicaSalesStrategy } from './services/clinica-sales.strategy';
 
@@ -10,6 +11,7 @@ export const clinicaModule: ModuleDefinition = {
   basePath: 'clinica',
   router,
   salesStrategy: clinicaSalesStrategy,
+  lgpd: clinicaLgpd,
   permissions: [
     { key: 'cli.agenda:operate',      label: 'Agendar, receber e cobrar consultas', module: ModuleKey.CLINICA },
     { key: 'cli.cadastro:manage',     label: 'Cadastrar profissionais',             module: ModuleKey.CLINICA },

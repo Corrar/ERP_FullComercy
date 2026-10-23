@@ -2,8 +2,11 @@
 // A rota pública lê por slug (tenant + menu) sem login e por isso usa o client base com o
 // tenant filtrado à mão — um dos poucos lugares autorizados a isso.
 import { prisma } from '../../../infra/prisma';
+import { randomBytes } from 'node:crypto';
+import { createProduct } from '../../../core/inventory/products.service';
 import { AppError } from '../../../shared/errors';
 import { ctx } from '../../../core/tenancy/tenant-context';
+import { provedorPix } from '../../../core/payments/payments.service';
 
 export async function cardapioPublico(tenantSlug: string, menuSlug: string) {
   const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true, name: true, status: true, settings: true, modules: { where: { moduleKey: 'FOOD', enabled: true } } } });
@@ -21,6 +24,8 @@ export async function cardapioPublico(tenantSlug: string, menuSlug: string) {
     menu: { id: menu.id, name: menu.name, availability: menu.availability, abertoAgora: abertoAgora(menu.availability as never) },
     categorias: menu.categories.map((c) => ({ id: c.id, name: c.name, itens: c.items.map((i) => ({ id: i.id, variantId: i.variantId, nome: i.displayName, descricao: i.description, preco: i.price, imagem: i.imageUrl, prepTimeMin: i.prepTimeMin, adicionais: i.modifierGroups.map((g) => g.group) })) })),
     zonasEntrega: zonas,
+    /** Dá para pagar agora por Pix? (o provedor em si fica no servidor) */
+    pagamentoOnline: !!provedorPix((tenant.settings ?? {}) as Record<string, unknown>),
   };
 }
 
@@ -41,8 +46,17 @@ export async function menuCompleto(id: string) {
   return m;
 }
 export const criarCategoria = (menuId: string, input: { name: string; position?: number }) => ctx().db.foodMenuCategory.create({ data: { ...input, menuId, tenantId: ctx().tenantId } });
-export const criarItem = (menuId: string, input: { categoryId?: string; variantId: string; displayName: string; description?: string; price: number; imageUrl?: string; station?: string; prepTimeMin?: number; position?: number }) =>
-  ctx().db.foodMenuItem.create({ data: { ...input, menuId, tenantId: ctx().tenantId } });
+/** Item do cardápio. Sem `variantId` (restaurante recém-aberto não tem produto nenhum), o prato
+ *  nasce com o produto dele no core — sem controle de saldo (quem baixa estoque é a ficha técnica). */
+export async function criarItem(menuId: string, input: { categoryId?: string; variantId?: string; displayName: string; description?: string; price: number; imageUrl?: string; station?: string; prepTimeMin?: number; position?: number }) {
+  let variantId = input.variantId;
+  if (!variantId) {
+    const base = input.displayName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20) || 'PRATO';
+    const p = await createProduct({ name: input.displayName, sku: `${base}-${randomBytes(2).toString('hex').toUpperCase()}`, salePrice: input.price, trackStock: false, description: input.description });
+    variantId = p.variants[0].id;
+  }
+  return ctx().db.foodMenuItem.create({ data: { ...input, variantId, menuId, tenantId: ctx().tenantId } });
+}
 export const atualizarItem = (id: string, input: { categoryId?: string | null; displayName?: string; description?: string; price?: number; imageUrl?: string | null; station?: string; prepTimeMin?: number | null; isAvailable?: boolean; position?: number }) =>
   ctx().db.foodMenuItem.update({ where: { id }, data: input });
 

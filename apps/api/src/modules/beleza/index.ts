@@ -1,5 +1,6 @@
 import { ModuleKey } from '@prisma/client';
 import type { ModuleDefinition } from '../module.contract';
+import { belezaLgpd } from './services/lgpd';
 import router from './routes/beleza.routes';
 import { belezaSalesStrategy } from './services/beleza-sales.strategy';
 
@@ -10,6 +11,7 @@ export const belezaModule: ModuleDefinition = {
   basePath: 'beleza',
   router,
   salesStrategy: belezaSalesStrategy,
+  lgpd: belezaLgpd,
   permissions: [
     { key: 'bel.agenda:operate',    label: 'Agendar e atender',                 module: ModuleKey.BELEZA },
     { key: 'bel.cadastro:manage',   label: 'Cadastrar profissionais e serviços', module: ModuleKey.BELEZA },

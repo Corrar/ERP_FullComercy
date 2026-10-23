@@ -1,16 +1,23 @@
 import { useState } from 'react';
 import { post } from '@/lib/api';
 import { useAction, useGet } from '@/lib/use-api';
-import { Badge, Card, ErrorBox, Field, Form, Modal, Money, Table, Tabs } from '@/components/ui';
-import { d } from '@/lib/format';
+import { Badge, Card, ErrorBox, Field, Form, Modal, Table, Tabs } from '@/components/ui';
+import { brl, d } from '@/lib/format';
+import { EscolherCliente, type ClienteMin } from '@/components/EscolherCliente';
 
 export function Matriculas() {
   const [tab, setTab] = useState('ACTIVE'); const [adesao, setAdesao] = useState(false);
   const mats = useGet<any[]>(tab === 'OVERDUE' ? '/m/academia/matriculas/inadimplentes' : '/m/academia/matriculas', tab === 'OVERDUE' ? undefined : { status: tab });
-  const planos = useGet<any[]>('/m/academia/planos'); const clientes = useGet<any[]>('/customers');
+  const planos = useGet<any[]>('/m/academia/planos');
+  const [aluno, setAluno] = useState<ClienteMin | null>(null); const [planoId, setPlanoId] = useState('');
+  const plano = planos.data?.find((p) => p.id === planoId) ?? planos.data?.[0];
+  const primeiro = plano ? Number(plano.price) + Number(plano.enrollmentFee ?? 0) : 0;
   const aderir = useAction(async (v: Record<string, any>) => {
-    const o = await post('/orders', { channel: 'SUBSCRIPTION', customerId: v.customerId, items: [], payments: v.amount ? [{ method: v.method, amount: v.amount }] : undefined, moduleData: { planId: v.planId } });
-    setAdesao(false); await mats.reload(); if (o.status !== 'COMPLETED') alert(`Adesão criada como pedido #${o.number}. A matrícula nasce quando o pedido for pago.`);
+    if (!aluno) throw new Error('Escolha ou cadastre o aluno.');
+    if (!plano) throw new Error('Crie um plano antes (Planos).');
+    const o = await post('/orders', { channel: 'SUBSCRIPTION', customerId: aluno.id, items: [], payments: v.amount ? [{ method: v.method, amount: v.amount }] : undefined, moduleData: { planId: plano.id } });
+    setAdesao(false); setAluno(null); await mats.reload();
+    setCobrado(o.status === 'COMPLETED' ? `${aluno.name} matriculado(a) no ${plano.name}.` : `Adesão registrada como pedido #${o.number}: a matrícula nasce quando o pedido for pago (Pedidos → Receber).`);
   });
   const [cobrado, setCobrado] = useState<string | null>(null);
   const cobrar = useAction(async () => { const r = await post<any>('/m/academia/matriculas/rodar-cobranca'); setCobrado(`Cobranças geradas: ${r?.cobrancasGeradas ?? r?.geradas ?? JSON.stringify(r)}.`); await mats.reload(); });
@@ -23,9 +30,10 @@ export function Matriculas() {
     <Card><Table rows={mats.data} cols={[{ h: 'Aluno', c: (r) => <>{r.customer.name}<div className="muted">{r.customer.phone}</div></> }, { h: 'Plano', c: (r) => r.plan.name }, { h: 'Início', c: (r) => d(r.startDate) }, { h: 'Próx. cobrança', c: (r) => d(r.nextBillingAt) }, { h: 'Status', c: (r) => <Badge s={r.status} /> },
       { h: '', c: (r) => <div className="row">{r.status === 'ACTIVE' && <button className="btn" onClick={() => { const ate = prompt('Pausar até (AAAA-MM-DD)'); if (ate) void acao.run(r.id, 'pausar', { until: ate }); }}>Pausar</button>}{r.status === 'PAUSED' && <button className="btn" onClick={() => void acao.run(r.id, 'retomar')}>Retomar</button>}{['ACTIVE', 'OVERDUE', 'PAUSED'].includes(r.status) && <button className="btn danger" onClick={() => { const m = prompt('Motivo do cancelamento'); if (m) void acao.run(r.id, 'cancelar', { reason: m }); }}>Cancelar</button>}</div> }]} /></Card>
     <Modal title="Nova adesão" open={adesao} onClose={() => setAdesao(false)}><ErrorBox error={aderir.error} /><Form onSubmit={(v) => void aderir.run(v)} busy={aderir.busy} submitLabel="Registrar adesão">
-      <Field label="Aluno (cliente)"><select className="input" name="customerId" required>{clientes.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-      <Field label="Plano"><select className="input" name="planId" required>{planos.data?.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.price}</option>)}</select></Field>
-      <div className="row"><Field label="Pagar agora (valor)"><input className="input" name="amount" type="number" step="0.01" /></Field><Field label="Meio"><select className="input" name="method" defaultValue="PIX">{['PIX', 'CASH', 'DEBIT', 'CREDIT'].map((m) => <option key={m}>{m}</option>)}</select></Field></div>
-      <div className="muted">Adesão + 1º período. A matrícula nasce ao pagar. Sem valor, fica um pedido em aberto. <Money v={0} /></div></Form></Modal>
+      <EscolherCliente value={aluno} onChange={setAluno} rotulo="Aluno" />
+      {planos.data && !planos.data.length && <div className="banner warn" style={{ margin: 0 }}>Nenhum plano ainda: crie em Planos (mensal, trimestral…).</div>}
+      <Field label="Plano"><select className="input" value={plano?.id ?? ''} onChange={(e) => setPlanoId(e.target.value)} required>{planos.data?.map((p) => <option key={p.id} value={p.id}>{p.name} · {brl(p.price)}{Number(p.enrollmentFee) ? ` + adesão ${brl(p.enrollmentFee)}` : ''}</option>)}</select></Field>
+      <div className="row"><Field label="Pagar agora (valor)"><input key={plano?.id} className="input" name="amount" type="number" step="0.01" defaultValue={primeiro ? primeiro.toFixed(2) : ''} /></Field><Field label="Meio"><select className="input" name="method" defaultValue="PIX">{['PIX', 'CASH', 'DEBIT', 'CREDIT'].map((m) => <option key={m}>{m}</option>)}</select></Field></div>
+      <div className="muted">Adesão + 1º período: {brl(primeiro)}. A matrícula nasce ao pagar; sem valor, fica um pedido em aberto.</div></Form></Modal>
   </div>;
 }

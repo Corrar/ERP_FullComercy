@@ -16,6 +16,7 @@ import { useGet } from '@/lib/use-api';
 import { useAccount } from '@/lib/account';
 import { brl, d } from '@/lib/format';
 import { daysLeft, METHOD_LABEL, type BillingMethod } from '@/lib/billing';
+import { aoMudarMarca, estiloDaMarca, srcDoLogo, type Marca } from '@/lib/marca';
 import { InstalarApp } from '@/components/InstalarApp';
 
 const MOD_KEY = 'fc.module';
@@ -39,14 +40,19 @@ export function Shell() {
   const groups = useMemo(() => buildNav(can, (m) => m === current), [can, current]);
 
   const sub = useGet<any>(can('core.billing:manage') ? '/billing/subscription' : null);
+  // Marca da empresa (tela Empresa): logo no topo do menu e, se ligada, a cor dela no lugar da do módulo.
+  const marca = useGet<Marca>('/tenant/marca');
+  useEffect(() => aoMudarMarca(() => void marca.reload()), [marca.reload]);
+  const visual = marca.data?.corNoSistema ? estiloDaMarca(marca.data.cor, true) : { ...estiloDaMarca(marca.data?.cor, false), ...accentStyle(current) };
   const banner = subscriptionBanner(sub.data);
 
   return (
-    <div className={`shell ${collapsed ? 'collapsed' : ''} ${drawer ? 'drawer' : ''}`} style={accentStyle(current)}>
+    <div className={`shell ${collapsed ? 'collapsed' : ''} ${drawer ? 'drawer' : ''}`} style={visual}>
       <div className="scrim" onClick={() => setDrawer(false)} />
       <Sidebar
         title={current ? mine.find((m) => m.key === current)!.label : BRAND.name}
         kicker={s?.tenant.name ?? 'Módulo'}
+        logoUrl={srcDoLogo(marca.data)}
         modules={mine.map((m) => ({ key: m.key, label: m.label }))}
         currentModule={current}
         onPickModule={pick}

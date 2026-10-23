@@ -123,6 +123,17 @@ if (!E2E) {
     const c = await api().post('/auth/login', { tenant: slug, email: conv.email, password: 'Senha-do-caixa-123' });
     assert.ok(c.permissions.includes('varejo.pdv:operate') && c.permissions.includes('core.orders:create'));
     assert.ok(!c.permissions.includes('core.finance:view') && !c.permissions.includes('varejo.etiquetas:print'));
+
+    // Painel do dia: cada número só para quem pode vê-lo, com a permissão JÁ cortada pelo plano.
+    // Esta loja não comprou Financeiro nem Comissões: nem o dono (admin) recebe esses números.
+    const dd = await api(dono.accessToken).get('/dashboard');
+    assert.ok('faturamento' in dd.hoje && 'itensAbaixoDoMinimo' in dd.estoque && 'caixasAbertos' in dd.modulos.VAREJO);
+    assert.ok(!('financeiro' in dd), 'sem Financeiro no plano, sem "a receber"');
+    assert.ok(!('comissoesPendentes' in dd.modulos.VAREJO), 'sem Comissões no plano, sem comissões pendentes');
+    // O Caixa vê o que o perfil dele cobre (vendas, caixas) e nada do financeiro.
+    const dc = await api(c.accessToken).get('/dashboard');
+    assert.ok('vendas' in dc.hoje && 'caixasAbertos' in dc.modulos.VAREJO);
+    assert.ok(!('financeiro' in dc));
   });
 
   test('módulo ligado depois ganha os perfis dele; o Gerente recebe as chaves do módulo novo', async () => {
@@ -207,12 +218,30 @@ if (!E2E) {
     // (o job varre todas as empresas) e renovado esta — data fixa tornaria o teste dependente da ordem.
     const fim = new Date(antes.currentPeriodEnd).getTime();
     const { runBillingCycle } = await import('../../src/core/billing/billing.service');
+    const { outbox } = await import('../../src/infra/mailer');
+    const avisos = (re: RegExp) => outbox.filter((m) => m.to === email && m.subject.startsWith(`Loja ${run}:`) && re.test(m.subject));
     await runBillingCycle(new Date(fim + DIA));
     let s = await A.get('/billing/subscription');
     assert.equal(s.invoices[0].status, 'FAILED');
     assert.match(s.invoices[0].failureReason, /limite/);
     assert.equal(s.invoices[0].amount, '129.40', 'cobra o plano já alterado');
     assert.equal((await A.raw('GET', '/dashboard')).status, 200, 'dentro da carência segue aberto');
+    // Aviso de recusa na 1ª tentativa: motivo, data da suspensão e o caminho para resolver.
+    const [recusa] = avisos(/não conseguimos cobrar/);
+    assert.ok(recusa, 'aviso de recusa');
+    assert.match(recusa.text, /limite/);
+    assert.match(recusa.text, /suspenso/);
+    assert.match(recusa.text, /\/minha-conta/);
+
+    // Novas tentativas nos dias seguintes: só a ÚLTIMA vira outro aviso (não um e-mail por dia).
+    // (Viajando no tempo, uma passada pode tentar duas vezes — o `updatedAt` é do relógio real —,
+    // então o teste segue o número de tentativas, não o dia.)
+    for (let d = 2; d <= 6; d++) {
+      await runBillingCycle(new Date(fim + d * DIA));
+      const tentativas = (await A.get('/billing/subscription')).invoices[0].attempts;
+      assert.equal(avisos(/última tentativa/).length, tentativas >= 4 ? 1 : 0, `${tentativas} tentativas`);
+      assert.equal(avisos(/não conseguimos cobrar/).length, 1, 'as recusas do meio não avisam');
+    }
 
     await runBillingCycle(new Date(fim + 12 * DIA)); // carência de 10 dias vencida
     s = await A.get('/billing/subscription');
@@ -221,12 +250,94 @@ if (!E2E) {
     const bloq = await A.raw('GET', '/dashboard');
     assert.equal(bloq.status, 403);
     assert.equal(bloq.body.details.reason, 'TENANT_SUSPENDED');
+    assert.equal(avisos(/acesso suspenso/).length, 1, 'aviso de suspensão');
+    assert.match(avisos(/acesso suspenso/)[0].text, /Nenhum dado foi apagado/);
+    await runBillingCycle(new Date(fim + 13 * DIA));
+    assert.equal(avisos(/acesso suspenso/).length, 1, 'a passada seguinte não repete o aviso');
 
     s = await A.put('/billing/payment-method', { method: 'CARD', cardToken: 'tok_mock_visa_4242_1230' });
     assert.equal(s.invoices[0].status, 'PAID');
     assert.equal(s.status, 'ACTIVE');
     assert.equal(s.tenant.status, 'ACTIVE');
     assert.equal((await A.raw('GET', '/dashboard')).status, 200);
+    // Comprovante, dizendo que o acesso voltou; confirmar de novo (o webhook) não manda outro.
+    // (O teste anterior já recebeu um comprovante de 129,40, de outra fatura: conta só o da volta.)
+    const recibos = () => avisos(/pagamento de R\$\s?129,40 recebido/).filter((m) => /liberado de novo/.test(m.text));
+    assert.equal(recibos().length, 1);
+    const todos = avisos(/recebido/).length;
+    const { markInvoicePaid } = await import('../../src/core/billing/billing.service');
+    await markInvoicePaid(s.invoices[0].id);
+    assert.equal(avisos(/recebido/).length, todos, 'confirmação repetida não duplica o comprovante');
+  });
+
+  test('proporcional: função nova no meio do mês paga só os dias que faltam; recusa não liga nada', async () => {
+    const mail = `prorata-${run.toLowerCase()}@exemplo.com`;
+    const t = (await api().post('/account/register', { name: 'Dona Proporcional', email: mail, password: 'Senha-forte-123' })).token;
+    const r = await api(t).post('/account/checkout', { company: { name: `Prop ${run}`, document: cpf(9) }, modules: ['VAREJO'], features: [], payment: { method: 'CARD', cardToken: 'tok_mock_visa_4242_1230' } });
+    const C = api(r.session.accessToken);
+    const sel = (features: string[]) => ({ modules: ['VAREJO'], features });
+
+    // No teste grátis, ligar função não cobra nada agora.
+    const noTeste = await C.post('/billing/subscription/features/preview', sel(['varejo.comissoes']));
+    assert.deepEqual([noTeste.proporcional.valor, noTeste.proporcional.motivo, noTeste.novoValor], ['0.00', 'teste', '134.40']);
+
+    // Mês pago correndo: 10 dias usados, 20 pela frente (de 30).
+    const { prisma } = await import('../../src/infra/prisma');
+    const agora = Date.now();
+    await prisma.subscription.update({ where: { id: r.subscriptionId }, data: { status: 'ACTIVE', trialEndsAt: null, currentPeriodStart: new Date(agora - 10 * DIA), currentPeriodEnd: new Date(agora + 20 * DIA) } });
+    const prev = await C.post('/billing/subscription/features/preview', sel(['varejo.comissoes']));
+    // 19,90 × 20/30 = 13,2666… → 13,27
+    assert.deepEqual([prev.proporcional.valor, prev.proporcional.dias, prev.proporcional.diasPeriodo], ['13.27', 20, 30]);
+    assert.deepEqual(prev.proporcional.funcoes, ['Comissões de vendedores']);
+
+    const { outbox } = await import('../../src/infra/mailer');
+    const s = await C.put('/billing/subscription/features', sel(['varejo.comissoes']));
+    assert.equal(s.amount, '134.40', 'mensalidade cheia nova vale na próxima fatura');
+    const f = s.invoices.find((i: any) => i.note?.startsWith('Proporcional'));
+    assert.deepEqual([f.amount, f.status], ['13.27', 'PAID']);
+    assert.match(f.note, /Comissões de vendedores · 20 de 30 dias/);
+    assert.ok(outbox.some((m) => m.to === mail && /13,27 recebido/.test(m.subject) && /no meio do mês/.test(m.text)), 'comprovante do proporcional');
+    assert.equal((await C.raw('GET', '/m/varejo/comissoes')).status, 200, 'a função já vale');
+
+    // Cartão sem limite: a cobrança proporcional é recusada e NADA muda (nem e-mail de recusa: a pessoa está na tela).
+    await C.put('/billing/payment-method', { method: 'CARD', cardToken: 'tok_mock_master_0341_1230' });
+    const recusas = outbox.filter((m) => m.to === mail && /não conseguimos cobrar/.test(m.subject)).length;
+    const bad = await C.raw('PUT', '/billing/subscription/features', sel(['varejo.comissoes', 'varejo.etiquetas']));
+    assert.equal(bad.status, 400);
+    assert.match(bad.body.error, /proporcional de 6,60 foi recusada/);
+    const depois = await C.get('/billing/subscription');
+    assert.equal(depois.amount, '134.40');
+    assert.ok(!depois.items.some((i: any) => i.key === 'varejo.etiquetas'), 'recusada, a função não entra');
+    assert.equal((await C.raw('GET', '/m/varejo/etiquetas/modelos')).status, 403);
+    assert.equal(outbox.filter((m) => m.to === mail && /não conseguimos cobrar/.test(m.subject)).length, recusas);
+
+    // Tirar função não cobra nem devolve agora: o valor menor vale na próxima fatura.
+    const notas = depois.invoices.length;
+    const menos = await C.put('/billing/subscription/features', sel([]));
+    assert.equal(menos.amount, '114.50');
+    assert.equal(menos.invoices.length, notas, 'remover não gera fatura');
+  });
+
+  test('aviso de fim do teste grátis: 2 dias antes, uma vez, com valor e cartão', async () => {
+    const mail = `teste-acabando-${run.toLowerCase()}@exemplo.com`;
+    const t = (await api().post('/account/register', { name: 'Dona Fim de Teste', email: mail, password: 'Senha-forte-123' })).token;
+    const r = await api(t).post('/account/checkout', { company: { name: `Fim ${run}`, document: cpf(7) }, modules: ['VAREJO'], features: [], payment: { method: 'CARD', cardToken: 'tok_mock_visa_4242_1230' } });
+    assert.equal(r.trial, true);
+    const fim = new Date(r.trialEndsAt).getTime();
+    const { runBillingCycle } = await import('../../src/core/billing/billing.service');
+    const { outbox } = await import('../../src/infra/mailer');
+    const avisos = () => outbox.filter((m) => m.to === mail && /teste grátis termina/.test(m.subject));
+
+    await runBillingCycle(new Date(fim - 3 * DIA));
+    assert.equal(avisos().length, 0, 'faltando 3 dias ainda não avisa');
+    await runBillingCycle(new Date(fim - 2 * DIA + 60_000));
+    await runBillingCycle(new Date(fim - DIA));
+    assert.equal(avisos().length, 1, 'avisa uma vez só na janela de 2 dias');
+    const [a] = avisos();
+    assert.match(a.subject, new RegExp(`^Fim ${run}: o teste grátis termina em \\d{2}/\\d{2}/\\d{4}$`));
+    assert.match(a.text, /R\$\s?114,50/);
+    assert.match(a.text, /final 4242/);
+    assert.ok(a.html?.includes('Revisar minha assinatura'));
   });
 
   test('cancelar vale no fim do período e pode ser desfeito antes', async () => {

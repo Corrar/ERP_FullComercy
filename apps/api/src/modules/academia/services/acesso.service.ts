@@ -44,11 +44,18 @@ export async function checkInManual(customerId: string) {
   return db.gymCheckIn.create({ data: { tenantId, customerId, membershipId: d.membershipId, source: CheckInSource.MANUAL } });
 }
 
+/** Token que nenhuma chave abre (rotação sem a antiga) = aparelho não autorizado, não erro 500. */
+function abrirToken(deviceId: string, selo: string): string | null {
+  try { return open(selo); } catch (e) { console.error(`[acesso] dispositivo ${deviceId}: ${(e as Error).message}`); return null; }
+}
+
 /** Webhook do aparelho (SEM login de usuário): autentica pelo token do dispositivo. */
 export async function eventoDoDispositivo(input: { deviceId: string; token: string; kind: CredentialKind; value: string; raw?: unknown }) {
   const device = await prisma.gymAccessDevice.findUnique({ where: { id: input.deviceId } });
   const cfg = (device?.config ?? {}) as { webhookToken?: string };
-  if (!device?.isActive || !cfg.webhookToken || !safeEqual(open(cfg.webhookToken), input.token)) throw new AppError('UNAUTHENTICATED', 'Dispositivo não autorizado.');
+  if (!device?.isActive || !cfg.webhookToken) throw new AppError('UNAUTHENTICATED', 'Dispositivo não autorizado.');
+  const esperado = abrirToken(device.id, cfg.webhookToken);
+  if (!esperado || !safeEqual(esperado, input.token)) throw new AppError('UNAUTHENTICATED', 'Dispositivo não autorizado.');
   const db = prismaForTenant(device.tenantId);
   await db.gymAccessDevice.update({ where: { id: device.id }, data: { lastSeenAt: new Date() } });
 

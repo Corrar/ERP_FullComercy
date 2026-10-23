@@ -26,6 +26,7 @@ export const CORE_NAV: NavItem[] = [
   { to: '/estoque', label: 'Estoque', perm: 'core.stock:view' },
   { to: '/compras', label: 'Compras', perm: 'core.purchases:view' },
   { to: '/financeiro', label: 'Financeiro', perm: 'core.finance:view' },
+  { to: '/cobrancas', label: 'Cobranças online', perm: 'core.payments:manage' },
 ];
 export const ADMIN_NAV: NavItem[] = [
   { to: '/usuarios', label: 'Usuários', perm: 'core.users:view' },

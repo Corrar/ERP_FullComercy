@@ -6,8 +6,10 @@
 //     finalizar a compra, e o que abre as empresas da conta.
 //   • FUNCIONÁRIO: quem foi convidado para uma empresa entra com o identificador da empresa,
 //     e-mail e senha (o login de sempre, `POST /auth/login`).
+//   • PÁGINA DA EMPRESA (`/e/<slug>`): a mesma porta do funcionário, com a logo e a cor da empresa
+//     e o identificador já preenchido — o link que a empresa manda para a equipe.
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { acct, api, post, pub } from '@/lib/api';
 import { useTurnstile } from '@/lib/turnstile';
 import { accountSession } from '@/lib/account';
@@ -19,8 +21,14 @@ import { mockGoogleCredential, renderGoogleButton } from '@/lib/google';
 import { ErrorBox, Modal, Spinner } from '@/components/ui';
 import { GoogleG, Icon } from '@/components/icons';
 import { BRAND } from '@/app/brand';
+import { estiloDaMarca, srcDoLogo, type Marca } from '@/lib/marca';
 
-function AuthLayout({ children }: { children: ReactNode }) {
+/** Empresa do último acesso da equipe neste aparelho: sem sessão, o app volta para a página DELA
+ *  (`/e/<slug>`), não para a loja. É o "computador do caixa". */
+export const EQUIPE_KEY = 'fc.equipe';
+
+function AuthLayout({ children, marca }: { children: ReactNode; marca?: Marca | null }) {
+  if (marca) return <AuthEmpresa marca={marca}>{children}</AuthEmpresa>;
   return (
     <div className="auth">
       <div className="auth-brand">
@@ -39,6 +47,26 @@ function AuthLayout({ children }: { children: ReactNode }) {
         </div>
         {children}
         <div className="auth-foot"><span>© {new Date().getFullYear()} {BRAND.name}</span><span className="row" style={{ gap: 6 }}><Icon name="shield" size={14} /> Conexão segura</span></div>
+      </div>
+    </div>
+  );
+}
+
+/** A tela de entrada vestida com a marca da EMPRESA: logo e nome dela; o produto só no rodapé. */
+function AuthEmpresa({ children, marca }: { children: ReactNode; marca: Marca }) {
+  const logo = srcDoLogo(marca);
+  const simbolo = logo ? <img className="auth-logo" src={logo} alt={`Logo de ${marca.nome}`} /> : <span className="brand-mark"><Icon name="building" size={18} stroke={2.2} /></span>;
+  return (
+    <div className="auth empresa" style={estiloDaMarca(marca.cor, false)}>
+      <div className="auth-brand">
+        <div className="row" style={{ gap: 12 }}>{simbolo}</div>
+        <h1>{marca.nome}</h1>
+        <ul><li><Icon name="users" size={18} /> Acesso da equipe</li></ul>
+      </div>
+      <div className="auth-form">
+        <div className="row" style={{ gap: 10 }}>{logo ? <img className="auth-logo sm" src={logo} alt="" /> : null}<strong>{marca.nome}</strong></div>
+        {children}
+        <div className="auth-foot"><span>Sistema {BRAND.name}</span><span className="row" style={{ gap: 6 }}><Icon name="shield" size={14} /> Conexão segura</span></div>
       </div>
     </div>
   );
@@ -136,7 +164,7 @@ export function Login() {
   const employee = useAction(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const f = new FormData(e.currentTarget);
     const r = await guarded(() => api('/auth/login', { method: 'POST', body: { tenant: f.get('tenant'), email: f.get('email'), password: f.get('password') }, headers: human.headers() }));
-    localStorage.setItem('fc.tenant', String(f.get('tenant')));
+    localStorage.setItem('fc.tenant', String(f.get('tenant'))); localStorage.setItem(EQUIPE_KEY, r.tenant.slug);
     session.set({ accessToken: r.accessToken, refreshToken: r.refreshToken, user: r.user, tenant: r.tenant, permissions: r.permissions, modules: r.modules });
     go(loc.state?.from ?? '/');
   });
@@ -187,7 +215,55 @@ export function Login() {
   );
 }
 
+/** `/e/<slug>`: a página de acesso da EMPRESA. Mesmo login da equipe, com a marca dela. */
+export function EquipeEmpresa() {
+  const { slug = '' } = useParams();
+  const [q] = useSearchParams(); const nav = useNavigate();
+  const loc = useLocation() as { state?: { from?: string } };
+  const [marca, setMarca] = useState<Marca | null>(null);
+  const [naoAchou, setNaoAchou] = useState(false);
+  useEffect(() => { pub.get<Marca>(`/public/marca/${encodeURIComponent(slug)}`).then(setMarca, () => setNaoAchou(true)); }, [slug]);
+  const human = useTurnstile('equipe');
+  const entrar = useAction(async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); const f = new FormData(e.currentTarget);
+    if (!human.ready) throw new Error('Aguarde a verificação anti-robô terminar.');
+    let r: any;
+    try { r = await api('/auth/login', { method: 'POST', body: { tenant: slug, email: f.get('email'), password: f.get('password') }, headers: human.headers() }); } finally { human.reset(); }
+    localStorage.setItem('fc.tenant', slug); localStorage.setItem(EQUIPE_KEY, slug);
+    session.set({ accessToken: r.accessToken, refreshToken: r.refreshToken, user: r.user, tenant: r.tenant, permissions: r.permissions, modules: r.modules });
+    nav(loc.state?.from ?? '/', { replace: true });
+  });
+
+  if (naoAchou) return (
+    <AuthLayout>
+      <div className="stack">
+        <h2>Empresa não encontrada</h2>
+        <div className="muted">O endereço <code>/e/{slug}</code> não corresponde a nenhuma empresa ativa. Confira o link com quem o enviou.</div>
+        <Link to="/login?modo=funcionario" className="linkish" onClick={() => localStorage.removeItem(EQUIPE_KEY)}>Entrar informando a empresa</Link>
+      </div>
+    </AuthLayout>
+  );
+  if (!marca) return <div className="auth" style={{ display: 'grid', placeItems: 'center' }}><Spinner /></div>;
+  return (
+    <AuthLayout marca={marca}>
+      <form onSubmit={(e) => void entrar.run(e)}>
+        <h2>Entrar</h2>
+        <div className="muted" style={{ marginTop: -6 }}>Use o e-mail e a senha que você recebeu no convite.</div>
+        <ErrorBox error={entrar.error} />
+        <input className="pill" name="email" type="email" placeholder="E-mail" autoComplete="username" required autoFocus defaultValue={q.get('email') ?? ''} />
+        <PasswordInput name="password" placeholder="Senha" autoComplete="current-password" />
+        <Link to={`/esqueci-senha?empresa=${encodeURIComponent(slug)}`} className="linkish">Esqueceu a senha?</Link>
+        <div className="ts-slot" ref={human.slot} /><ErrorBox error={human.error} />
+        <button className="btn-pill main" disabled={entrar.busy || !human.ready}>{entrar.busy ? <Spinner /> : <Icon name="arrowRight" />} Entrar</button>
+        <Link to="/login?modo=funcionario" className="linkish" style={{ alignSelf: 'center', color: 'var(--muted)', fontWeight: 600 }} onClick={() => localStorage.removeItem(EQUIPE_KEY)}>Entrar em outra empresa</Link>
+      </form>
+    </AuthLayout>
+  );
+}
+
 export function Forgot() {
+  const [q] = useSearchParams();
+  const empresa = q.get('empresa');
   const [done, setDone] = useState(false);
   const human = useTurnstile('esqueci');
   const { run, busy, error } = useAction(async (e: FormEvent<HTMLFormElement>) => {
@@ -202,12 +278,12 @@ export function Forgot() {
         <h2>Esqueci minha senha</h2>
         {done ? <div className="banner info" style={{ margin: 0 }}><Icon name="mail" size={18} /><span className="grow">Se o e-mail existir, você receberá um link válido por 1 hora.</span></div> : <>
           <ErrorBox error={error} />
-          <input className="pill" name="tenant" defaultValue={localStorage.getItem('fc.tenant') ?? ''} placeholder="Identificador da empresa" required />
+          <input className="pill" name="tenant" defaultValue={empresa ?? localStorage.getItem('fc.tenant') ?? ''} placeholder="Identificador da empresa" required />
           <input className="pill" name="email" type="email" placeholder="E-mail" required />
           <div className="ts-slot" ref={human.slot} /><ErrorBox error={human.error} />
           <button className="btn-pill main" disabled={busy || !human.ready}>{busy ? <Spinner /> : <Icon name="mail" />} Enviar link</button>
         </>}
-        <Link to="/login?modo=funcionario" className="linkish" style={{ alignSelf: 'center' }}>Voltar</Link>
+        <Link to={empresa ? `/e/${encodeURIComponent(empresa)}` : '/login?modo=funcionario'} className="linkish" style={{ alignSelf: 'center' }}>Voltar</Link>
       </form>
     </AuthLayout>
   );
@@ -219,8 +295,10 @@ export function Reset({ invite = false }: { invite?: boolean }) {
     e.preventDefault(); const f = new FormData(e.currentTarget);
     if (f.get('p1') !== f.get('p2')) throw new Error('As senhas não conferem.');
     await post('/auth/reset', { token: q.get('token'), password: f.get('p1') });
-    if (q.get('tenant')) localStorage.setItem('fc.tenant', q.get('tenant')!);
-    nav('/login?modo=funcionario', { replace: true });
+    const t = q.get('tenant');
+    if (t) localStorage.setItem('fc.tenant', t);
+    // Convite/redefinição levam o identificador: volta para a página da empresa, com a marca dela.
+    nav(t ? `/e/${encodeURIComponent(t)}` : '/login?modo=funcionario', { replace: true });
   });
   return (
     <AuthLayout>

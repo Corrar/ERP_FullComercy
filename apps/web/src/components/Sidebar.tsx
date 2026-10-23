@@ -13,6 +13,8 @@ import type { Theme } from '@/app/theme';
 export interface SidebarProps {
   title: string;
   kicker: string;
+  /** Logo da empresa no lugar do ícone do módulo (tela Empresa). */
+  logoUrl?: string | null;
   modules: { key: ModuleKey; label: string }[];
   currentModule: ModuleKey | null;
   onPickModule?: (m: ModuleKey) => void;
@@ -45,7 +47,9 @@ export function Sidebar(p: SidebarProps) {
       <div className="sb-head" ref={ref}>
         <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
           <button className={`sb-switch ${open ? 'open' : ''}`} onClick={() => canSwitch && setOpen((o) => !o)} aria-haspopup={canSwitch ? 'menu' : undefined} aria-expanded={canSwitch ? open : undefined} title={p.title}>
-            <span className="sb-tile"><Icon name={icon} size={18} /></span>
+            {p.logoUrl
+              ? <span className="sb-tile sb-logo"><img src={p.logoUrl} alt={`Logo de ${p.kicker}`} /></span>
+              : <span className="sb-tile"><Icon name={icon} size={18} /></span>}
             <span className="hide-c" style={{ flex: 1, minWidth: 0 }}>
               <span className="sb-kicker" style={{ display: 'block' }}>{p.kicker}</span>
               <span className="sb-title" style={{ display: 'block' }}>{p.title}</span>

@@ -32,8 +32,14 @@
 - [x] Modelo de perfis aplicado nas empresas antigas (job `core.perfis-modelo`, uma vez por empresa, só perfil vazio)
 - [x] Primeiros passos no painel: roteiro por módulo comprado, marcado pelos dados da empresa, "Fazer agora" leva à tela, dispensável (volta em Empresa)
 - [x] Conta do comprador: esqueci a senha da conta (leva junto a senha das empresas que usam a da conta), reenviar dados de acesso, assinatura e faturas de cada empresa na Minha conta
+- [x] Funções prontas ao contratar: teste que percorre TODAS as funções opcionais (antes cortada pelo plano, depois responde na hora, menu e guia do painel) + regra no CLAUDE.md; guia de primeiros passos ganhou os passos das funções opcionais e volta quando entra função nova
+- [x] Cobrança online de verdade: chave Pix da empresa, "Cobrar por Pix" no pedido e nas contas abertas (BR Code do Banco Central com valor, QR), link público `/pagar/<token>` para o cliente, confirmação do recebimento; tela própria "Cobranças online" (antes ficava escondida em Integrações, outra função paga)
+- [x] Promessas da loja cumpridas: Relatórios da loja por forma de pagamento + resumo com ticket médio e peças por venda (período na tela); Relatórios do restaurante por garçom e tempo de cozinha por estação; conta da comanda dividida por pessoa (partes antes de fechar, taxa já na 1ª parte)
+- [x] Testes de navegador do dia a dia em empresa recém-criada: salão → KDS → conta dividida → relatórios; recepção da academia (libera, barra, saída); OS → kanban → orçamento → aprovação
+- [x] Primeiro dia de cada comércio SÓ PELA TELA, em empresa vazia (8 módulos), e o que travava foi corrigido: prato do cardápio criado sem produto prévio (o produto nasce junto; endereço do cardápio sai do nome), SKU gerado do nome, cliente buscado/cadastrado na hora na Agenda e na OS da oficina e na matrícula (antes, lista de todos os clientes), matrícula já com o valor do plano, PDV com venda rápida (meio escolhido leva o total), F12 de verdade e cliente por nome (antes, "id"), agenda sem profissional e reserva sem quarto dizem onde cadastrar
+- [x] Funções opcionais pelo primeiro uso na tela: turma em vários dias + reserva + chamada, catraca e credencial, pacote vendido, convênio na consulta, vacina nos lembretes, compra recebida no estoque, conta a pagar baixada, convite com perfil pronto, etiquetas em PDF, evolução no prontuário, webhook. Corrigido no caminho: turma só aceitava um dia da semana; vacina sem data padrão não salvava; compra sem fornecedor não dizia onde cadastrar
 - [x] Site instalável como app (PWA): manifesto, ícones, service worker que guarda só a casca (nunca a API), página "sem conexão", botão "Instalar app" (Chrome/Edge/Android e instruções no iPhone)
-- [x] Testes: 43 unit, 39 e2e API, 22 Playwright
+- [x] Testes: 50 unit, 54 e2e API, 48 Playwright
 
 - [x] Homologação no ar: front na Vercel (`erp-modular`), API no Render (free), banco no Neon (`ERP-Modular`)
 
@@ -44,36 +50,46 @@
 
 - [x] SMTP no Render pelo Resend (smtp.resend.com:465, chave só de envio) — em MODO TESTE: remetente `onboarding@resend.dev`, que só entrega para o e-mail da conta Resend
 - [ ] Domínio próprio no Resend (registros SPF/DKIM no DNS) e trocar `MAIL_FROM` no Render — sem isso o cliente real não recebe os dados de acesso nem o "esqueci a senha" — passo do responsável
-- [ ] Colar no Render as chaves do Stripe (teste) e do Turnstile e trocar `BILLING_PROVIDER` para `stripe` — passo do responsável
+- [x] Chaves do Stripe (teste) no Render e `BILLING_PROVIDER=stripe` — conferido pela API no ar (catálogo: provider `stripe`, `pk_test_`)
+- [ ] Chaves do Turnstile no Render (`TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY`; widget na Cloudflare para os domínios da Vercel) — passo do responsável
 - [ ] Ativar boleto e Pix na conta Stripe e implementar no adaptador (hoje só cartão; Pix Automático o Stripe não oferece)
 - [ ] WAF/DDoS da Cloudflare exige domínio próprio com DNS na Cloudflare (proxy laranja na frente da Vercel e da API)
 
-- [ ] Colar `DATABASE_URL` (Neon `ERP-Modular`, conexão direta, sem `-pooler`) no serviço `erp-modular-api` — passo do responsável
+- [x] `DATABASE_URL` do Neon no `erp-modular-api` (log: `[db] ok`)
 - [ ] Apagar o Postgres `erp-modular-db` do Render (vazio, substituído pelo Neon; expiraria em 20/11/2026)
 - [ ] Produção de verdade: `APP_STAGE=production`, gateway real, `GOOGLE_CLIENT_ID`, papel `app_rw` com LOGIN e senha (separar `DATABASE_ADMIN_URL`)
 - [ ] Decidir se a homologação abre ao público (hoje a Vercel exige login do time)
 
 - [ ] Gateway REAL da assinatura (cartão tokenizado pelo SDK JS do gateway, boleto, Pix Automático) em
       `core/billing/providers/` + `tokenizeCard` em `apps/web/src/lib/billing.ts`
-- [ ] `GOOGLE_CLIENT_ID` de produção (origem autorizada no console do Google)
+- [x] `GOOGLE_CLIENT_ID` na homologação (login real com Google aceito pela API em 21/10)
+- [ ] `GOOGLE_CLIENT_ID` de produção (origem do domínio próprio autorizada no console do Google)
 - [ ] Nota fiscal de serviço da mensalidade do SaaS
 
-- [ ] Gateway de pagamento real (PIX dinâmico de um banco/PSP) como provedor em `core/payments/providers/`
-- [ ] Rotação de `APP_ENCRYPTION_KEY` (recifrar segredos) e política de backup/restore do banco
+- [x] Pix com baixa automática: a empresa conecta a conta do Mercado Pago dela em "Cobranças online" (token conferido lá e guardado selado, nunca volta à tela nem vai no `settings` da sessão); "Cobrar por Pix" e o "pagar agora" do cardápio online usam essa conta; o aviso do Mercado Pago só baixa depois de RELER o pagamento na API deles (e confere a assinatura secreta, se cadastrada); a janela do pedido fecha ao vivo. Sem conta conectada, segue a chave Pix com confirmação à mão
+- [x] Cardápio online: "Pagar agora" mandava o provedor `mock` (de teste) e só aparecia em loja sem nada configurado; recusa deixava pedido órfão — agora o meio é o da loja, a opção só aparece se houver, e a recusa vem antes de criar o pedido
+- [x] `API_PUBLIC_URL` no Render (homologação: `https://erp-modular-api.onrender.com`; a Vercel exige login do time e barraria o aviso) — feito em 22/10/2026
+- [ ] Para cada empresa: cadastrar o webhook no painel do Mercado Pago com a assinatura secreta (opcional, reforço) e testar um Pix real de R$ 1 numa conta de verdade
+- [ ] Outros PSPs (Efí, Asaas, banco direto) como provedores em `core/payments/providers/` — mesmo contrato do Mercado Pago
+- [x] Rotação de `APP_ENCRYPTION_KEY`: selo com id da chave, chave anterior só para abrir, job `core.recifrar-segredos`, status em `/platform/segredos`; produção não sobe sem a chave; segredo ilegível falha só o item (webhook/catraca), não o lote — procedimento em `docs/OPERACAO.md`
+- [x] Política de backup/restore escrita (`docs/OPERACAO.md` §2)
+- [ ] Executar a política: `pg_dump` semanal fora do Neon, conferir a janela de restauração do plano, primeiro ensaio de restauração — passo do responsável
 - [ ] Papéis de banco em produção criados à mão (plataforma `BYPASSRLS`, tenant comum) e `db:rls` no deploy
 - [ ] Limites por plano da plataforma (usuários, pedidos/mês) e bloqueio por inadimplência do SaaS
-- [ ] Termos de uso / LGPD: exportação e exclusão de dados do cliente final (pedidos públicos guardam telefone)
+- [x] LGPD do cliente final: exportar (JSON com núcleo + módulos) e anonimizar (pedidos ficam; vínculo vivo e prontuário bloqueiam), permissão própria, auditoria, botões na ficha do cliente
+- [ ] Termos de uso e política de privacidade publicados na loja e no cadastro (texto jurídico — passo do responsável)
 
 ## P1 — próxima rodada
 
-- [ ] Identidade visual (nome, logo, cor) — trocar `app/brand.ts`, `--brand` e o ícone
-- [ ] Proporcional (pro rata) ao adicionar função no meio do ciclo; hoje o valor novo vale na próxima fatura
-- [ ] E-mail de aviso: fim do teste em 2 dias, fatura gerada, pagamento recusado, suspensão
-- [ ] Painel do dia esconder KPI de módulo cuja função não está no plano (ex.: comissões pendentes)
+- [x] Marca DA EMPRESA cliente: logo enviado (PNG/JPEG/WebP conferidos pelos bytes, até 256 KB), cor no menu e nos botões quando a empresa liga, página de acesso da equipe `/e/<empresa>` com a marca dela, aparelho da equipe volta para essa página ao sair, e-mails com o logo enviado
+- [ ] Domínio próprio por empresa (ex.: `sistema.minhaloja.com.br` → página da empresa): exige domínio do produto, DNS e certificado por cliente na Vercel
+- [ ] Identidade visual DO PRODUTO (nome, logo, cor) — trocar `app/brand.ts`, `--brand` e o ícone
+- [x] Proporcional (pro rata) ao ligar função no meio do mês pago: só as funções novas, pelos dias que faltam; cartão cobra antes de ligar (recusou, nada muda); prévia na tela antes de salvar; remover não devolve e o valor menor vale na próxima fatura
+- [x] E-mails de aviso da cobrança: fim do teste em 2 dias, fatura disponível (boleto/Pix), recusa (1ª e última tentativa), suspensão e comprovante — uma vez cada (`core_billing_notices`)
+- [x] Painel do dia por permissão já cortada pelo plano: cada número só para quem pode vê-lo (o Caixa não vê "a receber"; sem Comissões no plano, sem "comissões pendentes"); chaves na conferência de boot
 
 - [ ] Emissão fiscal por adaptador (NFC-e no PDV, NF-e na compra) ouvindo `order.status` COMPLETED
 - [ ] Socket.IO entre instâncias (adapter Redis) e fila para o outbox quando houver várias réplicas
-- [ ] Testes de navegador para Food (KDS), Academia (recepção) e Serviços (kanban → OS) — o salão (mesas) já tem
 
 ## P2 — quando couber
 

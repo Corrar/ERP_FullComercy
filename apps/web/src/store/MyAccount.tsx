@@ -83,7 +83,7 @@ function Assinatura({ a }: { a: any }) {
     <div className="muted small">Pagamento: {METHOD_LABEL[a.method as keyof typeof METHOD_LABEL] ?? a.method}{a.pagamento?.last4 ? ` · ${BRAND_LABEL[a.pagamento.brand] ?? 'Cartão'} final ${a.pagamento.last4}` : ''}. Para trocar o cartão, mudar funções ou cancelar, abra o ERP e vá em Assinatura.</div>
     <div><strong>O que está contratado</strong>{a.items.map((i: any) => <div key={i.label} className="row between" style={{ padding: '4px 0' }}><span>{i.label}</span><span className="mono">{brl(i.price)}</span></div>)}</div>
     <div><strong>Faturas</strong><Table<any> rows={a.faturas} empty={a.status === 'TRIALING' ? 'Nenhuma fatura ainda: a primeira sai no fim do teste grátis.' : 'Nenhuma fatura.'} cols={[
-      { h: 'Período', c: (f) => `${d(f.periodStart)} a ${d(f.periodEnd)}` }, { h: 'Vencimento', c: (f) => d(f.dueAt) }, { h: 'Valor', c: (f) => brl(f.amount), right: true },
+      { h: 'Período', c: (f) => <>{d(f.periodStart)} a {d(f.periodEnd)}{f.note && <div className="muted small">{f.note}</div>}</> }, { h: 'Vencimento', c: (f) => d(f.dueAt) }, { h: 'Valor', c: (f) => brl(f.amount), right: true },
       { h: 'Situação', c: (f) => <span className={`badge ${INVOICE_STATUS[f.status]?.tone ?? ''}`}>{INVOICE_STATUS[f.status]?.label ?? f.status}</span> },
     ]} /></div>
   </div>;

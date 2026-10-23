@@ -10,6 +10,7 @@ import type { ModuleKey } from '@prisma/client';
 import type { PermissionDef } from '../core/rbac/permissions';
 import type { SalesStrategy } from '../core/orders/sales-strategy';
 import type { JobDefinition } from '../jobs/scheduler';
+import type { TenantTx } from '../infra/prisma';
 
 export interface ModuleDefinition {
   key: ModuleKey;
@@ -30,4 +31,17 @@ export interface ModuleDefinition {
   onEnable?(tenantId: string): Promise<void>;
   /** Tarefas periódicas do módulo (varrem TODOS os tenants com o módulo ativo). */
   jobs?: JobDefinition[];
+  /** LGPD — o que o módulo guarda sobre um cliente final (o titular). Roda no contexto do tenant. */
+  lgpd?: ModuleLgpd;
+}
+
+export interface ModuleLgpd {
+  /** Dados do titular neste módulo, legíveis por gente (vão no arquivo de exportação). */
+  exportar(customerId: string): Promise<Record<string, unknown>>;
+  /** O que impede anonimizar AGORA (vínculo em andamento: matrícula ativa, reserva, agendamento
+   *  futuro). Lista vazia = pode. */
+  pendencias?(customerId: string): Promise<string[]>;
+  /** Tira o que identifica a pessoa; mantém o que a lei manda guardar (fiscal, prontuário). Roda
+   *  dentro da transação do core, junto com o cadastro. */
+  anonimizar(customerId: string, tx: TenantTx): Promise<void>;
 }

@@ -44,6 +44,16 @@ Cada módulo é uma pasta autocontida que se apresenta ao `moduleRegistry` com: 
 no catálogo), estratégia de venda, `onEnable` (semente) e jobs. Retirar um módulo do produto é
 apagar a pasta e uma linha; desligar numa empresa é uma linha em `core_tenant_modules`.
 
+**LGPD do titular** (o cliente final da empresa): `core/customers/lgpd.service.ts` exporta tudo o que
+a empresa guarda da pessoa (cadastro, endereços, pedidos, títulos) e cada módulo — ligado ou não, se guardou algo — entrega a
+sua parte pelo gancho `lgpd` do contrato (`exportar`, `pendencias`, `anonimizar(tx)`). Excluir vira
+ANONIMIZAR, numa transação: pedidos e títulos ficam (obrigação fiscal), sem nada que leve à
+pessoa; o módulo tira o dele (credencial da catraca, placa, endereço da entrega, observações).
+Vínculo vivo bloqueia com 409 e o motivo (pedido aberto, matrícula, reserva, agendamento futuro,
+pacote com sessão a usar); paciente com prontuário não é anonimizado (Lei 13.787/2018: 20 anos com
+a identificação). Permissão própria `core.customers:lgpd` (só o admin, por padrão), confirmação
+digitando o nome, e as duas operações na auditoria sem o nome antigo.
+
 ### 3.1 O pedido genérico e a estratégia de venda
 
 `POST /orders` é a porta única de venda. `salesStrategies.resolve()` escolhe o módulo pela
@@ -85,6 +95,11 @@ O app abre na **loja** (`/comecar`): a pessoa escolhe o comércio (módulo), lig
   CSP restritiva e HSTS/X-Frame-Options/Permissions-Policy no front (Vercel). Job `core.billing-cycle`: fim do teste, renovação,
   retentativa de cartão (24 h, até 4), atraso → `PAST_DUE`, carência (`BILLING_GRACE_DAYS`) →
   empresa `SUSPENDED`; pagar reabre. `/billing/*` fica aberto para a empresa suspensa.
+  Avisos por e-mail à conta que paga (`core/billing/avisos.ts`): teste acabando (2 dias antes), fatura
+  disponível (boleto/Pix), pagamento recusado (1ª recusa e última tentativa), suspensão e comprovante.
+  Cada um sai uma vez por (tipo, referência) em `core_billing_notices`; falha de envio não mexe na cobrança.
+  Função ligada no meio do mês pago gera fatura proporcional (dias inteiros que faltam, mínimo R$ 0,50,
+  `note` descreve); no cartão a cobrança vem ANTES de ligar. Remover não devolve.
 
 ## 4. Eventos e integrações
 

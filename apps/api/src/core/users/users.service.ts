@@ -85,7 +85,7 @@ export async function inviteUser(input: { name: string; email: string; roleIds: 
   const marca = await marcaDaEmpresa(tenantId);
   await sendMail({ to: user.email, subject: `${marca.nome} · convite para a equipe`, ...emailDaEmpresa({
     marca, titulo: `Olá, ${user.name}`,
-    paragrafos: [`Você foi convidado(a) para a equipe de ${marca.nome}. Defina sua senha para entrar (o link vale por 72 horas).`, `Para entrar depois, use o identificador da empresa: ${tenantSlug}.`],
+    paragrafos: [`Você foi convidado(a) para a equipe de ${marca.nome}. Defina sua senha para entrar (o link vale por 72 horas).`, `Para entrar depois, guarde o endereço da empresa: ${appUrl(`/e/${encodeURIComponent(tenantSlug)}`)}.`],
     botao: { texto: 'Definir minha senha', url: link },
     nota: 'Se você não esperava este convite, ignore este e-mail.',
   }) });

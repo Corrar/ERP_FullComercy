@@ -51,7 +51,7 @@ export function Subscription() {
 
       <Card title="Faturas" actions={<button className="btn" onClick={() => setPaying(true)}><Icon name="card" size={15} /> Trocar forma de pagamento</button>}>
         <Table rows={sub.invoices} empty={sub.status === 'TRIALING' ? 'Nenhuma fatura ainda: a primeira sai no fim do teste grátis.' : 'Nenhuma fatura.'} cols={[
-          { h: 'Período', c: (i: any) => `${d(i.periodStart)} – ${d(i.periodEnd)}` },
+          { h: 'Período', c: (i: any) => <>{d(i.periodStart)} – {d(i.periodEnd)}{i.note && <div className="muted small">{i.note}</div>}</> },
           { h: 'Vencimento', c: (i: any) => d(i.dueAt) },
           { h: 'Forma', c: (i: any) => METHOD_LABEL[i.method as BillingMethod] },
           { h: 'Valor', right: true, c: (i: any) => <span className="mono">{brl(i.amount)}</span> },
@@ -71,7 +71,7 @@ export function Subscription() {
           : <button className="btn ghost" style={{ color: 'var(--danger)' }} disabled={cancel.busy} onClick={() => void cancel.run()}>Cancelar assinatura</button>}
       </div>
 
-      {editing && <EditPlan sub={sub} onClose={() => setEditing(false)} onSaved={async (s) => { setData(s); setEditing(false); await refresh(); setToast('Plano atualizado. O novo valor vale a partir da próxima cobrança.'); }} />}
+      {editing && <EditPlan sub={sub} onClose={() => setEditing(false)} onSaved={async (s) => { setData(s); setEditing(false); await refresh(); setToast(Number(s.proporcional?.valor) > 0 ? `Plano atualizado. Cobrado agora ${brl(s.proporcional.valor)} (proporcional); a mensalidade nova vale a partir da próxima cobrança.` : 'Plano atualizado. O novo valor vale a partir da próxima cobrança.'); }} />}
       {paying && <ChangePayment provider={catalog.provider} stripeKey={catalog.provider === 'stripe' ? catalog.stripe?.publishableKey ?? null : null} methods={catalog.methods} current={sub.method} onClose={() => setPaying(false)} onSaved={async (s) => { setData(s); setPaying(false); await refresh().catch(() => undefined); setToast('Forma de pagamento atualizada.'); }} />}
     </div>
   );
@@ -81,6 +81,16 @@ function EditPlan({ sub, onClose, onSaved }: { sub: any; onClose: () => void; on
   const { data: catalog } = useCatalog();
   const [sel, setSel] = useState<{ modules: ModuleKey[]; features: string[] }>({ modules: sub.modules, features: sub.items.map((i: any) => i.key) });
   const { quote, error } = useQuote(sel);
+  // O que salvar cobraria AGORA (proporcional), calculado pelo servidor como o resto do preço.
+  const [prev, setPrev] = useState<any>(null);
+  const chave = JSON.stringify(sel);
+  useEffect(() => {
+    let vivo = true;
+    const t = setTimeout(() => { post('/billing/subscription/features/preview', sel).then((r) => { if (vivo) setPrev(r); }, () => { if (vivo) setPrev(null); }); }, 150);
+    return () => { vivo = false; clearTimeout(t); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chave]);
+  const prop = prev?.proporcional;
   const save = useAction(async () => onSaved(await put('/billing/subscription/features', sel)));
   useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = ''; }; }, []);
   if (!catalog) return null;
@@ -99,7 +109,12 @@ function EditPlan({ sub, onClose, onSaved }: { sub: any; onClose: () => void; on
         <ErrorBox error={error ?? save.error} />
         <FeatureList catalog={catalog} modules={sel.modules} quote={quote} selected={sel.features} onToggle={(k) => setSel((s) => ({ ...s, features: s.features.includes(k) ? s.features.filter((x) => x !== k) : [...s.features, k] }))} />
         <div className="card row between" style={{ position: 'sticky', bottom: -22, padding: 14 }}>
-          <div><div className="muted small">Novo valor</div><b className="mono" style={{ fontSize: 20 }}>{quote ? brl(quote.total) : '—'}</b><span className="muted small"> /mês (hoje {brl(sub.amount)})</span></div>
+          <div>
+            <div className="muted small">Novo valor</div><b className="mono" style={{ fontSize: 20 }}>{quote ? brl(quote.total) : '—'}</b><span className="muted small"> /mês (hoje {brl(sub.amount)})</span>
+            {prop && Number(prop.valor) > 0 && <div className="small" data-testid="proporcional" style={{ marginTop: 4 }}>Cobrado agora: <b className="mono">{brl(prop.valor)}</b> <span className="muted">— proporcional a {prop.dias} de {prop.diasPeriodo} dias</span></div>}
+            {prop?.motivo === 'teste' && <div className="muted small" style={{ marginTop: 4 }}>No teste grátis nada é cobrado agora.</div>}
+            {prev && Number(prev.novoValor) < Number(prev.valorAtual) && <div className="muted small" style={{ marginTop: 4 }}>Funções removidas saem agora; o valor menor vale na próxima fatura.</div>}
+          </div>
           <button className="btn primary" disabled={!quote || save.busy} onClick={() => void save.run()}>{save.busy ? <Spinner /> : <Icon name="check" size={16} />} Salvar plano</button>
         </div>
       </div>

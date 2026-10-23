@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate, Outlet, useLocation } from 'react-router
 import { useSession, type ModuleKey } from '@/lib/session';
 import { Shell } from './Shell';
 import { MODULES } from './modules';
-import { Login, Forgot, Reset, AccountForgot, AccountReset } from '@/core/auth/pages';
+import { Login, Forgot, Reset, AccountForgot, AccountReset, EquipeEmpresa, EQUIPE_KEY } from '@/core/auth/pages';
 import { Dashboard } from '@/core/dashboard/Dashboard';
 import { Orders, OrderDetail } from '@/core/orders/pages';
 import { Customers } from '@/core/customers/Customers';
@@ -17,6 +17,8 @@ import { Company } from '@/core/company/Company';
 import { Audit } from '@/core/audit/Audit';
 import { Account } from '@/core/auth/Account';
 import { Storefront, OrderTracking } from '@/public/Storefront';
+import { Pagar } from '@/public/Pagar';
+import { Cobrancas } from '@/core/payments/Cobrancas';
 import { CustomerDetail } from '@/core/customers/CustomerDetail';
 import { Subscription } from '@/core/billing/Subscription';
 import { Landing } from '@/store/Landing';
@@ -34,6 +36,9 @@ import { PurchaseDetail } from '@/core/purchases/PurchaseDetail';
 function RequireAuth() {
   const { s } = useSession(); const loc = useLocation();
   if (s) return <Outlet />;
+  // Aparelho da equipe (último login por uma empresa): volta para a página DELA, não para a loja.
+  const equipe = accountSession.get() ? null : (() => { try { return localStorage.getItem(EQUIPE_KEY); } catch { return null; } })();
+  if (equipe) return <Navigate to={`/e/${encodeURIComponent(equipe)}`} state={loc.pathname === '/' ? undefined : { from: loc.pathname }} replace />;
   if (loc.pathname === '/') return <Navigate to={accountSession.get() ? '/minha-conta' : '/comecar'} replace />;
   return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
 }
@@ -45,6 +50,7 @@ function RequireModule({ k }: { k: ModuleKey }) {
 
 export const router = createBrowserRouter([
   { path: '/login', element: <Login /> },
+  { path: '/e/:slug', element: <EquipeEmpresa /> },
   { path: '/esqueci-senha', element: <Forgot /> },
   { path: '/redefinir-senha', element: <Reset /> },
   { path: '/definir-senha', element: <Reset invite /> },
@@ -60,6 +66,7 @@ export const router = createBrowserRouter([
   // Público (cliente final): vitrine do cardápio e acompanhamento do pedido.
   { path: '/cardapio/:tenant/:menu', element: <Storefront /> },
   { path: '/pedido/:tenant/:numero', element: <OrderTracking /> },
+  { path: '/pagar/:token', element: <Pagar /> },
   {
     element: <RequireAuth />,
     children: [{
@@ -76,6 +83,7 @@ export const router = createBrowserRouter([
         { path: '/compras', element: <Purchases /> },
         { path: '/compras/:id', element: <PurchaseDetail /> },
         { path: '/financeiro', element: <Finance /> },
+        { path: '/cobrancas', element: <Cobrancas /> },
         { path: '/usuarios', element: <Users /> },
         { path: '/perfis', element: <Roles /> },
         { path: '/integracoes', element: <Integrations /> },

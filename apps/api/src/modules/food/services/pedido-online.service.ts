@@ -1,13 +1,15 @@
 // modules/food/services/pedido-online.service.ts — o PEDIDO DO CLIENTE FINAL pelo cardápio
 // online, SEM login. Roda como o tenant (runAsTenantSlug), cria/acha o cliente pelo telefone e
 // entra pela MESMA porta de todo pedido: createOrder com a estratégia do Food.
-// Pagamento: na entrega/retirada (o título fica em aberto). Pagamento online é integração futura.
+// Pagamento: na entrega/retirada (o título fica em aberto) ou AGORA por Pix, pelo meio que a
+// empresa configurou em "Cobranças online" (Mercado Pago com baixa automática, ou a chave Pix).
 import { ctx } from '../../../core/tenancy/tenant-context';
 import { runAsTenantSlug } from '../../../core/tenancy/run-as-tenant';
 import { AppError } from '../../../shared/errors';
 import * as orders from '../../../core/orders/order.service';
 import { abertoAgora } from './cardapio.service';
 import { assinarAcompanhamento } from '../../../shared/track-token';
+import { createIntent, provedorPix } from '../../../core/payments/payments.service';
 
 export interface PedidoOnlineInput {
   menuSlug: string;
@@ -19,9 +21,9 @@ export interface PedidoOnlineInput {
   observacoes?: string;
   pagamentoNaEntrega: 'CASH' | 'DEBIT' | 'CREDIT' | 'PIX';
   trocoPara?: number;
-  /** Pagar AGORA pelo provedor configurado na empresa (`settings.payments.<provider>`): devolve o
-   *  QR/link junto do pedido. Sem provedor configurado → 400. */
-  pagarOnline?: { provider: string; method: 'PIX' | 'CREDIT' };
+  /** Pagar AGORA: devolve o QR/link junto do pedido. O provedor é o da empresa (`provedorPix`);
+   *  `provider` explícito só vale se a empresa o configurou. Sem nenhum → 400, ANTES de criar o pedido. */
+  pagarOnline?: { provider?: string; method: 'PIX' | 'CREDIT' };
 }
 
 export function pedidoOnline(tenantSlug: string, input: PedidoOnlineInput) {
@@ -31,6 +33,9 @@ export function pedidoOnline(tenantSlug: string, input: PedidoOnlineInput) {
     if (!menu) throw AppError.notFound('Cardápio');
     if (!abertoAgora(menu.availability as never)) throw AppError.conflict('A loja está fechada agora.');
     if (input.serviceType === 'DELIVERY' && !input.endereco) throw AppError.validation('Delivery exige endereço.');
+    const pagamentos = ctx().tenantSettings.payments as Record<string, unknown> | undefined;
+    const provedor = input.pagarOnline ? (input.pagarOnline.provider ?? provedorPix(ctx().tenantSettings)) : null;
+    if (input.pagarOnline && (!provedor || !pagamentos?.[provedor])) throw AppError.validation('Esta loja não aceita pagamento online.');
 
     const telefone = input.cliente.telefone.replace(/\D/g, '');
     const cliente = await db.customer.findFirst({ where: { phone: telefone } })
@@ -56,10 +61,9 @@ export function pedidoOnline(tenantSlug: string, input: PedidoOnlineInput) {
       moduleData: { serviceType: input.serviceType, menuId: menu.id, address: input.endereco, zoneId: input.zoneId, externalSource: 'SITE' },
     });
     if (!input.pagarOnline) return pedido;
-    const cfg = (ctx().tenantSettings.payments as Record<string, unknown> | undefined)?.[input.pagarOnline.provider];
-    if (!cfg) throw AppError.validation('Esta loja não aceita pagamento online por este provedor.');
-    const { createIntent } = await import('../../../core/payments/payments.service');
-    const intent = await createIntent({ provider: input.pagarOnline.provider, method: input.pagarOnline.method, orderId: pedido.id });
+    // Gateway fora do ar: o pedido não fica pendurado sem pagamento que o cliente nem viu.
+    const intent = await createIntent({ provider: provedor!, method: input.pagarOnline.method, orderId: pedido.id })
+      .catch(async (e) => { await orders.cancelOrder(pedido.id, 'Pagamento online não pôde ser gerado.').catch(() => undefined); throw e; });
     return { ...pedido, pagamento: { intentId: intent.id, status: intent.status, qrCode: intent.qrCode, checkoutUrl: intent.checkoutUrl, expiresAt: intent.expiresAt } };
   });
 }

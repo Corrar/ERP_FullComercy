@@ -8,6 +8,7 @@ import { useAction, useGet } from '@/lib/use-api';
 import { Card, ErrorBox, Money, Table, Tabs } from '@/components/ui';
 
 const TIPO: Record<string, string> = { DINE_IN: 'Salão', TAKEOUT: 'Retirada', DELIVERY: 'Delivery' };
+const minutos = (v: number | null) => (v == null ? '—' : `${Math.round(v)} min`);
 const hoje = () => new Date().toLocaleDateString('sv-SE'); // aaaa-mm-dd no fuso do navegador
 
 export function Relatorios() {
@@ -31,13 +32,15 @@ export function Relatorios() {
       <input className="input" type="date" aria-label="Até" value={ate} min={de || undefined} onChange={(e) => setAte(e.target.value)} style={{ width: 160 }} />
       <button className="btn" onClick={() => void csv.run()} disabled={csv.busy}>{csv.busy ? '…' : 'CSV'}</button>
     </div></div>
-    <Tabs tabs={[{ k: 'itens', label: 'Por item' }, { k: 'tipos', label: 'Por tipo' }, { k: 'horas', label: 'Por hora' }, { k: 'entregadores', label: 'Entregadores' }]} active={tab} onChange={setTab} />
+    <Tabs tabs={[{ k: 'itens', label: 'Por item' }, { k: 'tipos', label: 'Por tipo' }, { k: 'horas', label: 'Por hora' }, { k: 'garcons', label: 'Por garçom' }, { k: 'cozinha', label: 'Tempo de cozinha' }, { k: 'entregadores', label: 'Entregadores' }]} active={tab} onChange={setTab} />
     <ErrorBox error={r.error ?? csv.error} />
     <Card>
       {tab === 'itens' && <Table rows={rows} empty="Nenhum item vendido no período." cols={[{ h: 'Item', c: (x) => x.item }, { h: 'Qtd', c: (x) => num(x.qtd), right: true }, { h: 'Total', c: (x) => <Money v={x.total} />, right: true }]} />}
       {tab === 'tipos' && <Table rows={rows} empty="Nenhum pedido concluído no período." cols={[{ h: 'Tipo', c: (x) => TIPO[x.tipo] ?? x.tipo }, { h: 'Pedidos', c: (x) => x.pedidos, right: true }, { h: 'Total', c: (x) => <Money v={x.total} />, right: true }, { h: 'Ticket médio', c: (x) => <Money v={x.ticket_medio} />, right: true }]} />}
       {tab === 'horas' && <Table rows={rows} empty="Nenhum pedido no período." cols={[{ h: 'Hora', c: (x) => `${x.hora}h` }, { h: 'Pedidos', c: (x) => x.pedidos, right: true }, { h: 'Total', c: (x) => <Money v={x.total} />, right: true }]} />}
-      {tab === 'entregadores' && <Table rows={rows} empty="Nenhuma entrega no período." cols={[{ h: 'Entregador', c: (x) => x.entregador }, { h: 'Entregas', c: (x) => x.entregas, right: true }, { h: 'Falhas', c: (x) => x.falhas, right: true }, { h: 'Tempo médio', c: (x) => (x.tempo_medio_min == null ? '—' : `${Math.round(x.tempo_medio_min)} min`), right: true }, { h: 'Taxas', c: (x) => <Money v={x.taxas} />, right: true }]} />}
+      {tab === 'garcons' && <Table rows={rows} empty="Nenhuma rodada lançada no salão no período." cols={[{ h: 'Garçom', c: (x) => x.garcom }, { h: 'Rodadas', c: (x) => x.rodadas, right: true }, { h: 'Itens', c: (x) => num(x.itens), right: true }, { h: 'Total', c: (x) => <Money v={x.total} />, right: true }, { h: 'Por rodada', c: (x) => <Money v={x.ticket_medio} />, right: true }]} />}
+      {tab === 'cozinha' && <Table rows={rows} empty="Nenhum pedido ficou pronto na cozinha no período." cols={[{ h: 'Estação', c: (x) => x.estacao }, { h: 'Pedidos', c: (x) => x.tickets, right: true }, { h: 'Espera na fila', c: (x) => minutos(x.espera_min), right: true }, { h: 'Preparo', c: (x) => minutos(x.preparo_min), right: true }, { h: 'Total até pronto', c: (x) => minutos(x.total_min), right: true }, { h: 'Acima de 20 min', c: (x) => x.acima_20min, right: true }]} />}
+      {tab === 'entregadores' && <Table rows={rows} empty="Nenhuma entrega no período." cols={[{ h: 'Entregador', c: (x) => x.entregador }, { h: 'Entregas', c: (x) => x.entregas, right: true }, { h: 'Falhas', c: (x) => x.falhas, right: true }, { h: 'Tempo médio', c: (x) => minutos(x.tempo_medio_min), right: true }, { h: 'Taxas', c: (x) => <Money v={x.taxas} />, right: true }]} />}
     </Card>
   </div>;
 }

@@ -1,6 +1,6 @@
 # API — FullComercy
 
-> Gerado por `npm run docs:api` em 2026-10-22. 331 rotas.
+> Gerado por `npm run docs:api` em 2026-10-22. 354 rotas.
 
 Autenticação: rotas **Core** e de **Módulo** exigem `Authorization: Bearer <access token>`; as de módulo exigem ainda o módulo ATIVO na empresa (403 `MODULE_INACTIVE`). A coluna *permissão* é a chave que `requirePermission` cobra (perfil `admin` passa em todas). Vazio = qualquer usuário logado. Com assinatura da loja, a chave também precisa estar no PLANO da empresa (403 `NOT_IN_PLAN`).
 
@@ -18,10 +18,13 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `POST` | `/auth/forgot` |  |
 | `POST` | `/auth/reset` |  |
 | `GET` | `/auth/me` |  |
+| `GET` | `/public/payments/link/:token` |  |
 | `POST` | `/public/payments/:provider/webhook` |  |
 | `GET` | `/public/billing/catalog` |  |
 | `POST` | `/public/billing/quote` |  |
 | `POST` | `/public/billing/webhooks/:provider` |  |
+| `GET` | `/public/marca/:slug` |  |
+| `GET` | `/public/marca/:slug/logo` |  |
 | `POST` | `/account/register` |  |
 | `POST` | `/account/login` |  |
 | `POST` | `/account/google` |  |
@@ -46,6 +49,8 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/platform/tenants` |  |
 | `PATCH` | `/platform/tenants/:id/status` |  |
 | `PUT` | `/platform/tenants/:id/modules/:key` |  |
+| `GET` | `/platform/segredos` |  |
+| `POST` | `/platform/segredos/recifrar` |  |
 | `GET` | `/platform/modules` |  |
 
 ## Core · audit
@@ -60,6 +65,7 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 |---|---|---|
 | `GET` | `/billing/subscription` | `core.billing:manage` |
 | `PUT` | `/billing/subscription/features` | `core.billing:manage` |
+| `POST` | `/billing/subscription/features/preview` | `core.billing:manage` |
 | `POST` | `/billing/card-setup` | `core.billing:manage` |
 | `PUT` | `/billing/payment-method` | `core.billing:manage` |
 | `POST` | `/billing/invoices/:id/pay` | `core.billing:manage` |
@@ -78,6 +84,9 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `PATCH` | `/customers/:id/active` | `core.customers:manage` |
 | `POST` | `/customers/:id/addresses` | `core.customers:manage` |
 | `DELETE` | `/customers/:id/addresses/:addressId` | `core.customers:manage` |
+| `GET` | `/customers/:id/lgpd/export` | `core.customers:lgpd` |
+| `GET` | `/customers/:id/lgpd/pendencias` | `core.customers:lgpd` |
+| `POST` | `/customers/:id/lgpd/anonimizar` | `core.customers:lgpd` |
 
 ## Core · dashboard
 
@@ -130,6 +139,12 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/payments/providers` | `core.payments:manage` |
 | `GET` | `/payments/intents` | `core.payments:manage` |
 | `POST` | `/payments/intents` | `core.payments:manage` |
+| `GET` | `/payments/intents/:id` | `core.payments:manage` |
+| `GET` | `/payments/config/pix` | `core.payments:manage` |
+| `PUT` | `/payments/config/pix` | `core.payments:manage` |
+| `GET` | `/payments/config/mercadopago` | `core.payments:manage` |
+| `PUT` | `/payments/config/mercadopago` | `core.payments:manage` |
+| `DELETE` | `/payments/config/mercadopago` | `core.payments:manage` |
 | `POST` | `/payments/intents/:id/confirm` | `core.payments:manage` |
 | `POST` | `/payments/intents/:id/cancel` | `core.payments:manage` |
 
@@ -207,6 +222,9 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `PUT` | `/tenant/settings` | `core.tenant:manage` |
 | `GET` | `/tenant/primeiros-passos` | `core.tenant:manage` |
 | `POST` | `/tenant/primeiros-passos/dispensar` | `core.tenant:manage` |
+| `GET` | `/tenant/marca` |  |
+| `PUT` | `/tenant/marca/logo` | `core.tenant:manage` |
+| `DELETE` | `/tenant/marca/logo` | `core.tenant:manage` |
 
 ## Core · users
 
@@ -331,6 +349,7 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `POST` | `/m/food/comandas` | `food.salao:operate` |
 | `GET` | `/m/food/comandas/:id/conta` | `food.salao:operate` |
 | `POST` | `/m/food/comandas/:id/fechar` | `food.salao:close` |
+| `POST` | `/m/food/comandas/:id/partes` | `food.salao:close` |
 | `POST` | `/m/food/comandas/:id/transferir` | `food.salao:operate` |
 | `POST` | `/m/food/comandas/:id/cancelar` | `food.salao:close` |
 | `GET` | `/m/food/cozinha/fila` | `food.cozinha:view` |
@@ -362,6 +381,8 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/m/food/relatorios/itens` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/tipos` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/horas` | `food.relatorios:view` |
+| `GET` | `/m/food/relatorios/cozinha` | `food.relatorios:view` |
+| `GET` | `/m/food/relatorios/garcons` | `food.relatorios:view` |
 | `GET` | `/m/food/relatorios/entregadores` | `food.relatorios:view` |
 
 ## Módulo HOTEL
@@ -465,9 +486,11 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `GET` | `/m/varejo/relatorios/vendedores` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/horas` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/abc` | `varejo.relatorios:view` |
+| `GET` | `/m/varejo/relatorios/resumo` | `varejo.relatorios:view` |
+| `GET` | `/m/varejo/relatorios/pagamentos` | `varejo.relatorios:view` |
 | `GET` | `/m/varejo/relatorios/sem-giro` | `varejo.relatorios:view` |
 
-## Catálogo de permissões (74)
+## Catálogo de permissões (75)
 
 | Chave | Descrição | Módulo |
 |---|---|---|
@@ -477,6 +500,7 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | `core.roles:manage` | Gerir perfis e permissões | core |
 | `core.customers:view` | Ver clientes | core |
 | `core.customers:manage` | Criar/editar clientes | core |
+| `core.customers:lgpd` | Atender titular (LGPD): exportar e anonimizar dados de cliente | core |
 | `core.products:view` | Ver produtos | core |
 | `core.products:manage` | Criar/editar produtos | core |
 | `core.stock:view` | Ver estoque | core |
@@ -553,6 +577,7 @@ Loja de módulos: `/public/billing/*` é público; `/account/me`, `/account/comp
 | core.outbox-dispatch | 1 min |
 | core.payments-expire | 5 min |
 | core.billing-cycle | 15 min |
+| core.recifrar-segredos | 60 min |
 | core.perfis-modelo | 1440 min |
 | gym.cobranca-recorrente | 360 min |
 | gym.gerar-sessoes | 720 min |

@@ -24,7 +24,8 @@ export async function enviarBoasVindas(d: DadosBoasVindas): Promise<boolean> {
   try {
     const token = await issuePasswordToken(d.tenantId, d.adminUserId, 'INVITE');
     const definir = appUrl(`/definir-senha?tenant=${encodeURIComponent(d.slug)}&token=${token}`);
-    const entrar = appUrl(`/login?modo=funcionario&empresa=${encodeURIComponent(d.slug)}&email=${encodeURIComponent(d.email)}`);
+    // Página de acesso da EMPRESA (logo e cor dela): é o link que o dono repassa para a equipe.
+    const entrar = appUrl(`/e/${encodeURIComponent(d.slug)}?email=${encodeURIComponent(d.email)}`);
     const marca = await marcaDaEmpresa(d.tenantId);
     const modulos = d.modulos.map((m) => MODULE_OFFERS.find((o) => o.key === m)?.name ?? m).join(', ');
     const funcoes = d.funcoes.join(', ');
@@ -34,7 +35,7 @@ export async function enviarBoasVindas(d: DadosBoasVindas): Promise<boolean> {
       marca, titulo: `Seu sistema está pronto, ${d.nome}`,
       paragrafos: [
         `A empresa ${marca.nome} foi criada com ${d.modulos.length > 1 ? 'os módulos' : 'o módulo'} ${modulos}. Funções contratadas: ${funcoes}.`,
-        `Dados de acesso — endereço: ${entrar} · empresa: ${d.slug} · e-mail: ${d.email}. Você entra como administrador e vê exatamente o que foi contratado.`,
+        `Dados de acesso — endereço: ${entrar} · empresa: ${d.slug} · e-mail: ${d.email}. Você entra como administrador e vê exatamente o que foi contratado. Esse mesmo endereço (sem o seu e-mail) é o que a sua equipe usa para entrar.`,
         d.temSenha
           ? 'Senha: a mesma que você criou no cadastro. Se preferir uma senha só para o sistema, defina pelo botão abaixo (o link vale por 72 horas e só funciona uma vez).'
           : 'Você se cadastrou com o Google e pode continuar entrando por ele. Para entrar também com e-mail e senha, defina a sua pelo botão abaixo (o link vale por 72 horas e só funciona uma vez).',

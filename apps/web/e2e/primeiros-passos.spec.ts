@@ -10,8 +10,9 @@ test('primeiros passos: guia do Varejo no painel, marca o feito, dispensa e volt
 
   await uiLogin(page, slug);
   const guia = page.locator('.card', { has: page.getByText('Primeiros passos', { exact: true }) });
-  await expect(guia).toContainText('Faltam 6 de 6 passos');
-  // O primeiro passo pendente é o destaque; "Fazer agora" leva à tela certa.
+  await expect(guia).toContainText('Faltam 11 de 11 passos');
+  // Sem assinatura (empresa de plataforma) nada é cortado: o guia traz também os passos das funções
+  // opcionais (fornecedores, Pix, vendedores…). O primeiro pendente é o destaque; "Fazer agora" leva à tela.
   await guia.locator('[data-passo="varejo.produtos"]').getByRole('link', { name: 'Fazer agora' }).click();
   await expect(page).toHaveURL(/\/produtos$/);
   await page.getByRole('button', { name: 'Novo produto' }).click();
@@ -23,7 +24,7 @@ test('primeiros passos: guia do Varejo no painel, marca o feito, dispensa e volt
   await expect(dlg).toBeHidden();
 
   await page.goto('/');
-  await expect(guia).toContainText('Faltam 5 de 6 passos');
+  await expect(guia).toContainText('Faltam 10 de 11 passos');
   await expect(guia.locator('[data-passo="varejo.produtos"]')).toHaveClass(/feito/);
   await expect(guia.locator('[data-passo="varejo.estoque"]')).toHaveClass(/proximo/);
 
@@ -32,5 +33,5 @@ test('primeiros passos: guia do Varejo no painel, marca o feito, dispensa e volt
   await page.goto('/empresa');
   await page.getByRole('button', { name: 'Mostrar de novo' }).click();
   await page.goto('/');
-  await expect(guia).toContainText('Faltam 5 de 6 passos');
+  await expect(guia).toContainText('Faltam 10 de 11 passos');
 });

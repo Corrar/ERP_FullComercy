@@ -2,7 +2,7 @@
 // da comanda, aplicar taxa de serviço, receber e COMPLETAR cada pedido no core.
 import { OrderStatus, PaymentMethod } from '@prisma/client';
 import { ctx } from '../../../core/tenancy/tenant-context';
-import { tenantTransaction } from '../../../infra/prisma';
+import { tenantTransaction, type TenantTx } from '../../../infra/prisma';
 import { AppError } from '../../../shared/errors';
 import { D, round2, sum } from '../../../shared/money';
 import { registerPayments } from '../../../core/orders/order.service';
@@ -33,40 +33,65 @@ export async function contaDaComanda(tabId: string) {
   return { tab, pedidos, subtotal, taxaServico: taxa, taxaMaterializada: taxasMaterializadas.length > 0, total: round2(subtotal.plus(taxa)), pago, restante: round2(subtotal.plus(taxa).minus(pago)) };
 }
 
+/** A taxa de serviço vira um pedido próprio (linha FEE), para o financeiro enxergá-la separada. */
+async function materializarTaxa(tabId: string, conta: Awaited<ReturnType<typeof contaDaComanda>>) {
+  if (!conta.taxaServico.gt(0) || conta.taxaMaterializada) return;
+  await orders.createOrder({
+    moduleKey: 'FOOD', channel: 'TABLE', items: [{ kind: 'FEE', description: `Taxa de serviço comanda ${conta.tab.code}`, quantity: 1, unitPrice: conta.taxaServico.toNumber() }],
+    moduleData: { tabId, serviceType: 'DINE_IN' }, notes: 'Taxa de serviço',
+  });
+}
+
+/** Rateio: paga pedido a pedido, na ordem, até esgotar o dinheiro. */
+async function ratear(tx: TenantTx, pedidos: Awaited<ReturnType<typeof contaDaComanda>>['pedidos'], payments: { method: PaymentMethod; amount: number }[]) {
+  let restante = payments.map((p) => ({ ...p, amount: D(p.amount) }));
+  for (const o of pedidos) {
+    let falta = D(o.total).minus(sum(o.payments.map((p) => D(p.amount))));
+    const parcelas: { method: PaymentMethod; amount: number }[] = [];
+    restante = restante.flatMap((p) => {
+      if (falta.lte(0) || p.amount.lte(0)) return [p];
+      const usa = p.amount.lt(falta) ? p.amount : falta;
+      falta = falta.minus(usa);
+      parcelas.push({ method: p.method, amount: usa.toNumber() });
+      return [{ ...p, amount: p.amount.minus(usa) }];
+    });
+    if (parcelas.length) await registerPayments(tx, o, parcelas);
+  }
+}
+
+/** DIVIDIR A CONTA: recebe a parte de uma pessoa sem fechar a comanda. A taxa de serviço entra
+ *  já na primeira parte (senão a divisão por pessoa ficaria sem ela e o último pagaria a taxa toda). */
+export async function pagarParte(tabId: string, payments: { method: PaymentMethod; amount: number }[], cobrarTaxa = true) {
+  const { db, tenantId } = ctx();
+  const conta = await contaDaComanda(tabId);
+  if (conta.tab.status !== 'OPEN') throw AppError.conflict('Comanda não está aberta.');
+  if (cobrarTaxa) await materializarTaxa(tabId, conta);
+  const atual = await contaDaComanda(tabId);
+  const alvo = cobrarTaxa ? atual.total : atual.subtotal;
+  const pagoAgora = round2(sum(payments.map((p) => D(p.amount))));
+  const falta = round2(alvo.minus(atual.pago));
+  if (pagoAgora.lte(0)) throw AppError.validation('Informe o valor da parte.');
+  if (pagoAgora.gt(falta)) throw AppError.validation(`A parte passa do que falta na conta (${falta}).`);
+  await tenantTransaction(db, tenantId, (tx) => ratear(tx, atual.pedidos, payments));
+  return contaDaComanda(tabId);
+}
+
 /** Fecha a conta: cobra a taxa num pedido de FEE, rateia o pagamento e completa tudo. */
 export async function fecharComanda(tabId: string, payments: { method: PaymentMethod; amount: number }[], cobrarTaxa = true) {
   const { db, tenantId } = ctx();
   const conta = await contaDaComanda(tabId);
   if (conta.tab.status !== 'OPEN') throw AppError.conflict('Comanda não está aberta.');
+  if (!cobrarTaxa && conta.taxaMaterializada) throw AppError.validation('A taxa de serviço já entrou na divisão da conta: feche com a taxa.');
   const total = cobrarTaxa ? conta.total : conta.subtotal;
   const pagoAgora = round2(sum(payments.map((p) => D(p.amount))));
   if (pagoAgora.plus(conta.pago).lt(total)) throw AppError.validation(`Pagamento insuficiente: faltam ${total.minus(conta.pago).minus(pagoAgora)}.`);
 
-  // A taxa de serviço vira um pedido próprio (linha FEE), para o financeiro enxergá-la separada.
-  if (cobrarTaxa && conta.taxaServico.gt(0) && !conta.taxaMaterializada) {
-    await orders.createOrder({
-      moduleKey: 'FOOD', channel: 'TABLE', items: [{ kind: 'FEE', description: `Taxa de serviço comanda ${conta.tab.code}`, quantity: 1, unitPrice: conta.taxaServico.toNumber() }],
-      moduleData: { tabId, serviceType: 'DINE_IN' }, notes: 'Taxa de serviço',
-    });
-  }
+  if (cobrarTaxa) await materializarTaxa(tabId, conta);
   const atualizada = await contaDaComanda(tabId);
 
   await tenantTransaction(db, tenantId, async (tx) => {
-    // Rateio: paga pedido a pedido, na ordem, até esgotar o dinheiro.
-    let restante = payments.map((p) => ({ ...p, amount: D(p.amount) }));
-    for (const o of atualizada.pedidos) {
-      let falta = D(o.total).minus(sum(o.payments.map((p) => D(p.amount))));
-      const parcelas: { method: PaymentMethod; amount: number }[] = [];
-      restante = restante.flatMap((p) => {
-        if (falta.lte(0) || p.amount.lte(0)) return [p];
-        const usa = p.amount.lt(falta) ? p.amount : falta;
-        falta = falta.minus(usa);
-        parcelas.push({ method: p.method, amount: usa.toNumber() });
-        return [{ ...p, amount: p.amount.minus(usa) }];
-      });
-      if (parcelas.length) await registerPayments(tx, o, parcelas);
-      await tx.order.update({ where: { id: o.id }, data: { status: OrderStatus.COMPLETED, completedAt: new Date() } });
-    }
+    await ratear(tx, atualizada.pedidos, payments);
+    for (const o of atualizada.pedidos) await tx.order.update({ where: { id: o.id }, data: { status: OrderStatus.COMPLETED, completedAt: new Date() } });
     await tx.foodTab.update({ where: { id: tabId }, data: { status: 'CLOSED', closedAt: new Date() } });
     if (conta.tab.tableId) await tx.foodTable.update({ where: { id: conta.tab.tableId }, data: { status: 'FREE' } });
   });

@@ -71,7 +71,7 @@ test('food: nova mesa no salão, editada e desativada', async ({ page }) => {
   await expect(mesa).toHaveCount(0);
 });
 
-test('listagens paginadas, CSV de pedidos com token e marca dos e-mails', async ({ page }) => {
+test('listagens paginadas, CSV de pedidos com token e marca da empresa', async ({ page }) => {
   await uiLogin(page, 'loja-demo');
   await page.goto('/pedidos');
   await expect(page.getByText(/registro\(s\)|\d+–\d+ de \d+/)).toBeVisible();
@@ -87,8 +87,12 @@ test('listagens paginadas, CSV de pedidos com token e marca dos e-mails', async 
   await expect(page.getByText(/registro\(s\)|\d+–\d+ de \d+/)).toBeVisible();
 
   await page.goto('/empresa');
-  const marca = page.locator('.card:has-text("Marca nos e-mails")');
-  await marca.locator('input[name=logoUrl]').fill('https://cdn.exemplo.com/loja.png');
-  await marca.getByRole('button', { name: 'Salvar' }).click();
-  await expect(page.locator('.toast')).toHaveText('Marca dos e-mails salva.');
+  // Cor só dos e-mails (sem marcar "usar no sistema"): o menu segue na cor do módulo.
+  const marca = page.locator('.card:has-text("Marca da empresa")');
+  await marca.getByLabel('Cor da empresa').fill('#0f766e');
+  await marca.getByRole('checkbox').uncheck();
+  await marca.getByRole('button', { name: 'Salvar cor' }).click();
+  await expect(page.locator('.toast')).toHaveText('Cor salva.');
+  await expect(page.locator('.sidebar .sb-item.active')).not.toHaveCSS('background-color', 'rgb(15, 118, 110)');
+  await expect(marca.getByLabel('Link de acesso da equipe')).toHaveValue(/\/e\/loja-demo$/);
 });

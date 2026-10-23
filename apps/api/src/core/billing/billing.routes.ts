@@ -25,6 +25,7 @@ const router = Router();
 const P = requirePermission('core.billing:manage');
 router.get('/subscription', P, asyncHandler(async (_req, res) => { res.json(await billing.getSubscription()); }));
 router.put('/subscription/features', P, asyncHandler(async (req, res) => { res.json(await billing.changeFeatures(parse(selection, req.body))); }));
+router.post('/subscription/features/preview', P, asyncHandler(async (req, res) => { res.json(await billing.previewFeatures(parse(selection, req.body))); }));
 router.post('/card-setup', P, asyncHandler(async (_req, res) => { res.json(await billing.cardSetupForTenant()); }));
 router.put('/payment-method', P, asyncHandler(async (req, res) => {
   res.json(await billing.changePaymentMethod(parse(z.object({ method: z.nativeEnum(BillingMethod), cardToken: z.string().max(200).optional() }), req.body)));

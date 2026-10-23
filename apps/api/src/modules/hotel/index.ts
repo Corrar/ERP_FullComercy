@@ -1,5 +1,6 @@
 import { ModuleKey } from '@prisma/client';
 import type { ModuleDefinition } from '../module.contract';
+import { hotelLgpd } from './services/lgpd';
 import router from './routes/hotel.routes';
 import { hotelSalesStrategy } from './services/hotel-sales.strategy';
 
@@ -10,6 +11,7 @@ export const hotelModule: ModuleDefinition = {
   basePath: 'hotel',
   router,
   salesStrategy: hotelSalesStrategy,
+  lgpd: hotelLgpd,
   permissions: [
     { key: 'hot.reservas:operate',   label: 'Reservar, fazer check-in e check-out', module: ModuleKey.HOTEL },
     { key: 'hot.quartos:manage',     label: 'Cadastrar quartos e diárias',          module: ModuleKey.HOTEL },

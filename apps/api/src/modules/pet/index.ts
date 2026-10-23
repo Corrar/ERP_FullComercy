@@ -1,5 +1,6 @@
 import { ModuleKey } from '@prisma/client';
 import type { ModuleDefinition } from '../module.contract';
+import { petLgpd } from './services/lgpd';
 import router from './routes/pet.routes';
 import { petSalesStrategy } from './services/pet-sales.strategy';
 
@@ -10,6 +11,7 @@ export const petModule: ModuleDefinition = {
   basePath: 'pet',
   router,
   salesStrategy: petSalesStrategy,
+  lgpd: petLgpd,
   permissions: [
     { key: 'pet.pets:view',       label: 'Ver pets e tutores',              module: ModuleKey.PET },
     { key: 'pet.pets:manage',     label: 'Cadastrar pets',                  module: ModuleKey.PET },

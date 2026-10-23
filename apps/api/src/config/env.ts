@@ -18,6 +18,9 @@ export const envSchema = z.object({
   /// Cloudflare do Render → proxy interno do Render (10.x) → Express = 4. Com 1 o log mostrava
   /// 10.26.240.130 para todo mundo; com 2, IPs da Cloudflare — e todos dividiam a cota do rate limit.
   TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(1),
+  /// Teto GLOBAL de requisições por minuto por IP (as rotas sensíveis têm limites próprios, menores).
+  /// Só o teste de navegador sobe isso: a suíte inteira sai de um IP só em ~1 min e passava dos 600.
+  RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(600),
   /// Conexão do TENANT: papel comum, sujeito ao RLS. É a que o código de negócio usa.
   DATABASE_URL: z.string().min(1, 'DATABASE_URL ausente'),
   /// Conexão da PLATAFORMA: papel com BYPASSRLS (login, onboarding, jobs). Ausente = mesma URL
@@ -38,8 +41,16 @@ export const envSchema = z.object({
   PLATFORM_API_KEY: z.string().min(32).optional(),
   /// Chave da cifra de segredos guardados em JSON (token de catraca, chaves de gateway).
   APP_ENCRYPTION_KEY: z.string().min(16).optional(),
+  /// Chave ANTERIOR, só durante a rotação: abre o que foi selado com ela, nunca sela. O job
+  /// `core.recifrar-segredos` regrava tudo na atual; zerada a antiga (`GET /platform/segredos`), sai.
+  APP_ENCRYPTION_KEY_PREVIOUS: z.string().min(16).optional(),
   /// URL pública do FRONT (links de e-mail: redefinir senha, convite).
   APP_URL: z.string().url().default('http://localhost:5173'),
+  /// URL pública da API (com https), para o gateway avisar o pagamento (Mercado Pago:
+  /// `<API_PUBLIC_URL>/public/payments/mercadopago/webhook`). Na Vercel: `https://<front>/api`.
+  API_PUBLIC_URL: z.string().url().optional(),
+  /// API do Mercado Pago (Pix com baixa automática na conta da empresa). Trocar só em teste (servidor falso).
+  MERCADOPAGO_API_URL: z.string().url().default('https://api.mercadopago.com'),
   /// E-mail transacional. Sem SMTP_HOST, provedor `console` (loga o link; nada sai).
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().default(587),
@@ -106,6 +117,11 @@ export function configProblems(c: z.infer<typeof envSchema>, st: 'local' | 'stag
   }
   if (!!c.TURNSTILE_SITE_KEY !== !!c.TURNSTILE_SECRET_KEY) out.push('TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY vão juntas.');
   if (st === 'production' && !c.TURNSTILE_SECRET_KEY) out.push('Produção exige Cloudflare Turnstile (TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY).');
+  if (c.APP_ENCRYPTION_KEY_PREVIOUS && !c.APP_ENCRYPTION_KEY) out.push('APP_ENCRYPTION_KEY_PREVIOUS sem APP_ENCRYPTION_KEY: a chave nova vai na atual, a antiga na PREVIOUS.');
+  if (c.APP_ENCRYPTION_KEY_PREVIOUS && c.APP_ENCRYPTION_KEY_PREVIOUS === c.APP_ENCRYPTION_KEY) out.push('APP_ENCRYPTION_KEY_PREVIOUS igual à atual: a rotação não troca nada.');
+  if (st === 'production' && !c.APP_ENCRYPTION_KEY) out.push('Produção exige APP_ENCRYPTION_KEY (sem ela os segredos dos webhooks e das catracas ficam em claro no banco).');
+  if (st === 'production' && c.MERCADOPAGO_API_URL !== 'https://api.mercadopago.com') out.push('MERCADOPAGO_API_URL só muda fora de produção (servidor falso dos testes).');
+  if (st === 'production' && !c.API_PUBLIC_URL?.startsWith('https://')) out.push('Produção exige API_PUBLIC_URL com https (o Mercado Pago avisa o Pix pago nesse endereço).');
   // Sem SMTP o cliente compra e nunca recebe os dados de acesso nem o "esqueci a senha".
   if (st === 'production' && !c.SMTP_HOST) out.push('Produção exige e-mail de verdade (SMTP_HOST, e SMTP_USER/SMTP_PASS se o servidor pedir).');
   return out;
