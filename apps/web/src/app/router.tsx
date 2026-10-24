@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useSession, type ModuleKey } from '@/lib/session';
 import { Shell } from './Shell';
@@ -31,15 +32,18 @@ import { accountSession } from '@/lib/account';
 import { ProductDetail } from '@/core/products/ProductDetail';
 import { PurchaseDetail } from '@/core/purchases/PurchaseDetail';
 
-/** Sem sessão de empresa: quem tem conta vai para "minhas empresas"; quem não tem cai na LOJA
- *  (o app abre na escolha do comércio, como pedido). Deep link para uma tela do ERP → login. */
+// A apresentação (three.js, GSAP, Motion) carrega à parte: não pesa no ERP de quem já entrou.
+const Apresentacao = lazy(() => import('@/landing/Apresentacao'));
+
+/** Sem sessão de empresa: quem tem conta vai para "minhas empresas"; quem não tem cai na
+ *  APRESENTAÇÃO (/inicio), que leva à loja. Deep link para uma tela do ERP → login. */
 function RequireAuth() {
   const { s } = useSession(); const loc = useLocation();
   if (s) return <Outlet />;
   // Aparelho da equipe (último login por uma empresa): volta para a página DELA, não para a loja.
   const equipe = accountSession.get() ? null : (() => { try { return localStorage.getItem(EQUIPE_KEY); } catch { return null; } })();
   if (equipe) return <Navigate to={`/e/${encodeURIComponent(equipe)}`} state={loc.pathname === '/' ? undefined : { from: loc.pathname }} replace />;
-  if (loc.pathname === '/') return <Navigate to={accountSession.get() ? '/minha-conta' : '/comecar'} replace />;
+  if (loc.pathname === '/') return <Navigate to={accountSession.get() ? '/minha-conta' : '/inicio'} replace />;
   return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
 }
 /** Rota de módulo: 404 amigável se a empresa não tem o módulo (o back já devolveria 403). */
@@ -57,6 +61,7 @@ export const router = createBrowserRouter([
   { path: '/conta/esqueci-senha', element: <AccountForgot /> },
   { path: '/conta/redefinir-senha', element: <AccountReset /> },
   // Loja de módulos (pública até o pagamento; checkout e minhas empresas pedem a conta).
+  { path: '/inicio', element: <Suspense fallback={<div className="login"><div className="muted">Carregando…</div></div>}><Apresentacao /></Suspense> },
   { path: '/comecar', element: <Landing /> },
   { path: '/comecar/:modulo', element: <Configurator /> },
   { path: '/previa', element: <Preview /> },

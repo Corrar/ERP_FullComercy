@@ -56,7 +56,7 @@ export function StoreLayout({ module, children, step }: { module?: ModuleKey | n
     <div className="store" style={accentStyle(module)}>
       {demo && <div className="demo-strip" role="note"><Icon name="info" size={15} /> {demo}</div>}
       <header className="store-top">
-        <Link to="/comecar" className="brand" aria-label={`${BRAND.name} — início`}><span className="brand-mark"><Icon name="grid" size={18} stroke={2.2} /></span><span className="hide-sm">{BRAND.name}</span></Link>
+        <Link to="/inicio" className="brand" aria-label={`${BRAND.name} — início`}><span className="brand-mark"><Icon name="grid" size={18} stroke={2.2} /></span><span className="hide-sm">{BRAND.name}</span></Link>
         <div className="row" style={{ flexWrap: 'nowrap' }}>
           <InstalarApp />
           <button className="btn icon ghost" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Alternar tema" title="Tema"><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>

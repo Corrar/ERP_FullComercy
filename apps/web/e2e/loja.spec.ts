@@ -11,7 +11,10 @@ function cpf(seed: number) {
 }
 
 test('loja: comércio → funções → prévia → carrinho → login → cartão → ERP com teste grátis', async ({ page }) => {
+  // Sem conta, a raiz abre a apresentação; o CTA leva à loja.
   await page.goto('/');
+  await expect(page).toHaveURL(/\/inicio$/);
+  await page.locator('.lp-hero').getByRole('button', { name: 'Montar meu sistema' }).click();
   await expect(page).toHaveURL(/\/comecar$/);
   await expect(page.getByRole('heading', { name: 'Qual é o seu comércio?' })).toBeVisible();
   await page.locator('[data-module=VAREJO]').click();

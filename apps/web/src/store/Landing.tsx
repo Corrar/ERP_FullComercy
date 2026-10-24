@@ -9,7 +9,7 @@ import { cart, useCart } from '@/lib/cart';
 import { useAccount } from '@/lib/account';
 import { useCatalog } from '@/lib/billing';
 import { brl } from '@/lib/format';
-import { D } from './money';
+import { aPartirDe } from './money';
 import { MODULE_SLUG, StoreLayout } from './shared';
 import type { ModuleKey } from '@/lib/session';
 
@@ -32,10 +32,7 @@ export function Landing() {
       {!catalog ? <div className="mod-grid">{[0, 1, 2, 3].map((i) => <div key={i} className="skel" style={{ height: 210, borderRadius: 20 }} />)}</div> : (
         <div className="mod-grid">
           {catalog.modules.map((m) => {
-            // "a partir de": o mínimo do módulo (base + obrigatória + dependências), somado do catálogo.
-            const req = catalog.features.find((f) => f.module === m.key && f.required)!;
-            const keys = new Set(['core.base', req.key, ...(req.requires ?? [])]);
-            const from = catalog.features.filter((f) => keys.has(f.key)).reduce((a, f) => a + D(f.price), 0);
+            const from = aPartirDe(catalog, m.key);
             return (
               <button key={m.key} className={`mod-card ${sel === m.key ? 'on' : ''}`} style={accentStyle(m.key)} onClick={() => go(m.key)} data-module={m.key}>
                 <div className="row between" style={{ flexWrap: 'nowrap' }}>

@@ -1,0 +1,114 @@
+/* landing.css — a apresentação (/inicio). Usa os tokens do styles.css: funciona no tema claro e no
+   escuro. Carregado só com a página (lazy), não pesa no ERP. */
+.lp { position: relative; min-height: 100vh; background: var(--bg); color: var(--text); overflow-x: clip; }
+.lp-fundo { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 80% 20%, color-mix(in srgb, var(--brand) 22%, transparent), transparent 70%),
+    radial-gradient(50% 45% at 10% 80%, color-mix(in srgb, #db2777 12%, transparent), transparent 70%),
+    radial-gradient(40% 40% at 50% 50%, color-mix(in srgb, #0891b2 8%, transparent), transparent 70%); }
+.lp-cena { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: block; }
+.lp-cena[data-webgl="indisponivel"] { display: none; }
+.lp > header, .lp > main, .lp > footer { position: relative; z-index: 1; }
+.lp-leitura { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 40; transform-origin: 0 50%; background: linear-gradient(90deg, var(--brand), #db2777, #ea580c); }
+
+/* Cabeçalho: transparente no topo, ganha fundo ao rolar. */
+.lp-top { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px clamp(16px, 4vw, 40px); transition: background .3s, border-color .3s, backdrop-filter .3s; border-bottom: 1px solid transparent; }
+.lp-top.solido { background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(14px) saturate(1.4); border-bottom-color: var(--line); }
+.lp-top .brand { font-weight: 800; display: inline-flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; }
+.lp-nav { display: flex; gap: 22px; }
+.lp-nav a { color: var(--muted); font-weight: 650; text-decoration: none; font-size: 14.5px; }
+.lp-nav a:hover { color: var(--text); }
+
+/* Hero */
+.lp-hero { min-height: calc(100svh - 64px); display: grid; align-items: center; padding: 24px clamp(16px, 6vw, 72px) 80px; position: relative; }
+.lp-hero-texto { max-width: 680px; }
+.lp-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-weight: 700; font-size: 13px; color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent); border: 1px solid color-mix(in srgb, var(--brand) 25%, transparent); }
+html[data-theme="dark"] .lp-chip { color: #a5a9ff; }
+.lp-hero h1 { font-size: clamp(38px, 6.6vw, 78px); line-height: 1.02; letter-spacing: -.04em; font-weight: 850; margin: 18px 0 18px; }
+.lp-palavra { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .06em; }
+.lp-palavra > span { display: inline-block; }
+.lp-hero p { font-size: clamp(16px, 1.6vw, 19px); line-height: 1.55; color: var(--muted); max-width: 560px; margin: 0 0 28px; }
+.lp-ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+.lp .btn.lg { padding: 14px 22px; font-size: 16px; border-radius: 14px; }
+.lp-garantias { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 26px; color: var(--muted); font-weight: 650; font-size: 13.5px; }
+.lp-garantias span { display: inline-flex; align-items: center; gap: 6px; }
+.lp-rolar { position: absolute; left: 50%; bottom: 22px; width: 26px; height: 42px; margin-left: -13px; border: 2px solid var(--line-strong); border-radius: 14px; }
+.lp-rolar span { position: absolute; left: 50%; top: 8px; width: 4px; height: 8px; margin-left: -2px; border-radius: 2px; background: var(--muted); animation: lp-rolar 1.8s infinite; }
+@keyframes lp-rolar { 0% { transform: translateY(0); opacity: 1; } 70% { transform: translateY(12px); opacity: 0; } 100% { opacity: 0; } }
+
+/* Montagem: frase que acende com a rolagem enquanto as peças se encaixam (à direita). */
+.lp-montagem { min-height: 140vh; display: flex; align-items: center; padding: 0 clamp(16px, 6vw, 72px); }
+.lp-frase { max-width: 46%; font-size: clamp(28px, 3.8vw, 52px); line-height: 1.12; letter-spacing: -.03em; font-weight: 800; margin: 0; }
+
+/* Seções de conteúdo: fundo próprio por cima da cena. */
+/* Conteúdo com fundo sólido (a cena some antes); a primeira seção nasce de um degradê suave. */
+.lp-secao { padding: clamp(64px, 10vw, 120px) clamp(16px, 6vw, 72px); background: var(--bg); position: relative; }
+#ramos::before { content: ''; position: absolute; left: 0; right: 0; top: -160px; height: 160px; background: linear-gradient(to bottom, transparent, var(--bg)); pointer-events: none; }
+.lp-cabeca { max-width: 720px; margin-bottom: 36px; }
+.lp-kicker { display: inline-block; font-weight: 800; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); margin-bottom: 10px; }
+html[data-theme="dark"] .lp-kicker { color: #a5a9ff; }
+.lp h2 { font-size: clamp(28px, 4vw, 46px); line-height: 1.08; letter-spacing: -.03em; font-weight: 820; margin: 0 0 12px; }
+.lp-cabeca p { color: var(--muted); font-size: 17px; line-height: 1.5; margin: 0; }
+
+.lp-ramos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 16px; }
+.lp-ramo { text-align: left; display: flex; flex-direction: column; gap: 8px; padding: 22px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-sm); cursor: pointer; color: var(--text); font: inherit; position: relative; overflow: hidden; transition: border-color .25s, box-shadow .25s; }
+.lp-ramo::after { content: ''; position: absolute; inset: auto -40% -60% auto; width: 160px; height: 160px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 16%, transparent); transition: transform .4s; }
+.lp-ramo:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: var(--shadow); }
+.lp-ramo:hover::after { transform: scale(1.5); }
+.lp-ramo:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.lp-ramo strong { font-size: 18px; }
+.lp-ramo .muted { font-size: 14px; }
+.lp-ramo-preco { margin-top: 6px; font-size: 13.5px; color: var(--muted); }
+.lp-ramo-preco b { color: var(--text); }
+.lp-ramo-ir { margin-top: auto; padding-top: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 750; color: var(--accent); }
+
+/* Como funciona: fixado em tela larga, os passos acendem com a rolagem. */
+.lp-passos { min-height: 100vh; display: flex; align-items: center; padding: clamp(64px, 8vw, 100px) clamp(16px, 6vw, 72px); background: var(--bg); }
+.lp-passos-in { width: 100%; display: grid; grid-template-columns: 1fr 1.2fr; gap: clamp(24px, 6vw, 80px); align-items: center; }
+.lp-passos-lista { position: relative; display: grid; gap: 22px; padding-left: 28px; }
+.lp-passos-barra { position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 3px; background: var(--line-strong); overflow: hidden; }
+.lp-passos-barra > span { display: block; width: 100%; height: 100%; transform-origin: 50% 0; background: linear-gradient(180deg, var(--brand), #db2777); transform: scaleY(1); }
+.lp-passo { display: flex; gap: 18px; padding: 20px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); opacity: .45; transform: translateX(0); transition: opacity .4s, transform .4s, border-color .4s, box-shadow .4s; }
+.lp-passo.ativo { opacity: 1; border-color: color-mix(in srgb, var(--brand) 35%, var(--line)); box-shadow: var(--shadow); transform: translateX(6px); }
+.lp-passo-n { font-size: 15px; font-weight: 800; color: var(--brand); min-width: 28px; }
+html[data-theme="dark"] .lp-passo-n { color: #a5a9ff; }
+.lp-passo h3 { margin: 0 0 6px; font-size: 19px; }
+.lp-passo p { margin: 0; color: var(--muted); line-height: 1.5; }
+
+.lp-recursos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 14px; }
+.lp-recurso { padding: 20px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
+.lp-recurso strong { display: block; margin: 12px 0 6px; font-size: 16px; }
+.lp-recurso p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.lp-recurso-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent); }
+html[data-theme="dark"] .lp-recurso-ic { color: #a5a9ff; }
+
+.lp-numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px; padding: 48px clamp(16px, 6vw, 72px); background: var(--bg); }
+.lp-numeros > div { padding: 22px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); display: grid; gap: 6px; }
+.lp-numeros b { font-size: clamp(30px, 4vw, 44px); letter-spacing: -.03em; }
+.lp-numeros > div > span { color: var(--muted); font-weight: 600; }
+
+.lp-final { padding: clamp(64px, 10vw, 120px) clamp(16px, 6vw, 72px); background: var(--bg); }
+.lp-final-in { max-width: 860px; margin: 0 auto; text-align: center; padding: clamp(32px, 6vw, 64px) clamp(20px, 5vw, 56px); border-radius: 28px; color: #fff; background: linear-gradient(135deg, var(--brand), var(--brand-deep) 60%, #6b21a8); box-shadow: 0 30px 60px color-mix(in srgb, var(--brand) 35%, transparent); }
+.lp-final-in h2 { color: #fff; }
+.lp-final-in p { color: rgba(255,255,255,.82); font-size: 17px; margin: 0 0 26px; }
+.lp-final-in .btn.primary { background: #fff; color: var(--brand-deep); border-color: #fff; }
+
+.lp-rodape { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 28px clamp(16px, 6vw, 72px); border-top: 1px solid var(--line); background: var(--bg); color: var(--muted); font-weight: 650; }
+.lp-rodape nav { gap: 18px; }
+.lp-rodape a { color: var(--muted); text-decoration: none; }
+.lp-rodape a:hover { color: var(--text); }
+
+@media (max-width: 899px) {
+  .lp-frase { max-width: 100%; padding: 22px; border-radius: 20px; background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(6px); }
+  .lp-montagem { min-height: 110vh; }
+  .lp-passos { min-height: 0; }
+  .lp-passos-in { grid-template-columns: 1fr; }
+  .lp-passo { opacity: 1; }
+  .lp-hero-texto { padding: 18px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-rolar span { animation: none; }
+  .lp-passo { opacity: 1; transition: none; }
+  html { scroll-behavior: auto; }
+}
+@media (prefers-reduced-motion: no-preference) { html:has(.lp) { scroll-behavior: smooth; } }

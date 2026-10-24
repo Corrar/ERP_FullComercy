@@ -35,6 +35,16 @@ Tema: `html[data-theme]` (`app/theme.ts`, por aparelho). Cor do módulo: `accent
 (`app/module-look.ts`) no contêiner. Responsivo: <1024px a loja troca o resumo lateral por barra
 fixa embaixo e o login esconde o painel de marca; <900px a sidebar vira gaveta (hambúrguer).
 
+## 2.0 Apresentação (`/inicio`)
+
+Porta de entrada de quem chega sem conta (a raiz `/` e o app instalado caem aqui; a loja é `/comecar`).
+Código em `src/landing/`, carregado sob demanda. Hero com o título subindo palavra por palavra e dois
+CTAs (montar / já sou cliente); oito peças 3D (three.js, uma por ramo na cor `MODULE_LOOK`) soltas à
+direita (desktop) ou rente à borda de baixo (celular) que se ENCAIXAM numa grade conforme a rolagem
+(GSAP ScrollTrigger) enquanto a frase acende; a cena some e para de desenhar quando o conteúdo começa.
+Ramos, preços "a partir de" e números vêm do catálogo do servidor — nada inventado. Movimento
+reduzido: quadro único montado, sem fixar seção; sem WebGL: só o fundo em degradê.
+
 ## 2.1 Loja de módulos
 
 Etapas fixas no topo (Comércio → Funções → Carrinho → Pagamento). Escolha do comércio em cartões
