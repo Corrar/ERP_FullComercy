@@ -38,7 +38,9 @@ export function useAcompanhamento(trackToken: string | undefined, aoMudar: () =>
   useEffect(() => {
     if (!trackToken) return;
     const so = conectar({ track: trackToken });
+    // Ao (re)conectar, relê: o que mudou antes de entrar na sala do pedido não chegaria como evento.
+    so.on('connect', aoMudar);
     so.on('track.update', aoMudar);
-    return () => { so.off('track.update', aoMudar); so.disconnect(); };
+    return () => { so.off('connect', aoMudar); so.off('track.update', aoMudar); so.disconnect(); };
   }, [trackToken, aoMudar]);
 }

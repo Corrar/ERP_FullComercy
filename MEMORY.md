@@ -83,6 +83,8 @@ estratégia; outbox em tabela; front sem framework; monorepo.
 | e2e do navegador com o Mercado Pago falso passou e, na rodada seguinte, o aviso "não pagou" | o servidor falso recomeçava os ids em 5000000 e o banco local ainda tinha a cobrança da rodada anterior com o mesmo id | ids do falso a partir do relógio; vale para qualquer servidor falso que gere id |
 | Testes de navegador passavam, mas o cliente novo não conseguia montar o cardápio pela tela | os testes PREPARAVAM cadastros pela API; a tela de item exigia um produto que a empresa nova não tem | `e2e/primeiro-dia.spec.ts`: cada comércio do zero, só pela tela — nada preparado pela API |
 | "Depois de anonimizar a busca não acha" passava no vazio | a busca não olha e-mail, e o telefone de teste montado de `run` (letras) nem era único | asserção do ANTES (acha 1) com documento e telefone únicos; só então o DEPOIS (acha 0) vale |
+| Vitrine: "Preparando" não acendia no CI (o acompanhamento ficava parado) | a cozinha mudou o pedido ANTES de o socket da página entrar na sala `track:`; o evento saiu para ninguém e a tela só relia por evento | `useAcompanhamento` relê ao (re)conectar. Contra-prova: atrasar o handshake do socket em 3 s reproduz o erro do CI sem a correção e passa com ela |
+| Apresentação: "heading não encontrado" só no CI | era a 1ª spec a abrir o Vite de DEV (as anteriores usam o build): com cache frio ele segura os módulos até acabar a varredura inicial (~5 s local, mais no CI) e a espera padrão é 5 s | espera maior só na primeira carga dessa spec. Não era recarga por dependência nova (`DEBUG=vite:deps`: a varredura já achava three/gsap/motion) |
 
 ## 4. Fatos do ambiente de desenvolvimento desta sessão
 

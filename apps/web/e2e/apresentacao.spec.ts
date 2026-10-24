@@ -12,6 +12,9 @@ test('apresentação: raiz sem conta → /inicio, ramos e números do catálogo,
 
   await page.goto('/');
   await expect(page).toHaveURL(/\/inicio$/);
+  // É a 1ª spec a abrir o Vite de dev (as anteriores usam o build): com cache frio ele segura os
+  // módulos até terminar a varredura inicial (~5 s aqui, mais no CI). Daí a espera maior só aqui.
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/O sistema do seu comércio,\s+montado função por função\./);
   await expect(page.locator('canvas.lp-cena')).toHaveAttribute('data-webgl', /^(ok|indisponivel)$/);
 
@@ -37,7 +40,7 @@ test('apresentação com movimento reduzido: tudo visível sem animar, celular s
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/inicio');
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('.lp-hero').getByRole('button', { name: 'Montar meu sistema' })).toBeVisible();
   for (const id of ['#ramos', '#como-funciona', '#recursos']) {
     await page.locator(id).scrollIntoViewIfNeeded();
